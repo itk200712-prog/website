@@ -36,9 +36,14 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
               style={{ aspectRatio: ASPECT[g.aspect] ?? "4 / 3" }}
               onClick={() => setOpen(g)}
             >
-              <div className="absolute inset-0 flex items-center justify-center text-white/25">
-                <ImageIcon size={44} />
-              </div>
+              {g.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={g.image} alt={g.title} className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-white/25">
+                  <ImageIcon size={44} />
+                </div>
+              )}
               <span className="absolute top-3 right-3 badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold">
                 {g.aspect}
               </span>
@@ -73,9 +78,14 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
         >
           <div className="card max-w-3xl w-full p-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="relative bg-slate-800" style={{ aspectRatio: ASPECT[open.aspect] }}>
-              <div className="absolute inset-0 flex items-center justify-center text-white/25">
-                <ImageIcon size={64} />
-              </div>
+              {open.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={open.image} alt={open.title} className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-white/25">
+                  <ImageIcon size={64} />
+                </div>
+              )}
               <button
                 className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center"
                 onClick={() => setOpen(null)}

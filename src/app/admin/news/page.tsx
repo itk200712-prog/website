@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Eye, Newspaper, Pencil, Pin, Plus, Search, Trash2 } from "lucide-react";
 import { AdminModal, AdminTopbar, dbInsert, useNotice } from "@/components/admin";
+import { uploadSiteImage } from "@/lib/supabase/storage";
 import { NEWS } from "@/lib/seed";
 import type { NewsItem } from "@/lib/types";
 
@@ -25,6 +26,19 @@ export default function AdminNewsPage() {
       (!q || n.title_en.toLowerCase().includes(q.toLowerCase()) || n.desc_en.toLowerCase().includes(q.toLowerCase()))
   );
 
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUploading(true);
+    const r = await uploadSiteImage(f, "news");
+    setUploading(false);
+    if (r && r.url) { setPhoto(r.url); show("✅ Photo upload වුණා — Add ඔබන්න"); }
+    else show(`⚠ ${r && r.error ? r.error : "upload failed"}`);
+  }
+
   async function addAnnouncement(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -37,13 +51,14 @@ export default function AdminNewsPage() {
       desc_en: String(fd.get("desc_en")),
       desc_si: String(fd.get("desc_si")),
       date: new Date().toISOString().slice(0, 10),
-      image: "/images/news/notice.jpg",
+      image: photo || String(fd.get("image")) || "/images/news/notice.jpg",
       pinned: fd.get("pinned") === "on",
       published: fd.get("published") === "on",
     };
     setItems((xs) => [row, ...xs]);
     const err = await dbInsert("news", row as unknown as Record<string, unknown>);
     setModal(false);
+    setPhoto(null);
     show(err ? `⚠ ${err}` : "✅ Announcement added");
   }
 
@@ -159,7 +174,8 @@ export default function AdminNewsPage() {
               <label className="field-label">Notice Banner Image</label>
               <div className="flex gap-2.5">
                 <label className="btn btn-outline flex-1 !justify-start cursor-pointer">
-                  <input type="file" accept="image/*" className="hidden" />
+                  <input type="file" accept="image/*" className="hidden" onChange={onPhoto} />
+                  {photo && <img src={photo} alt="preview" className="w-9 h-9 rounded-lg object-cover" />}
                   ⬆ Choose Image File (jpg, .png, .webp)
                 </label>
                 <input name="image" className="field flex-1" placeholder="or enter image path / URL" />

@@ -100,7 +100,14 @@ export function SiteFooter() {
               <li className="flex gap-3">
                 <MapPin size={17} className="text-slate-500 shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-slate-200">{lang === "si" ? SITE.address_si : SITE.address_en}</div>
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(SITE.address_en)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-slate-200 hover:text-white hover:underline"
+                  >
+                    {lang === "si" ? SITE.address_si : SITE.address_en}
+                  </a>
                   <div className="text-slate-500 text-xs">{lang === "si" ? SITE.address_en : SITE.address_si}</div>
                 </div>
               </li>
@@ -109,7 +116,9 @@ export function SiteFooter() {
                 <div>
                   <div className="text-[11px] uppercase tracking-widest text-slate-500">{t.labels.hotline} / Phone</div>
                   <div className="text-slate-200 font-semibold">
-                    {SITE.phones[0]} <span className="text-slate-600">|</span> {SITE.phones[1]}
+                    <a href={`tel:${SITE.phones[0].replace(/\s/g, "")}`} className="hover:text-white hover:underline">{SITE.phones[0]}</a>
+                    <span className="text-slate-600"> | </span>
+                    <a href={`tel:${SITE.phones[1].replace(/\s/g, "")}`} className="hover:text-white hover:underline">{SITE.phones[1]}</a>
                   </div>
                 </div>
               </li>
@@ -117,7 +126,7 @@ export function SiteFooter() {
                 <Mail size={17} className="text-slate-500 shrink-0 mt-0.5" />
                 <div>
                   <div className="text-[11px] uppercase tracking-widest text-slate-500">Email</div>
-                  <div className="text-slate-200 font-semibold">{SITE.email}</div>
+                  <a href={`mailto:${SITE.email}`} className="text-slate-200 font-semibold hover:text-white hover:underline">{SITE.email}</a>
                 </div>
               </li>
               <li className="flex gap-3">
