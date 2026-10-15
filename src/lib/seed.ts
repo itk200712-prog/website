@@ -18,8 +18,8 @@ export const SITE = {
   name_si: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය",
   short_en: "Panduwasnuwara New MPCS LTD",
   short_si: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය",
-  reg_no: "ලියා/186",
-  reg_no_si: "ලියා/186",
+  reg_no: "කුරු/186",
+  reg_no_si: "කුරු/186",
   est: "1976-10-06",
   address_si: "කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකාව",
   address_en: "Kurunegala Rd, Hettipola, Sri Lanka",
@@ -28,6 +28,10 @@ export const SITE = {
   hours_si: ["සඳුදා – සිකුරාදා : පෙ.ව 8.30 – ප.ව 5.30", "සෙනසුරාදා : පෙ.ව 8.30 – ප.ව 1.30", "ඉරිදා සහ රජයේ නිවාඩු දින වසා ඇත"],
   hours_en: ["Mon – Fri : 8.30 AM – 5.30 PM", "Saturday : 8.30 AM – 1.30 PM", "Closed on Sundays & Public Holidays"],
   credit: "Designed By Induwara Thathsara",
+  designer: {
+    whatsapp: "https://wa.me/",
+    facebook: "https://www.facebook.com/",
+  },
 } as const;
 
 export const SETTINGS: SiteSettings = {

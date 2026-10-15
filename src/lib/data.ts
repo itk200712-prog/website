@@ -85,7 +85,13 @@ export async function getGallery(): Promise<GalleryItem[]> {
     const sb = createAnonClient();
     const { data, error } = await sb.from("gallery_items").select("*");
     if (error || !data || data.length === 0) return GALLERY;
-    return data as unknown as GalleryItem[];
+    // DB rows: comments/likes/aspect නැති විය හැක — safe defaults (client crash වළක්වයි)
+    return (data as unknown as GalleryItem[]).map((g) => ({
+      ...g,
+      comments: Array.isArray(g.comments) ? g.comments : [],
+      likes: typeof g.likes === "number" ? g.likes : 0,
+      aspect: g.aspect ?? "landscape",
+    }));
   }, GALLERY);
 }
 

@@ -166,12 +166,7 @@ export function HomeSections({
         <HeroSlideshow images={settings.hero_images} />
         <div className="hero-overlay" />
         <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
-          <div className="flex items-center gap-2 text-[11px] font-bold tracking-[0.22em] uppercase text-amber-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> {c.estBadge}
-          </div>
-          <h1 className="mt-5 text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl">{t.brandFull}</h1>
-          <p className="mt-2 text-lg sm:text-2xl text-indigo-100 font-semibold">{c.heroTag}</p>
-          <p className="mt-5 text-slate-200 max-w-2xl leading-relaxed text-[15px]">{c.heroDesc}</p>
+          <h1 className="text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl">{t.brandFull}</h1>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link href={L("/membership/apply")} className="btn btn-amber">

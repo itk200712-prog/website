@@ -29,12 +29,15 @@ export function ContactInfoCard() {
           </div>
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Head Office / Address</div>
-            <div className="font-semibold text-slate-800 text-[13.5px] mt-0.5 flex items-center gap-2">
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(lang === "si" ? SITE.address_en : SITE.address_en)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-slate-800 text-[13.5px] mt-0.5 flex items-center gap-2 hover:text-indigo-700 transition-colors"
+            >
               {lang === "si" ? SITE.address_si : SITE.address_en}
-              <a href="https://maps.google.com" target="_blank" rel="noreferrer" className="text-indigo-700">
-                <ExternalLink size={13} />
-              </a>
-            </div>
+              <ExternalLink size={13} className="text-indigo-700" />
+            </a>
             <div className="text-slate-500 text-[12px]">{lang === "si" ? SITE.address_en : SITE.address_si}</div>
           </div>
         </li>
@@ -45,7 +48,9 @@ export function ContactInfoCard() {
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Hotline / Phone</div>
             <div className="font-bold text-slate-900 text-[15px] tabular-nums mt-0.5">
-              {SITE.phones[0]} <span className="text-slate-300">|</span> {SITE.phones[1]}
+              <a href={`tel:${SITE.phones[0].replace(/\s/g, "")}`} className="hover:text-indigo-700 transition-colors">{SITE.phones[0]}</a>
+              <span className="text-slate-300"> | </span>
+              <a href={`tel:${SITE.phones[1].replace(/\s/g, "")}`} className="hover:text-indigo-700 transition-colors">{SITE.phones[1]}</a>
             </div>
           </div>
         </li>
@@ -55,7 +60,7 @@ export function ContactInfoCard() {
           </div>
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Email</div>
-            <div className="font-semibold text-slate-800 text-[13.5px] mt-0.5">{SITE.email}</div>
+            <a href={`mailto:${SITE.email}`} className="font-semibold text-slate-800 text-[13.5px] mt-0.5 inline-block hover:text-indigo-700 transition-colors">{SITE.email}</a>
           </div>
         </li>
         <li className="flex gap-3.5">

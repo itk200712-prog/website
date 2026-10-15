@@ -4,12 +4,14 @@
 // Site footer — quick links + contact info + credit
 // ============================================================================
 
+import { useState } from "react";
 import Link from "next/link";
 import { MapPin, Phone, Mail, Clock, Facebook, MessageCircle, ExternalLink, ShieldCheck } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { SITE } from "@/lib/seed";
 
 export function SiteFooter() {
+  const [showDesigner, setShowDesigner] = useState(false);
   const { t, lang } = useLang();
   const L = (p: string) => `/${lang}${p === "/" ? "" : p}`;
 
@@ -134,8 +136,36 @@ export function SiteFooter() {
         <div className="border-t border-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
             <div>© 2026 {lang === "si" ? SITE.short_si : SITE.short_en} — All Rights Reserved.</div>
-            <div>
-              Designed By <span className="text-white font-semibold">Induwara Thathsara</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowDesigner((v) => !v)}
+                className="hover:text-white"
+              >
+                Designed By <span className="text-white font-semibold underline decoration-dotted underline-offset-4">Induwara Thathsara</span>
+              </button>
+              {showDesigner && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 flex items-center gap-2.5 rounded-full border border-slate-700 bg-slate-900 px-4 py-2.5 shadow-2xl whitespace-nowrap pop-in">
+                  <a
+                    href={SITE.designer.whatsapp}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="WhatsApp"
+                    className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-400 hover:scale-110 transition"
+                  >
+                    <MessageCircle size={18} />
+                  </a>
+                  <a
+                    href={SITE.designer.facebook}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Facebook"
+                    className="w-10 h-10 rounded-full bg-sky-600 text-white flex items-center justify-center hover:bg-sky-500 hover:scale-110 transition"
+                  >
+                    <Facebook size={18} />
+                  </a>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-4">
               <a href="#" className="hover:text-white">Privacy Policy</a>

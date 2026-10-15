@@ -21,12 +21,19 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
 
   return (
     <>
+      {items.length === 0 ? (
+        <div className="card p-12 text-center">
+          <ImageIcon size={44} className="mx-auto text-slate-300" />
+          <p className="mt-4 font-extrabold text-slate-800 text-lg">Photo Gallery එක තවම හිස්</p>
+          <p className="mt-1.5 text-slate-500 text-[13px]">Admin → Gallery එකෙන් ඡායාරූප upload කළ පසු මෙහි පෙන්වයි.</p>
+        </div>
+      ) : (
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((g) => (
           <figure key={g.id} className="card card-hover overflow-hidden">
             <button
               className="w-full block relative bg-slate-800"
-              style={{ aspectRatio: ASPECT[g.aspect] }}
+              style={{ aspectRatio: ASPECT[g.aspect] ?? "4 / 3" }}
               onClick={() => setOpen(g)}
             >
               <div className="absolute inset-0 flex items-center justify-center text-white/25">
@@ -46,16 +53,17 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
                   onClick={() => setLiked((l) => ({ ...l, [g.id]: !l[g.id] }))}
                 >
                   <Heart size={14} className={liked[g.id] ? "fill-rose-500 text-rose-500" : ""} />
-                  {g.likes + (liked[g.id] ? 1 : 0)} Likes
+                  {(g.likes ?? 0) + (liked[g.id] ? 1 : 0)} Likes
                 </button>
                 <span className="flex items-center gap-1.5">
-                  <MessageSquare size={14} /> {g.comments.length} Comments
+                  <MessageSquare size={14} /> {(g.comments?.length ?? 0)} Comments
                 </span>
               </div>
             </figcaption>
           </figure>
         ))}
       </div>
+      )}
 
       {/* lightbox — title + description මෙතනත් */}
       {open && (
@@ -83,7 +91,7 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
                   <Heart size={14} className="fill-rose-500 text-rose-500" /> {open.likes} Likes
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <MessageSquare size={14} /> {open.comments.length} Comments
+                  <MessageSquare size={14} /> {(open.comments?.length ?? 0)} Comments
                 </span>
                 <span className="badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold ml-auto">{open.aspect}</span>
               </div>
