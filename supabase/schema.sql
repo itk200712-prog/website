@@ -37,10 +37,7 @@ create table if not exists public.profiles (
 );
 
 -- ✅ user requirement: NIC වලින් login — anon ලඟට nic→email lookup පමණයි (password නෑ)
-create or replace view public.login_lookup with (security_invoker = off) as
-  select nic, auth_email from public.profiles;
-
-grant select on public.login_lookup to anon, authenticated;
+drop view if exists public.login_lookup;
 
 -- role/status protection
 create or replace function public.protect_role_change() returns trigger

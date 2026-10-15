@@ -43,7 +43,12 @@ export function NewsList({ news }: { news: NewsItem[] }) {
           <article key={n.id} className="card card-hover overflow-hidden">
             <div className="grid md:grid-cols-[280px_1fr]">
               <div className="h-52 md:h-full bg-gradient-to-br from-indigo-900 to-slate-800 relative flex items-center justify-center">
-                <Newspaper size={44} className="text-white/25" />
+                {n.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={n.image} alt={n.title_en} className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <Newspaper size={44} className="text-white/25" />
+                )}
                 <div className="absolute top-3 left-3 flex gap-2">
                   <span className="badge-blue rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase">
                     {n.badge_text ?? n.category}
