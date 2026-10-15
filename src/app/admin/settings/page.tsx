@@ -4,9 +4,10 @@
 // System Settings — WhatsApp number, Years of Service, FormSubmit emails
 // ============================================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Image as ImageIcon, Mail, MessageCircle, Plus, RefreshCw, Save, Settings, Trash2, Upload } from "lucide-react";
-import { AdminTopbar, dbUpdate, useNotice } from "@/components/admin";
+import { AdminTopbar, dbUpsert, useNotice } from "@/components/admin";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { deleteSiteImage, uploadSiteImage } from "@/lib/supabase/storage";
 import { SETTINGS } from "@/lib/seed";
 
@@ -18,6 +19,35 @@ export default function AdminSettingsPage() {
   const [email2, setEmail2] = useState(SETTINGS.contact_email_2);
   const [heroImages, setHeroImages] = useState<string[]>([...SETTINGS.hero_images]);
   const [newImg, setNewImg] = useState("");
+  const [membersTotal, setMembersTotal] = useState(String(SETTINGS.members_total));
+  const [votersTotal, setVotersTotal] = useState(String(SETTINGS.voters_total));
+  const [loaded, setLoaded] = useState(false);
+
+  // DB එකෙන් saved values load කරන්න (seed නෙමෙයි!)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!isSupabaseConfigured()) { setLoaded(true); return; }
+      try {
+        const { data } = await createClient().from("system_settings").select("*");
+        if (!alive || !data || data.length === 0) { setLoaded(true); return; }
+        const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
+        const g = (k: string) => map.get(k);
+        if (g("whatsapp_number") != null) setWa(g("whatsapp_number")!);
+        if (g("years_of_service") != null) setYears(g("years_of_service")!);
+        if (g("contact_email_1") != null) setEmail1(g("contact_email_1")!);
+        if (g("contact_email_2") != null) setEmail2(g("contact_email_2")!);
+        if (g("members_total") != null) setMembersTotal(g("members_total")!);
+        if (g("voters_total") != null) setVotersTotal(g("voters_total")!);
+        const hero = g("hero_images");
+        if (hero) {
+          try { const arr = JSON.parse(hero); if (Array.isArray(arr)) setHeroImages(arr); } catch { /* ignore */ }
+        }
+      } catch { /* ignore */ }
+      setLoaded(true);
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const addImage = () => {
     const v = newImg.trim();
@@ -64,16 +94,27 @@ export default function AdminSettingsPage() {
           </div>
         </section>
 
-        {/* Years */}
+        {/* Years + counters */}
         <section className="border-t border-slate-100 pt-7">
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-            <Settings size={20} className="text-indigo-700" /> Years of Service Configuration
+            <Settings size={20} className="text-indigo-700" /> Homepage Statistics Counters
           </h2>
-          <div className="mt-4">
-            <input value={years} onChange={(e) => setYears(e.target.value)} className="field max-w-xs" />
-            <p className="text-slate-400 text-[10.5px] mt-1.5">
-              Configure the operational years of service displayed on the live homepage statistics counter.
-            </p>
+          <p className="text-slate-500 text-[12.5px] mt-1.5 leading-relaxed">
+            මුල් පිටුවේ statistics cards වල පෙන්වන ගණන් — Save Settings ඔබන විට site එකේ සුරැකේ.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="field-label">Years of Service</label>
+              <input value={years} onChange={(e) => setYears(e.target.value)} className="field max-w-xs" />
+            </div>
+            <div>
+              <label className="field-label">Total Members (සාමාජිකයින්)</label>
+              <input value={membersTotal} onChange={(e) => setMembersTotal(e.target.value)} className="field max-w-xs" />
+            </div>
+            <div>
+              <label className="field-label">Total Voters (ඡන්ද දායකයින්)</label>
+              <input value={votersTotal} onChange={(e) => setVotersTotal(e.target.value)} className="field max-w-xs" />
+            </div>
           </div>
         </section>
 
@@ -254,15 +295,24 @@ Message: Customer inquiry text...`}
           <button
             className="btn btn-primary"
             onClick={async () => {
-              const err = (await dbUpdate("system_settings", { key: "whatsapp_number" }, { value: wa })) ??
-                (await dbUpdate("system_settings", { key: "years_of_service" }, { value: years })) ??
-                (await dbUpdate("system_settings", { key: "contact_email_1" }, { value: email1 })) ??
-                (await dbUpdate("system_settings", { key: "contact_email_2" }, { value: email2 })) ??
-                (await dbUpdate("system_settings", { key: "hero_images" }, { value: JSON.stringify(heroImages) }));
-              show(err ? `⚠ ${err}` : `✅ Settings saved — Hero images ${heroImages.length}ක් සුරැකුණා`);
+              const rows = [
+                { key: "whatsapp_number", value: wa },
+                { key: "years_of_service", value: years },
+                { key: "contact_email_1", value: email1 },
+                { key: "contact_email_2", value: email2 },
+                { key: "members_total", value: membersTotal },
+                { key: "voters_total", value: votersTotal },
+                { key: "hero_images", value: JSON.stringify(heroImages) },
+              ];
+              let err: string | null = null;
+              for (const row of rows) {
+                err = await dbUpsert("system_settings", row);
+                if (err) break;
+              }
+              show(err ? `⚠ ${err}` : `✅ සුරැකුණා! Site එකේ දැන් පෙන්වනවා — Hero images ${heroImages.length}ක්`);
             }}
           >
-            <Save size={16} /> Save Settings
+            <Save size={16} /> {loaded ? "Save Settings" : "Loading saved settings…"}
           </button>
         </div>
       </div>

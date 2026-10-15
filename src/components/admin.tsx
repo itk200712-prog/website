@@ -174,7 +174,24 @@ export async function dbUpdate(
   try {
     let q = createClient().from(table).update(patch);
     for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
-    const { error } = await q;
+    const { data, error } = await q.select("*");
+    if (error) return error.message;
+    if (!data || data.length === 0) return "rows 0ක් update වුණා — login/permission පරීක්ෂා කරන්න";
+    return null;
+  } catch (e) {
+    return String(e);
+  }
+}
+
+/** key-value table (e.g. system_settings) සඳහා upsert — row නැත්නම් නව එකක් හැදේ */
+export async function dbUpsert(
+  table: string,
+  row: Record<string, unknown>,
+  onConflict = "key"
+): Promise<string | null> {
+  if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
+  try {
+    const { error } = await createClient().from(table).upsert(row, { onConflict });
     return error ? error.message : null;
   } catch (e) {
     return String(e);
