@@ -7,11 +7,12 @@
 //   ✅ Business card "Services (N)" click → Services tab with that business pre-selected
 // ============================================================================
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ArrowRight, Building2, CheckCircle2, ExternalLink, Image as ImageIcon, Pencil, Plus, RefreshCw, Search, Trash2,
 } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
+import { uploadSiteImage } from "@/lib/supabase/storage";
 import { BUSINESSES } from "@/lib/seed";
 import type { BusinessUnit, BusinessService } from "@/lib/types";
 
@@ -26,6 +27,54 @@ export default function AdminBusinessesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [svcOpen, setSvcOpen] = useState(false);
   const [units, setUnits] = useState<BusinessUnit[]>([...BUSINESSES]);
+  const [mgrRows, setMgrRows] = useState<Array<{ role_en: string; role_si: string; name: string; location: string; phone: string }>>([]);
+  const [coverPreview, setCoverPreview] = useState("");
+  const [uploadTarget, setUploadTarget] = useState<"logo" | "cover" | null>(null);
+  const logoRef = useRef<HTMLInputElement>(null);
+  const coverRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const openEdit = (b: BusinessUnit) => {
+    setEditFor(b);
+    setMgrRows(b.contacts.map((c) => ({ role_en: c.role_en, role_si: c.role_si, name: c.name, location: c.location, phone: c.phone })));
+    setCoverPreview(b.cover ?? "");
+  };
+
+  const PRESETS: Record<string, string> = {
+    "Rural Bank": "/images/sections/rural-bank.png",
+    "Consumer Section": "/images/sections/consumer.png",
+    "Maliban Biscuits": "/images/sections/maliban-biscuits.png",
+    "Maliban Milk": "/images/sections/maliban-kiri.png",
+    "Nature's Secrets": "/images/sections/natures-secrets.png",
+    "Hemas Agency": "/images/sections/hemas.png",
+    "Ristbury Tiara": "/images/sections/ristbury-tiara.png",
+    "Fuel Station": "/images/sections/fuel-station.png",
+    "Funeral Services": "/images/sections/funeral.png",
+    "Main Logo": "/images/sections/gold-loan.png",
+  };
+
+  const pickUpload = (target: "logo" | "cover") => {
+    setUploadTarget(target);
+    fileRef.current?.click();
+  };
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !uploadTarget) return;
+    show("⏳ Image එක upload වෙමින්...");
+    const res = await uploadSiteImage(f, uploadTarget === "logo" ? "businesses" : "covers");
+    if (res && res.url) {
+      if (uploadTarget === "logo" && logoRef.current) logoRef.current.value = res.url;
+      if (uploadTarget === "cover") {
+        if (coverRef.current) coverRef.current.value = res.url;
+        setCoverPreview(res.url);
+      }
+      show("✅ Image එක upload වුණා — Save කරන්න");
+    } else {
+      show(`⚠ ${res && res.error ? res.error : "Upload failed — path එකක් අතින් දාන්න"}`);
+    }
+  };
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -126,7 +175,7 @@ export default function AdminBusinessesPage() {
                 </div>
               )}
               <div className="flex items-center gap-1.5 mt-4">
-                <button className="btn btn-outline !py-1.5 !px-3 !text-[11px] flex-1" onClick={() => setEditFor(b)}>
+                <button className="btn btn-outline !py-1.5 !px-3 !text-[11px] flex-1" onClick={() => openEdit(b)}>
                   <Pencil size={12} /> Edit Page &amp; Card
                 </button>
                 <a href={`/businesses/${b.slug}`} target="_blank" className="btn btn-outline !py-1.5 !px-3 !text-[11px]">
@@ -241,6 +290,8 @@ export default function AdminBusinessesPage() {
         </div>
       )}
 
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+
       {/* ============================================================ MODALS */}
       {editFor && (
         <AdminModal title="Edit Business Division" sub="Update titles, taglines, category, descriptions, and logo" onClose={() => setEditFor(null)} wide>
@@ -256,9 +307,17 @@ export default function AdminBusinessesPage() {
                 desc_en: fd.get("desc_en"), desc_si: fd.get("desc_si"),
                 active: fd.get("active") === "on", is_new: fd.get("is_new") === "on",
                 order: Number(fd.get("order")),
+                logo: String(fd.get("logo") ?? ""),
+                cover: String(fd.get("cover") ?? "") || null,
               };
               setUnits((xs) => xs.map((b) => (b.slug === editFor.slug ? { ...b, ...patch } as BusinessUnit : b)));
               const err = await dbUpdate("business_units", { slug: editFor.slug }, patch);
+              await dbDelete("business_contacts", { business_slug: editFor.slug });
+              for (const c of mgrRows) {
+                if (c.role_en || c.role_si || c.name || c.location || c.phone) {
+                  await dbInsert("business_contacts", { business_slug: editFor.slug, ...c });
+                }
+              }
               setEditFor(null);
               show(err ? `⚠ ${err}` : "✅ Business division updated");
             }}
@@ -306,30 +365,38 @@ export default function AdminBusinessesPage() {
                   <div className="text-slate-400 text-[11px]">Add one or more branch locations or department managers for this business unit.</div>
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" className="btn btn-primary !py-1.5 !px-3.5 !text-[11.5px]" onClick={() => show("+ Add Manager row")}>
+                  <button type="button" className="btn btn-primary !py-1.5 !px-3.5 !text-[11.5px]" onClick={() => setMgrRows((rs) => [...rs, { role_en: "", role_si: "", name: "", location: "", phone: "" }])}>
                     <Plus size={13} /> Add Manager
                   </button>
-                  <button type="button" className="btn btn-green !py-1.5 !px-3.5 !text-[11.5px]" onClick={() => show("+ Add Regional Branch row")}>
+                  <button type="button" className="btn btn-green !py-1.5 !px-3.5 !text-[11.5px]" onClick={() => setMgrRows((rs) => [...rs, { role_en: "Regional Branch", role_si: "ප්‍රාදේශීය ශාඛාව", name: "", location: "", phone: "" }])}>
                     <Plus size={13} /> Add Regional Branch
                   </button>
                 </div>
               </div>
-              {editFor.contacts[0] && (
-                <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 mt-4">
+              {mgrRows.length === 0 && (
+                <div className="text-slate-400 text-[12px] mt-3">දැනට managers නෑ — "+ Add Manager" ඔබලා විස්තර එකතු කරන්න.</div>
+              )}
+              {mgrRows.map((c, i) => (
+                <div key={i} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 mt-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" /> MANAGER / BRANCH #1
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" /> MANAGER / BRANCH #{i + 1}
                     </div>
-                    <span className="badge-blue rounded-full px-2.5 py-0.5 text-[9.5px] font-bold">Manager</span>
+                    <div className="flex items-center gap-2">
+                      <span className="badge-blue rounded-full px-2.5 py-0.5 text-[9.5px] font-bold">{c.role_en.toLowerCase().includes("branch") || c.role_en.toLowerCase().includes("ශාඛා") ? "Branch" : "Manager"}</span>
+                      <button type="button" title="Remove" className="text-rose-500 hover:text-rose-700" onClick={() => setMgrRows((rs) => rs.filter((_, j) => j !== i))}>
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-4 mt-3">
-                    <input className="field !py-2 !text-[11.5px]" placeholder="e.g. Store Manager" />
-                    <input className="field !py-2 !text-[11.5px]" defaultValue={editFor.contacts[0].name} />
-                    <input className="field !py-2 !text-[11.5px]" defaultValue={editFor.contacts[0].location} />
-                    <input className="field !py-2 !text-[11.5px]" defaultValue={editFor.contacts[0].phone} />
+                    <input className="field !py-2 !text-[11.5px]" placeholder="e.g. Store Manager" value={c.role_en} onChange={(e) => setMgrRows((rs) => rs.map((r, j) => (j === i ? { ...r, role_en: e.target.value } : r)))} />
+                    <input className="field !py-2 !text-[11.5px]" placeholder="නම / Name" value={c.name} onChange={(e) => setMgrRows((rs) => rs.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))} />
+                    <input className="field !py-2 !text-[11.5px]" placeholder="ලිපිනය / Location" value={c.location} onChange={(e) => setMgrRows((rs) => rs.map((r, j) => (j === i ? { ...r, location: e.target.value } : r)))} />
+                    <input className="field !py-2 !text-[11.5px]" placeholder="037 229 1018" value={c.phone} onChange={(e) => setMgrRows((rs) => rs.map((r, j) => (j === i ? { ...r, phone: e.target.value } : r)))} />
                   </div>
                 </div>
-              )}
+              ))}
             </div>
 
             {/* logo + cover */}
@@ -341,13 +408,13 @@ export default function AdminBusinessesPage() {
                 <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-[9px] font-black text-slate-500">
                   LOGO
                 </div>
-                <input className="field flex-1" defaultValue="/images/sections/ristbury-tiara.png" />
-                <button type="button" className="btn btn-outline" onClick={() => show("Upload from device")}>⬆ Upload from Device</button>
+                <input ref={logoRef} name="logo" className="field flex-1" defaultValue={editFor.logo} placeholder="/images/sections/... or https://..." />
+                <button type="button" className="btn btn-outline" onClick={() => pickUpload("logo")}>⬆ Upload from Device</button>
               </div>
               <div className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mt-3">Or quick pick existing preset:</div>
               <div className="flex flex-wrap gap-1.5 mt-2">
-                {["Rural Bank", "Consumer Section", "Maliban Biscuits", "Maliban Milk", "Nature's Secrets", "Hemas Agency", "Ristbury Tiara", "Fuel Station", "Funeral Services", "Main Logo"].map((p) => (
-                  <button key={p} type="button" className="rounded-full border border-slate-200 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 hover:border-indigo-400" onClick={() => show(`Preset: ${p}`)}>
+                {Object.keys(PRESETS).map((p) => (
+                  <button key={p} type="button" className="rounded-full border border-slate-200 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 hover:border-indigo-400" onClick={() => { if (logoRef.current) logoRef.current.value = PRESETS[p]; }}>
                     {p}
                   </button>
                 ))}
@@ -355,12 +422,16 @@ export default function AdminBusinessesPage() {
               <div className="font-extrabold text-slate-900 text-[14px] flex items-center gap-2 mt-5">
                 <ImageIcon size={16} /> Business Page Hero Cover Photo
               </div>
-              <div className="rounded-2xl bg-slate-800 text-white/40 text-[12px] text-center py-10 mt-3">
-                No custom cover photo selected — Upload an image or pick a preset below.
+              <div className="rounded-2xl bg-slate-800 text-white/40 text-[12px] text-center py-10 mt-3 overflow-hidden">
+                {coverPreview ? (
+                  <img src={coverPreview} alt="Cover preview" className="w-full h-40 object-cover rounded-xl" />
+                ) : (
+                  "No custom cover photo selected — Upload an image or pick a preset below."
+                )}
               </div>
               <div className="flex gap-2.5 mt-3">
-                <input className="field flex-1" placeholder="/images/gallery/... or https://..." />
-                <button type="button" className="btn btn-outline" onClick={() => show("Upload cover photo")}>⬆ Upload Cover Photo</button>
+                <input ref={coverRef} name="cover" className="field flex-1" placeholder="/images/gallery/... or https://..." defaultValue={editFor.cover ?? ""} onChange={(e) => setCoverPreview(e.target.value)} />
+                <button type="button" className="btn btn-outline" onClick={() => pickUpload("cover")}>⬆ Upload Cover Photo</button>
               </div>
             </div>
 

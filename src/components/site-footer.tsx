@@ -57,16 +57,17 @@ export function SiteFooter() {
               <span>Est: {SITE.est}</span>
             </div>
             <div className="mt-4 flex gap-2">
-              <a href="#" className="w-9 h-9 rounded-full border border-slate-700 flex items-center justify-center hover:bg-white/10">
-                <Facebook size={16} />
+              <a href="#" title="Facebook" aria-label="Facebook" className="w-10 h-10 rounded-full border border-white/15 bg-white/5 text-white flex items-center justify-center hover:bg-white/20 transition">
+                <Facebook size={17} />
               </a>
               <a
                 href={`https://wa.me/${SITE.phones[1].replace(/\s/g, "")}`}
                 target="_blank"
                 rel="noreferrer"
-                className="w-9 h-9 rounded-full border border-slate-700 flex items-center justify-center hover:bg-white/10"
+                title="WhatsApp" aria-label="WhatsApp"
+                className="w-10 h-10 rounded-full border border-white/15 bg-white/5 text-white flex items-center justify-center hover:bg-white/20 transition"
               >
-                <MessageCircle size={16} />
+                <MessageCircle size={17} />
               </a>
             </div>
           </div>

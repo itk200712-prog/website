@@ -26,7 +26,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   /* භාෂාව අනුව fonts: English = Inter · සිංහල = Noto Sans Sinhala */
-  font-family: "Inter", "Noto Sans Sinhala", "Iskoola Pota", sans-serif;
+  font-family: "Inter", "Iskoola Pota", "Noto Sans Sinhala", sans-serif;
 }
 
 /* Section badge: │ LABEL */

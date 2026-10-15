@@ -5,7 +5,7 @@
 // ============================================================================
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Users, MapPin, Phone, MessageSquare, Send, Clock, CheckCircle2, Building2, Headphones,
 } from "lucide-react";
@@ -237,23 +237,40 @@ export function InquiryForm({ department, compact }: { department?: string; comp
   );
 }
 
+function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(value); return; }
+    const dur = 1500; const t0 = performance.now(); let raf = 0;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / dur);
+      setN(Math.round(value * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+  return <>{n.toLocaleString()}{suffix}</>;
+}
+
 export function StatsBand({ members, voters, divisions, years }: { members: number; voters: number; divisions: number; years: number }) {
   const { t } = useLang();
   const items = [
-    { icon: <Users size={22} />, value: members.toLocaleString(), label: t.stats.members, tag: "CSV / EXCEL" },
-    { icon: <CheckCircle2 size={22} />, value: voters.toLocaleString(), label: t.stats.voters, tag: "ELECTORAL" },
-    { icon: <Building2 size={22} />, value: String(divisions), label: t.stats.divisions, tag: "BUSINESS" },
-    { icon: <Clock size={22} />, value: `${years}+`, label: t.stats.years, tag: "SINCE 1976" },
+    { icon: <Users size={22} />, value: members, suffix: "", label: t.stats.members, tag: "CSV / EXCEL" },
+    { icon: <CheckCircle2 size={22} />, value: voters, suffix: "", label: t.stats.voters, tag: "ELECTORAL" },
+    { icon: <Building2 size={22} />, value: divisions, suffix: "", label: t.stats.divisions, tag: "BUSINESS" },
+    { icon: <Clock size={22} />, value: years, suffix: "+", label: t.stats.years, tag: "SINCE 1976" },
   ];
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {items.map((s) => (
-        <div key={s.label} className="card p-6">
+        <div key={s.label} className="rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_-14px_rgba(15,23,42,0.18)] p-6">
           <div className="flex items-center justify-between">
             <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center">{s.icon}</div>
             <span className="text-[9.5px] font-bold tracking-[0.16em] text-slate-400 uppercase">{s.tag}</span>
           </div>
-          <div className="mt-3 text-3xl font-black text-slate-900 tabular-nums">{s.value}</div>
+          <div className="mt-3 text-3xl font-black text-slate-900 tabular-nums"><Counter value={s.value} suffix={s.suffix} /></div>
           <div className="text-slate-500 text-[13px] mt-0.5">{s.label}</div>
         </div>
       ))}
