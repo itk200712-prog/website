@@ -8,10 +8,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck } from "lucide-react";
 import { useLang } from "@/lib/i18n";
+import { LangSwitcher } from "@/components/lang-switcher";
 import { BUSINESSES } from "@/lib/seed";
 
 export function SiteHeader() {
   const { t, lang, setLang } = useLang();
+  const L = (p: string) => `/${lang}${p === "/" ? "" : p}`;
   const [open, setOpen] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
 
@@ -22,7 +24,7 @@ export function SiteHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-[72px] gap-3">
           {/* logo */}
-          <Link href="/" className="flex items-center gap-3 shrink-0">
+          <Link href={L("/")} className="flex items-center gap-3 shrink-0">
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[10px] font-black tracking-wide shadow">
               coop
             </div>
@@ -34,7 +36,7 @@ export function SiteHeader() {
 
           {/* desktop nav */}
           <nav className="hidden lg:flex items-center gap-1 text-[13.5px] font-semibold text-slate-700">
-            <Link href="/" className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5">
+            <Link href={L("/")} className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5">
               <Home size={15} /> {t.nav.home}
             </Link>
 
@@ -53,7 +55,7 @@ export function SiteHeader() {
                     {publicBusinesses.map((b) => (
                       <Link
                         key={b.slug}
-                        href={`/businesses/${b.slug}`}
+                        href={L(`/businesses/${b.slug}`)}
                         className="flex items-start gap-2.5 p-2.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200"
                       >
                         <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500 shrink-0">
@@ -72,7 +74,7 @@ export function SiteHeader() {
                     ))}
                   </div>
                   <div className="mt-2 pt-2 border-t border-slate-100">
-                    <Link href="/businesses" className="text-[12.5px] font-bold text-indigo-700 hover:underline px-1">
+                    <Link href={L("/businesses")} className="text-[12.5px] font-bold text-indigo-700 hover:underline px-1">
                       {t.nav.allBusinesses} →
                     </Link>
                   </div>
@@ -89,21 +91,21 @@ export function SiteHeader() {
                 <div className="mega" style={{ width: "min(92vw, 420px)" }}>
                   <div className="section-badge mb-2">Membership Portal — MPCS</div>
                   <div className="flex flex-col gap-1">
-                    <Link href="/membership/members" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                    <Link href={L("/membership/members")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
                       <UsersRound size={18} className="text-indigo-700" />
                       <div>
                         <div className="text-[13px] font-bold text-slate-800">{t.nav.memberDetails}</div>
                         <div className="text-[11px] text-slate-500">Search full registered member registry</div>
                       </div>
                     </Link>
-                    <Link href="/membership/voters" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                    <Link href={L("/membership/voters")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
                       <ShieldCheck size={18} className="text-indigo-700" />
                       <div>
                         <div className="text-[13px] font-bold text-slate-800">{t.nav.voters}</div>
                         <div className="text-[11px] text-slate-500">Cooperative electoral register</div>
                       </div>
                     </Link>
-                    <Link href="/membership/apply" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                    <Link href={L("/membership/apply")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
                       <Newspaper size={18} className="text-indigo-700" />
                       <div>
                         <div className="flex items-center gap-2">
@@ -114,14 +116,14 @@ export function SiteHeader() {
                       </div>
                     </Link>
                     <div className="border-t border-slate-100 my-1" />
-                    <Link href="/register" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                    <Link href={L("/register")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
                       <UserRound size={18} className="text-slate-500" />
                       <div>
                         <div className="text-[13px] font-bold text-slate-800">{t.nav.register}</div>
                         <div className="text-[11px] text-slate-500">Create a new cooperative account</div>
                       </div>
                     </Link>
-                    <Link href="/signin" className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                    <Link href={L("/signin")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
                       <UserRound size={18} className="text-indigo-700" />
                       <div>
                         <div className="text-[13px] font-bold text-slate-800">{t.nav.signin}</div>
@@ -133,35 +135,22 @@ export function SiteHeader() {
               )}
             </div>
 
-            <Link href="/board" className="px-3 py-2 rounded-lg hover:bg-slate-100">{t.nav.board}</Link>
-            <Link href="/gallery" className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5">
+            <Link href={L("/board")} className="px-3 py-2 rounded-lg hover:bg-slate-100">{t.nav.board}</Link>
+            <Link href={L("/gallery")} className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5">
               <Images size={15} /> {t.nav.gallery}
             </Link>
-            <Link href="/news" className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5">
+            <Link href={L("/news")} className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5">
               <Newspaper size={15} /> {t.nav.news}
             </Link>
-            <Link href="/contact" className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5">
+            <Link href={L("/contact")} className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5">
               <Phone size={15} /> {t.nav.contact}
             </Link>
           </nav>
 
           <div className="flex items-center gap-2">
-            {/* lang switch */}
-            <div className="hidden sm:flex items-center rounded-full border border-slate-200 overflow-hidden text-xs font-bold">
-              <button
-                onClick={() => setLang("si")}
-                className={`px-3 py-1.5 ${lang === "si" ? "bg-indigo-700 text-white" : "bg-white text-slate-600"}`}
-              >
-                බාග
-              </button>
-              <button
-                onClick={() => setLang("en")}
-                className={`px-3 py-1.5 ${lang === "en" ? "bg-indigo-700 text-white" : "bg-white text-slate-600"}`}
-              >
-                English
-              </button>
-            </div>
-            <Link href="/signin" className="btn btn-primary !py-2 !px-4 !text-[12.5px] hidden sm:inline-flex">
+            {/* language switcher (professional) */}
+            <LangSwitcher />
+            <Link href={L("/signin")} className="btn btn-primary !py-2 !px-4 !text-[12.5px] hidden sm:inline-flex">
               <UserRound size={14} /> {t.nav.signin}
             </Link>
             <button className="lg:hidden p-2 rounded-lg border border-slate-200" onClick={() => setMobile(!mobile)}>

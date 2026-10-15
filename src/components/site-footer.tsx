@@ -11,6 +11,7 @@ import { SITE } from "@/lib/seed";
 
 export function SiteFooter() {
   const { t, lang } = useLang();
+  const L = (p: string) => `/${lang}${p === "/" ? "" : p}`;
 
   const quick = [
     ["/", "Home", "මුල් පිටුව"],
@@ -78,7 +79,7 @@ export function SiteFooter() {
             <ul className="space-y-2.5 text-[13px]">
               {quick.map(([href, en, si]) => (
                 <li key={href}>
-                  <Link href={href} className="hover:text-white flex items-center gap-2">
+                  <Link href={L(href)} className="hover:text-white flex items-center gap-2">
                     <span className="text-slate-600">›</span> {lang === "si" ? si : en}
                   </Link>
                 </li>
@@ -139,7 +140,7 @@ export function SiteFooter() {
               <span className="text-slate-700">|</span>
               <a href="#" className="hover:text-white">Terms of Service</a>
               <span className="text-slate-700">|</span>
-              <Link href="/admin" className="hover:text-white flex items-center gap-1">
+              <Link href={L("/admin")} className="hover:text-white flex items-center gap-1">
                 <ShieldCheck size={13} /> Admin Portal <ExternalLink size={11} />
               </Link>
             </div>

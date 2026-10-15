@@ -1,5 +1,5 @@
 -- ============================================================================
---  පඳුවස්නුවර නව බහු අරමුණු සමූපකාර සමිතිය (Panduwasnuwara New MPCS)
+--  සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය (Panduwasnuwara New MPCS)
 --  එකම SQL file එක — Schema + Data + Image Storage ඔක්කොම මෙතන ඇතුළත්.
 --
 --  භාවිතය: Supabase Dashboard > SQL Editor > New query > මේ file එකේ මුළු
@@ -378,6 +378,8 @@ insert into public.system_settings (key, value) values
   ('voters_total', '2359'),
   ('members_files_count', '52'),
   ('voters_files_count', '1'),
+  ('org_name_si', 'සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය'),
+  ('org_name_en', 'Panduwasnuwara New Multi Purpose Co-Operative Society LTD'),
   ('hero_images', '["/images/hero/hero-1.jpg","/images/hero/hero-2.jpg","/images/hero/hero-3.jpg","/images/hero/hero-4.jpg","/images/hero/hero-5.jpg"]')
 on conflict (key) do update set value = excluded.value;
 
@@ -414,10 +416,10 @@ on conflict (slug) do nothing;
 insert into public.business_contacts (business_slug, role_en, role_si, name, location, phone, note_en, note_si) values
 ('ristbury-tiara', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ඇම්. රණසිංහ (Manager)', 'ජයන්තිපුර මාවත, බණ්ඩාරගම පාර, හෙට්ටිපොල', '037 229 1018', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('coop-city', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ද සිල්වා (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1017', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('transport', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. සෙනවිරත්න (Manager)', 'සමූපකාර මාවත, පඳුවස්නුවර', '037 229 1018', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+('transport', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. සෙනවිරත්න (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1018', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('fertilizer', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඇම්. ඩී. බණ්ඩාරසිංහ (Manager)', 'හෙට්ටිපොල', '037 229 1019', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('insurance', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. පෙරේරා (Manager)', 'සමූපකාර මාවත, පඳුවස්නුවර', '037 229 1021', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('rural-bank', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. එම්. පෙරේරා (Manager)', 'සමූපකාර මාවත, හෙට්ටිපොල, පඳුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+('insurance', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. පෙරේරා (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1021', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+('rural-bank', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. එම්. පෙරේරා (Manager)', 'සමූපකාර මාවත, හෙට්ටිපොල, පඬුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('consumer', 'Sales Development Manager', 'විකුණුම් සංවර්ධන කළමනාකරු', 'එච්. බී. රණසිංහ (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1013', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('consumer', 'Store Manager', 'ගබඩා කළමනාකරු', 'ජේ. අමිල ද සිල්වා (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '070 526 8848', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('maliban-biscuits', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ප්‍රේමරත්න (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1014', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
@@ -425,8 +427,8 @@ insert into public.business_contacts (business_slug, role_en, role_si, name, loc
 ('natures-secrets', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ප්‍රේමරත්න (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1016', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('hemas', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ජී. කුමාර (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1017', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('fuel-station', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ජී. කුමාර (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1019', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('funeral', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. සිසිර කුමාර (Manager)', 'සමූපකාර මාවත, පඳුවස්නුවර', '037 229 1020', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('gold-loan-service', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'කළමනාකරු (Manager)', 'සමූපකාර මාවත, පඳුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු');
+('funeral', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. සිසිර කුමාර (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1020', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+('gold-loan-service', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'කළමනාකරු (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු');
 
 -- consumer regional branch
 insert into public.business_branches (business_slug, name, manager, location, phone) values
@@ -509,9 +511,9 @@ insert into public.board_members ("order", category, name_en, name_si, position_
 -- news (3)
 -- ---------------------------------------------------------------------------
 insert into public.news (id, category, badge_text, title_en, title_si, desc_en, desc_si, date, image, pinned, published) values
-('news-driver-vacancies', 'vacancy', 'Job Vacancy', 'Call for Applications: Heavy Vehicle & Logistics Driver Vacancies', 'බර වාහන හා ලොජිස්ටික් රියදුරන් බඳවා ගැනීම පිළිබඳ අයදුම්පත් කැඳවීම', 'Panduwasnuwara Multi-Purpose Co-operative Society (MPCS) invites applications from energetic, experienced, and qualified Sri Lankan citizens for the post of Heavy Vehicle & Distribution Drivers. Key Requirements: • Valid Sri Lankan Heavy Vehicle Driving License • Minimum 2 years experience • Clean driving record.', 'පඳුවස්නුවර බහු අරමුණු සමූපකාර සමිතිය (MPCS) විසින් බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි.', '2026-09-15', '/images/news/driver-vacancy.jpg', true, true),
-('news-paddy-procurement', 'notice', 'Special Notice', 'Procurement of 2026 Yala Season Paddy & Agricultural Crops at Guaranteed Prices', '2026 යල කන්නයේ වී සහ කෘෂි බෝග සහතික මිලට මිලදී ගැනීම', 'Panduwasnuwara MPCS has officially commenced direct procurement of Yala season paddy harvest and agricultural produce through designated cooperative storage centres to protect farming families against middlemen exploitation.', 'පඳුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් ආරක්ෂා කිරීම සඳහා යල කන්නයේ වී අස්වැන්න සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත.', '2026-09-15', '/images/news/paddy-procurement.jpg', false, true),
-('news-agm-48', 'notice', 'Special Notice', 'Notice of 48th Annual General Meeting & Member Dividend Distribution', '48 වන වාර්ෂික මහා සභා රැස්වීම සහ සාමාජික ලාභාංශ බෙදාහැරීම පිළිබඳ නිවේදනය', 'The 48th Annual General Meeting of the Panduwasnuwara Multi-Purpose Co-operative Society will be held at the MPCS Main Auditorium, Hettipola. Key Agenda: • Presentation of Audited Annual Financial Accounts • Member dividend distribution • Election of office bearers.', 'පඳුවස්නුවර බහු අරමුණු සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ.', '2026-09-15', '/images/news/agm-48.jpg', false, true)
+('news-driver-vacancies', 'vacancy', 'Job Vacancy', 'Call for Applications: Heavy Vehicle & Logistics Driver Vacancies', 'බර වාහන හා ලොජිස්ටික් රියදුරන් බඳවා ගැනීම පිළිබඳ අයදුම්පත් කැඳවීම', 'Panduwasnuwara Multi-Purpose Co-operative Society (MPCS) invites applications from energetic, experienced, and qualified Sri Lankan citizens for the post of Heavy Vehicle & Distribution Drivers. Key Requirements: • Valid Sri Lankan Heavy Vehicle Driving License • Minimum 2 years experience • Clean driving record.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතිය (MPCS) විසින් බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි.', '2026-09-15', '/images/news/driver-vacancy.jpg', true, true),
+('news-paddy-procurement', 'notice', 'Special Notice', 'Procurement of 2026 Yala Season Paddy & Agricultural Crops at Guaranteed Prices', '2026 යල කන්නයේ වී සහ කෘෂි බෝග සහතික මිලට මිලදී ගැනීම', 'Panduwasnuwara MPCS has officially commenced direct procurement of Yala season paddy harvest and agricultural produce through designated cooperative storage centres to protect farming families against middlemen exploitation.', 'පඬුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් ආරක්ෂා කිරීම සඳහා යල කන්නයේ වී අස්වැන්න සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත.', '2026-09-15', '/images/news/paddy-procurement.jpg', false, true),
+('news-agm-48', 'notice', 'Special Notice', 'Notice of 48th Annual General Meeting & Member Dividend Distribution', '48 වන වාර්ෂික මහා සභා රැස්වීම සහ සාමාජික ලාභාංශ බෙදාහැරීම පිළිබඳ නිවේදනය', 'The 48th Annual General Meeting of the Panduwasnuwara Multi-Purpose Co-operative Society will be held at the MPCS Main Auditorium, Hettipola. Key Agenda: • Presentation of Audited Annual Financial Accounts • Member dividend distribution • Election of office bearers.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ.', '2026-09-15', '/images/news/agm-48.jpg', false, true)
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -520,7 +522,7 @@ on conflict (id) do nothing;
 insert into public.gallery_items (id, title, description, aspect, image, likes) values
 ('gal-pirith', 'An all-night Pirith chanting ceremony', 'සමිතියේ වාර්ෂික සර්ව රාත්‍රී පිරිත් පිංකම — සාමාජිකයින් සහ පවුල් එක්ව සහභාගී වූ අවස්ථාව.', '4:3', '/images/gallery/pirith.jpg', 1),
 ('gal-agm', '48th Annual General Meeting', '48 වන වාර්ෂික මහා සභා රැස්වීම — MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල.', '16:9', '/images/gallery/agm.jpg', 3),
-('gal-hq', 'Main Headquarters', 'පඳුවස්නුවර නව බහු අරමුණු සමූපකාර සමිතියේ ප්‍රධාන කාර්යාලය, හෙට්ටිපොල.', '3:2', '/images/gallery/headquarters.jpg', 2)
+('gal-hq', 'Main Headquarters', 'සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතියේ ප්‍රධාන කාර්යාලය, හෙට්ටිපොල.', '3:2', '/images/gallery/headquarters.jpg', 2)
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------

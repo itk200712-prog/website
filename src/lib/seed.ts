@@ -15,9 +15,9 @@ import type {
 
 export const SITE = {
   name_en: "Panduwasnuwara New Multi Purpose Co-Operative Society LTD",
-  name_si: "පඳුවස්නුවර නව බහු අරමුණු සමූපකාර සමිතිය",
+  name_si: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය",
   short_en: "Panduwasnuwara New MPCS LTD",
-  short_si: "පඳුවස්නුවර නව බ.අ.ස.ස. සමිතිය",
+  short_si: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය",
   reg_no: "ලියා/186",
   reg_no_si: "ලියා/186",
   est: "1976-10-06",
@@ -284,7 +284,7 @@ export const BUSINESSES: BusinessUnit[] = [
         role_en: "Contact Manager",
         role_si: "සම්බන්ධතා කළමනාකරු",
         name: "එම්. ජී. සෙනවිරත්න (Manager)",
-        location: "සමූපකාර මාවත, පඳුවස්නුවර",
+        location: "සමූපකාර මාවත, පඬුවස්නුවර",
         phone: "037 229 1018",
         note_en: "Department Operations",
         note_si: "දෙපාර්තමේන්තු කටයුතු",
@@ -349,7 +349,7 @@ export const BUSINESSES: BusinessUnit[] = [
         role_en: "Contact Manager",
         role_si: "සම්බන්ධතා කළමනාකරු",
         name: "එම්. ජී. පෙරේරා (Manager)",
-        location: "සමූපකාර මාවත, පඳුවස්නුවර",
+        location: "සමූපකාර මාවත, පඬුවස්නුවර",
         phone: "037 229 1021",
         note_en: "Department Operations",
         note_si: "දෙපාර්තමේන්තු කටයුතු",
@@ -387,7 +387,7 @@ export const BUSINESSES: BusinessUnit[] = [
         role_en: "Contact Manager",
         role_si: "සම්බන්ධතා කළමනාකරු",
         name: "ආර්. එම්. පෙරේරා (Manager)",
-        location: "සමූපකාර මාවත, හෙට්ටිපොල, පඳුවස්නුවර",
+        location: "සමූපකාර මාවත, හෙට්ටිපොල, පඬුවස්නුවර",
         phone: "037 229 1012",
         note_en: "Department Operations",
         note_si: "දෙපාර්තමේන්තු කටයුතු",
@@ -789,7 +789,7 @@ export const BUSINESSES: BusinessUnit[] = [
         role_en: "Contact Manager",
         role_si: "සම්බන්ධතා කළමනාකරු",
         name: "ආර්. ජී. සිසිර කුමාර (Manager)",
-        location: "සමූපකාර මාවත, පඳුවස්නුවර",
+        location: "සමූපකාර මාවත, පඬුවස්නුවර",
         phone: "037 229 1020",
         note_en: "Department Operations",
         note_si: "දෙපාර්තමේන්තු කටයුතු",
@@ -826,7 +826,7 @@ export const BUSINESSES: BusinessUnit[] = [
         role_en: "Contact Manager",
         role_si: "සම්බන්ධතා කළමනාකරු",
         name: "කළමනාකරු (Manager)",
-        location: "සමූපකාර මාවත, පඳුවස්නුවර",
+        location: "සමූපකාර මාවත, පඬුවස්නුවර",
         phone: "037 229 1012",
         note_en: "Department Operations",
         note_si: "දෙපාර්තමේන්තු කටයුතු",
@@ -845,7 +845,7 @@ export const BUSINESSES: BusinessUnit[] = [
 // Rural Bank ශාඛා 22 (01–07 screenshots වලින්; 08–22 ප්‍රදේශ නම් + default කළමනාකරු — Admin එකෙන් වෙනස් කළ හැක)
 export const RURAL_BANK_BRANCHES = [
   { no: "01", name: "Hettipola Main Branch", name_si: "හෙට්ටිපොල ප්‍රධාන ශාඛාව", manager: "ස්ථානික කළමනාකරු", phone: "037 229 1012" },
-  { no: "02", name: "Panduwasnuwara Branch", name_si: "පඳුවස්නුවර ශාඛාව", manager: "ඩබ්ලිව්. ජී. බණ්ඩාර", phone: "076 424 7716" },
+  { no: "02", name: "Panduwasnuwara Branch", name_si: "පඬුවස්නුවර ශාඛාව", manager: "ඩබ්ලිව්. ජී. බණ්ඩාර", phone: "076 424 7716" },
   { no: "03", name: "Bingiriya Branch", name_si: "බිංගිරිය ශාඛාව", manager: "නිමල් පෙරේරා", phone: "037 229 1234" },
   { no: "04", name: "Katupotha Branch", name_si: "කටුපොත ශාඛාව", manager: "ඒ. එල්. සිල්වා", phone: "037 228 4512" },
   { no: "05", name: "Mandapola Branch", name_si: "මණ්ඩපොල ශාඛාව", manager: "ආර්. පී. ජයසිංහ", phone: "037 229 2045" },
@@ -881,7 +881,7 @@ export const NEWS: NewsItem[] = [
     desc_en:
       "Panduwasnuwara Multi-Purpose Co-operative Society (MPCS) invites applications from energetic, experienced, and qualified Sri Lankan citizens for the post of Heavy Vehicle & Distribution Drivers for our logistics and retail distribution network. Key Requirements: • Valid Sri Lankan Heavy Vehicle Driving License • Minimum 2 years experience • Clean driving record. Submit your application with certified copies of credentials to the Head Office, Hettipola.",
     desc_si:
-      "පඳුවස්නුවර බහු අරමුණු සමූපකාර සමිතිය (MPCS) විසින් අපේ ලොජිස්ටික් සහ සිල්ලර බෙදාහැරීම් ජාලය සඳහා බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා ක්‍රියාශීලී, අත්දැකීම් ඇති සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි. ප්‍රධාන අවශ්‍යතා: • වලංගු ශ්‍රී ලාංකික බර වාහන රියදුරු බලපත්‍රය • අවම වසර 2ක අත්දැකීම් • පිරිසිදු රියදුරු වාර්තාවක්. සහතික කළ ලේඛන පිටපත් සමඟ ඔබේ අයදුම්පත ප්‍රධාන කාර්යාලය, හෙට්ටිපොල වෙත ඉදිරිපත් කරන්න.",
+      "සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතිය (MPCS) විසින් අපේ ලොජිස්ටික් සහ සිල්ලර බෙදාහැරීම් ජාලය සඳහා බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා ක්‍රියාශීලී, අත්දැකීම් ඇති සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි. ප්‍රධාන අවශ්‍යතා: • වලංගු ශ්‍රී ලාංකික බර වාහන රියදුරු බලපත්‍රය • අවම වසර 2ක අත්දැකීම් • පිරිසිදු රියදුරු වාර්තාවක්. සහතික කළ ලේඛන පිටපත් සමඟ ඔබේ අයදුම්පත ප්‍රධාන කාර්යාලය, හෙට්ටිපොල වෙත ඉදිරිපත් කරන්න.",
     date: "2026-09-15",
     image: "/images/news/driver-vacancy.jpg",
     pinned: true,
@@ -896,7 +896,7 @@ export const NEWS: NewsItem[] = [
     desc_en:
       "Panduwasnuwara MPCS has officially commenced direct procurement of Yala season paddy harvest and agricultural produce through designated cooperative storage centres to protect farming families against middlemen exploitation. • Guaranteed competitive prices above standard government baseline rates. Farmers are kindly requested to contact the nearest cooperative branch for collection schedules.",
     desc_si:
-      "පඳුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් අතරමැදි සූරාකෑමෙන් ආරක්ෂා කිරීම සඳහා නම් කළ සමූපකාර ගබඩා මධ්‍යස්ථාන හරහා යල කන්නයේ වී අස්වැන්න සහ කෘෂි නිෂ්පාදන සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත. • සාමාන්‍ය රජයේ මූලික මිල ගණන්වලට වඩා තරඟකාරී සහතික මිල ගණන්. එකතු කිරීම් කාලසටහන් සඳහා ලඟම ඇති සමූපකාර ශාඛාව හා සම්බන්ධ වන ලෙස ගොවීන්ගෙන් කාරුණිකව ඉල්ලා සිටිමු.",
+      "පඬුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් අතරමැදි සූරාකෑමෙන් ආරක්ෂා කිරීම සඳහා නම් කළ සමූපකාර ගබඩා මධ්‍යස්ථාන හරහා යල කන්නයේ වී අස්වැන්න සහ කෘෂි නිෂ්පාදන සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත. • සාමාන්‍ය රජයේ මූලික මිල ගණන්වලට වඩා තරඟකාරී සහතික මිල ගණන්. එකතු කිරීම් කාලසටහන් සඳහා ලඟම ඇති සමූපකාර ශාඛාව හා සම්බන්ධ වන ලෙස ගොවීන්ගෙන් කාරුණිකව ඉල්ලා සිටිමු.",
     date: "2026-09-15",
     image: "/images/news/paddy-procurement.jpg",
     pinned: false,
@@ -911,7 +911,7 @@ export const NEWS: NewsItem[] = [
     desc_en:
       "The 48th Annual General Meeting of the Panduwasnuwara Multi-Purpose Co-operative Society will be held at the MPCS Main Auditorium, Hettipola. All registered and respected members are cordially invited to attend. Key Agenda: • Presentation of the Audited Annual Financial Accounts and Directors' Report • Approval of member dividend distribution • Election of office bearers for the upcoming term.",
     desc_si:
-      "පඳුවස්නුවර බහු අරමුණු සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ. ලියාපදිංචි සහ ගරු සාමාජිකයින් සියලු දෙනා සහභාගී වන ලෙස කාරුණිකව ආරාධනා කරමු. ප්‍රධාන වැඩසටහන: • විගණනය කළ වාර්ෂික මූල්‍ය ගිණුම් සහ අධ්‍යක්ෂ මණ්ඩල වාර්තාව ඉදිරිපත් කිරීම • සාමාජික ලාභාංශ බෙදාහැරීම අනුමත කිරීම • ඉදිරි කාලය සඳහා නිලධාරීන් තෝරාපත් කිරීම.",
+      "සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ. ලියාපදිංචි සහ ගරු සාමාජිකයින් සියලු දෙනා සහභාගී වන ලෙස කාරුණිකව ආරාධනා කරමු. ප්‍රධාන වැඩසටහන: • විගණනය කළ වාර්ෂික මූල්‍ය ගිණුම් සහ අධ්‍යක්ෂ මණ්ඩල වාර්තාව ඉදිරිපත් කිරීම • සාමාජික ලාභාංශ බෙදාහැරීම අනුමත කිරීම • ඉදිරි කාලය සඳහා නිලධාරීන් තෝරාපත් කිරීම.",
     date: "2026-09-15",
     image: "/images/news/agm-48.jpg",
     pinned: false,
@@ -944,7 +944,7 @@ export const GALLERY: GalleryItem[] = [
   {
     id: "gal-hq",
     title: "Main Headquarters",
-    description: "පඳුවස්නුවර නව බහු අරමුණු සමූපකාර සමිතියේ ප්‍රධාන කාර්යාලය, හෙට්ටිපොල.",
+    description: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතියේ ප්‍රධාන කාර්යාලය, හෙට්ටිපොල.",
     aspect: "3:2",
     image: "/images/gallery/headquarters.jpg",
     likes: 2,

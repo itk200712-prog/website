@@ -1,5 +1,7 @@
 # 🏛️ පඳුවස්නුවර නව බහු අරමුණු සමූපකාර සමිතිය — වෙබ් අඩවිය
 
+> 🌐 **Site එක දැන් භාෂා routes සමඟයි:** `/si` (සිංහල) · `/en` (English) — දකුණු පස ඇති **සිංහල | English** button එකෙන් මාරු කරන්න. Fonts: English = **Inter** · සිංහල = **Noto Sans Sinhala**. සමිතියේ නම: සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය.
+
 **Panduwasnuwara New Multi Purpose Co-Operative Society LTD**  
 Reg. No: ලියා/186 · ස්ථාපිතය: 1976-10-06 · හෙට්ටිපොල, පඳුවස්නුවර
 
@@ -9,7 +11,7 @@ Reg. No: ලියා/186 · ස්ථාපිතය: 1976-10-06 · හෙට�
 | **Styles** | Tailwind CSS (Bold & Corporate design) |
 | **Database** | Supabase (PostgreSQL) — SQL file එකයි |
 | **Hosting** | Vercel |
-| **Fonts** | Poppins + Noto Sans Sinhala (site එක පුරාම එකම font) |
+| **Fonts** | Inter + Noto Sans Sinhala (site එක පුරාම එකම font) |
 | **Languages** | සිංහල / English (switcher එකක් සමඟ) |
 
 ---
