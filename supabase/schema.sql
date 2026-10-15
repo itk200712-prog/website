@@ -595,10 +595,10 @@ select
   '{"full_name":"Super Administrator","nic":"SUPERADMIN"}'
 where not exists (select 1 from auth.users where email = 'superadmin@members.mpcs.lk');
 
-insert into auth.identities (id, user_id, provider_id, provider, identity_data, email, last_sign_in_at, created_at, updated_at)
+insert into auth.identities (id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
 select gen_random_uuid(), u.id, u.id::text, 'email',
   format('{"sub":"%s","email":"%s"}', u.id, u.email)::jsonb,
-  u.email, now(), now(), now()
+  now(), now(), now()
 from auth.users u
 where u.email = 'superadmin@members.mpcs.lk'
   and not exists (select 1 from auth.identities i where i.user_id = u.id and i.provider = 'email');
