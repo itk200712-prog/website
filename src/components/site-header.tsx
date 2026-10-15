@@ -35,7 +35,7 @@ export function SiteHeader() {
           </Link>
 
           {/* desktop nav */}
-          <nav className="hidden lg:flex items-center gap-0.5 text-[13px] font-semibold text-slate-200">
+          <nav className="hidden lg:flex items-center gap-0.5 text-[13px] font-semibold text-slate-200 whitespace-nowrap">
             <Link href={L("/")} className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5">
               <Home size={15} /> {t.nav.home}
             </Link>
@@ -135,7 +135,6 @@ export function SiteHeader() {
               )}
             </div>
 
-            <Link href={L("/board")} className="px-3 py-2 rounded-lg hover:bg-white/10">{t.nav.board}</Link>
             <Link href={L("/gallery")} className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5">
               <Images size={15} /> {t.nav.gallery}
             </Link>

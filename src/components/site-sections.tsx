@@ -157,6 +157,16 @@ export function InquiryForm({ department, compact }: { department?: string; comp
   const { t } = useLang();
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  // success card එක ලස්සන animation එකකින් පෙන්නලා ඉබේම close වෙලා form එකට ආයෙ එනවා
+  useEffect(() => {
+    if (!sent) return;
+    setClosing(false);
+    const t1 = setTimeout(() => setClosing(true), 2900);
+    const t2 = setTimeout(() => { setSent(false); setClosing(false); }, 3350);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [sent]);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -186,9 +196,14 @@ export function InquiryForm({ department, compact }: { department?: string; comp
 
   if (sent) {
     return (
-      <div className="card p-8 text-center">
-        <CheckCircle2 size={40} className="text-emerald-500 mx-auto" />
-        <p className="mt-3 font-bold text-slate-800">{t.contactPage.success}</p>
+      <div className={`card p-10 text-center ${closing ? "soft-out" : "pop-in"}`}>
+        <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto pop-in">
+          <CheckCircle2 size={34} />
+        </div>
+        <p className="mt-4 font-extrabold text-slate-900 text-[16px]">{t.contactPage.success}</p>
+        <div className="mx-auto mt-4 h-1 w-24 rounded-full bg-emerald-200 overflow-hidden">
+          <div className="h-full bg-emerald-500" style={{ animation: "softOut 3s linear forwards", transformOrigin: "left" }} />
+        </div>
       </div>
     );
   }
@@ -254,26 +269,32 @@ function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
   return <>{n.toLocaleString()}{suffix}</>;
 }
 
+const STAT_ICONS = { members: Users, voters: CheckCircle2, divisions: Building2, years: Clock } as const;
+
+export function StatCard({
+  kind, value, suffix = "", label, tag,
+}: { kind: keyof typeof STAT_ICONS; value: number; suffix?: string; label: string; tag: string }) {
+  const Icon = STAT_ICONS[kind];
+  return (
+    <div className="rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_-14px_rgba(15,23,42,0.18)] p-6">
+      <div className="flex items-center justify-between">
+        <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center"><Icon size={22} /></div>
+        <span className="text-[9.5px] font-bold tracking-[0.16em] text-slate-400 uppercase">{tag}</span>
+      </div>
+      <div className="mt-3 text-3xl font-black text-slate-900 tabular-nums"><Counter value={value} suffix={suffix} /></div>
+      <div className="text-slate-500 text-[13px] mt-0.5">{label}</div>
+    </div>
+  );
+}
+
 export function StatsBand({ members, voters, divisions, years }: { members: number; voters: number; divisions: number; years: number }) {
   const { t } = useLang();
-  const items = [
-    { icon: <Users size={22} />, value: members, suffix: "", label: t.stats.members, tag: "CSV / EXCEL" },
-    { icon: <CheckCircle2 size={22} />, value: voters, suffix: "", label: t.stats.voters, tag: "ELECTORAL" },
-    { icon: <Building2 size={22} />, value: divisions, suffix: "", label: t.stats.divisions, tag: "BUSINESS" },
-    { icon: <Clock size={22} />, value: years, suffix: "+", label: t.stats.years, tag: "SINCE 1976" },
-  ];
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {items.map((s) => (
-        <div key={s.label} className="rounded-2xl bg-white border border-slate-200 shadow-[0_12px_32px_-14px_rgba(15,23,42,0.18)] p-6">
-          <div className="flex items-center justify-between">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center">{s.icon}</div>
-            <span className="text-[9.5px] font-bold tracking-[0.16em] text-slate-400 uppercase">{s.tag}</span>
-          </div>
-          <div className="mt-3 text-3xl font-black text-slate-900 tabular-nums"><Counter value={s.value} suffix={s.suffix} /></div>
-          <div className="text-slate-500 text-[13px] mt-0.5">{s.label}</div>
-        </div>
-      ))}
+      <StatCard kind="members" value={members} label={t.stats.members} tag="CSV / EXCEL" />
+      <StatCard kind="voters" value={voters} label={t.stats.voters} tag="ELECTORAL" />
+      <StatCard kind="divisions" value={divisions} label={t.stats.divisions} tag="BUSINESS" />
+      <StatCard kind="years" value={years} suffix="+" label={t.stats.years} tag="SINCE 1976" />
     </div>
   );
 }

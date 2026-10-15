@@ -331,3 +331,16 @@ body {
     display: none !important;
   }
 }
+
+/* success / close animations (contact form) */
+@keyframes popIn {
+  0% { opacity: 0; transform: scale(0.85) translateY(12px); }
+  60% { opacity: 1; transform: scale(1.03) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes softOut {
+  to { opacity: 0; transform: scale(0.96) translateY(6px); }
+}
+.pop-in { animation: popIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.pop-in-delay { animation: popIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) 0.15s both; }
+.soft-out { animation: softOut 0.45s ease forwards; }

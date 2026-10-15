@@ -24,7 +24,7 @@ import {
   Images,
 } from "lucide-react";
 import { HeroSlideshow } from "@/components/hero-slideshow";
-import { SectionHead, StatsBand, PersonCard } from "@/components/site-sections";
+import { SectionHead, StatCard, PersonCard } from "@/components/site-sections";
 import { HomeClientBits } from "@/components/home-client";
 import { useLang } from "@/lib/i18n";
 import { SITE } from "@/lib/seed";
@@ -43,6 +43,10 @@ const HOME_COPY = {
     boardTitle: "අධ්‍යක්ෂ මණ්ඩලය",
     boardSub: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතියේ උපායමාර්ගික පාලනය සහ පරිපාලන නායකත්වය.",
     all: "සියල්ල බලන්න →",
+    statMembers: "සාමාජිකයින්",
+    statVoters: "ඡන්ද දායකයින්",
+    statDivisions: "ව්‍යාපාර අංශ",
+    statYears: "සේවා වසර",
     aboutBadge: "අප ගැන",
     aboutTitle: "ග්‍රාමීය බැංකු, පාරිභෝගික භාණ්ඩ සහ වෙළෙඳ නියෝජිතායතන එකම වහලක් යටින්",
     aboutP1:
@@ -91,6 +95,10 @@ const HOME_COPY = {
     boardSub:
       "Strategic governance and administrative leadership of the Panduwasnuwara New Multi Purpose Co-Operative Society.",
     all: "View All →",
+    statMembers: "Members",
+    statVoters: "Eligible Voters",
+    statDivisions: "Business Divisions",
+    statYears: "Years of Service",
     aboutBadge: "About Us",
     aboutTitle: "Rural banking, consumer goods and trade agencies, under one roof",
     aboutP1:
@@ -191,16 +199,6 @@ export function HomeSections({
         </div>
       </section>
 
-      {/* ================= STATS ================= */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 -mt-10 relative z-10">
-        <StatsBand
-          members={settings.members_total}
-          voters={settings.voters_total}
-          divisions={businesses.length}
-          years={settings.years_of_service}
-        />
-      </section>
-
       {/* ================= BOARD ================= */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
         <SectionHead
@@ -234,6 +232,11 @@ export function HomeSections({
               <p className="mt-5 text-[12.5px] font-bold text-indigo-700 tracking-wide">{c.principles}</p>
             </div>
             <div className="grid gap-5">
+              {/* stats — vision/mission එකට උඩින් (2ක්) */}
+              <div className="grid grid-cols-2 gap-4">
+                <StatCard kind="members" value={settings.members_total} label={c.statMembers} tag="CSV / EXCEL" />
+                <StatCard kind="voters" value={settings.voters_total} label={c.statVoters} tag="ELECTORAL" />
+              </div>
               <div className="card p-7">
                 <div className="flex items-center gap-2.5 text-indigo-700">
                   <Eye size={18} /> <h3 className="font-extrabold text-slate-900">{c.vision}</h3>
@@ -245,6 +248,14 @@ export function HomeSections({
                   <Target size={18} /> <h3 className="font-extrabold text-slate-900">{c.mission}</h3>
                 </div>
                 <p className="mt-3 text-slate-600 text-[14.5px] leading-relaxed">{c.missionText}</p>
+              </div>
+              {/* stats — යටින් (2ක්) */}
+              <div className="grid grid-cols-2 gap-4">
+                <StatCard kind="divisions" value={businesses.length} label={c.statDivisions} tag="BUSINESS" />
+                <StatCard kind="years" value={settings.years_of_service} suffix="+" label={c.statYears} tag="SINCE 1976" />
+              </div>
+              <div className="flex">
+                <Link href={L("/businesses")} className="btn btn-primary">{c.all}</Link>
               </div>
             </div>
           </div>

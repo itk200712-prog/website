@@ -19,6 +19,7 @@ export function SiteFooter() {
     ["/membership/members", "Member Details", "සාමාජික විස්තර"],
     ["/membership/voters", "Eligible Voters", "ඡන්දදායකයින්"],
     ["/membership/apply", "Apply for Membership", "සාමාජිකත්වය අයදුම්"],
+    ["/board", "Board of Directors", "අධ්‍යක්ෂ මණ්ඩලය"],
     ["/gallery", "Photo Gallery", "ඡායාරූප"],
     ["/news", "News & Notices", "පුවත් හා නිවේදන"],
     ["/contact", "Contact Us", "සම්බන්ධ වන්න"],
