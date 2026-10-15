@@ -29,8 +29,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body>
-        <FloatingLang />
-        <LanguageProvider initialLang={lang}>{children}</LanguageProvider>
+        <LanguageProvider initialLang={lang}>
+          {children}
+          <FloatingLang />
+        </LanguageProvider>
       </body>
     </html>
   );
