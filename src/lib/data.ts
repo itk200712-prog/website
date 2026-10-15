@@ -44,7 +44,7 @@ export async function getBusinesses(): Promise<BusinessUnit[]> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("business_units").select("*").order("order");
-    if (error || !data || data.length === 0) return BUSINESSES;
+    if (error || !data) return BUSINESSES;
     const svcs = await sb.from("business_services").select("*").order("order");
     const contacts = await sb.from("business_contacts").select("*");
     const branches = await sb.from("business_branches").select("*");
@@ -66,7 +66,7 @@ export async function getBoard(): Promise<BoardMember[]> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("board_members").select("*").order("order");
-    if (error || !data || data.length === 0) return BOARD;
+    if (error || !data) return BOARD;
     return data as unknown as BoardMember[];
   }, BOARD);
 }
@@ -75,7 +75,7 @@ export async function getNews(): Promise<NewsItem[]> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("news").select("*").eq("published", true);
-    if (error || !data || data.length === 0) return NEWS;
+    if (error || !data) return NEWS;
     return (data as unknown as NewsItem[]).sort((a, b) => Number(b.pinned) - Number(a.pinned));
   }, NEWS);
 }
@@ -84,7 +84,7 @@ export async function getGallery(): Promise<GalleryItem[]> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("gallery_items").select("*");
-    if (error || !data || data.length === 0) return GALLERY;
+    if (error || !data) return GALLERY;
     // DB rows: comments/likes/aspect නැති විය හැක — safe defaults (client crash වළක්වයි)
     return (data as unknown as GalleryItem[]).map((g) => ({
       ...g,
@@ -99,7 +99,7 @@ export async function getFuelPrices(): Promise<FuelPrice[]> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("fuel_prices").select("*");
-    if (error || !data || data.length === 0) return FUEL_PRICES;
+    if (error || !data) return FUEL_PRICES;
     const byType = new Map(data.map((r: { type: string }) => [r.type, r]));
     return FUEL_PRICES.map((f) => {
       const row = byType.get(f.type) as { price?: number } | undefined;
@@ -112,7 +112,7 @@ export async function getSettings(): Promise<SiteSettings> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("system_settings").select("*");
-    if (error || !data || data.length === 0) return SETTINGS;
+    if (error || !data) return SETTINGS;
     const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
     return {
       whatsapp_number: map.get("whatsapp_number") ?? SETTINGS.whatsapp_number,

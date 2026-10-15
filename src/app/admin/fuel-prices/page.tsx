@@ -4,9 +4,10 @@
 // Fuel Price Management — petrol 92 / super diesel / kerosene
 // ============================================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Fuel, RefreshCw } from "lucide-react";
 import { AdminTopbar, dbUpdate, useNotice } from "@/components/admin";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { FUEL_PRICES } from "@/lib/seed";
 
 export default function AdminFuelPricesPage() {
@@ -14,6 +15,25 @@ export default function AdminFuelPricesPage() {
   const [prices, setPrices] = useState(() =>
     Object.fromEntries(FUEL_PRICES.map((f) => [f.type, String(f.price)]))
   );
+
+  // DB එකෙන් saved prices load කරන්න
+  useEffect(() => {
+    (async () => {
+      if (!isSupabaseConfigured()) return;
+      try {
+        const { data } = await createClient().from("fuel_prices").select("*");
+        if (data && data.length) {
+          setPrices((p) => {
+            const next = { ...p };
+            for (const r of data as { type: string; price: number | string }[]) {
+              if (r.type in next) next[r.type] = String(r.price ?? next[r.type]);
+            }
+            return next;
+          });
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   return (
     <div>

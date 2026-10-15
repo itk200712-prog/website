@@ -158,8 +158,10 @@ export function AdminModal({
 export async function dbInsert(table: string, row: Record<string, unknown>): Promise<string | null> {
   if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
   try {
-    const { error } = await createClient().from(table).insert(row);
-    return error ? error.message : null;
+    const { data, error } = await createClient().from(table).insert(row).select("*");
+    if (error) return error.message;
+    if (!data || data.length === 0) return "row save වුණේ නෑ — login/permission පරීක්ෂා කරන්න";
+    return null;
   } catch (e) {
     return String(e);
   }
@@ -203,8 +205,10 @@ export async function dbDelete(table: string, match: Record<string, unknown>): P
   try {
     let q = createClient().from(table).delete();
     for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
-    const { error } = await q;
-    return error ? error.message : null;
+    const { data, error } = await q.select("*");
+    if (error) return error.message;
+    if (!data || data.length === 0) return "delete වුණේ නෑ — row එක හමු නොවුණා/permission නෑ";
+    return null;
   } catch (e) {
     return String(e);
   }

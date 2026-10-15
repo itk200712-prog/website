@@ -1,33 +1,40 @@
 "use client";
 
 // ============================================================================
-// News & Notices — Create New Announcement + list management
+// News & Notices — add / edit / delete / pin (සේරම DB එකට save වෙනවා)
 // ============================================================================
 
-import { useState } from "react";
-import { Eye, Newspaper, Pencil, Pin, Plus, Search, Trash2 } from "lucide-react";
-import { AdminModal, AdminTopbar, dbInsert, useNotice } from "@/components/admin";
+import { useEffect, useState } from "react";
+import { Eye, Pencil, Pin, Plus, Search, Trash2, Upload } from "lucide-react";
+import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { NEWS } from "@/lib/seed";
 import type { NewsItem } from "@/lib/types";
 
-const TABS = ["all", "vacancy", "notice", "tender", "general"];
-
 export default function AdminNewsPage() {
   const { show, node } = useNotice();
   const [modal, setModal] = useState(false);
-  const [q, setQ] = useState("");
-  const [tab, setTab] = useState("all");
-  const [items, setItems] = useState<NewsItem[]>([...NEWS]);
-
-  const filtered = items.filter(
-    (n) =>
-      (tab === "all" || n.category === tab) &&
-      (!q || n.title_en.toLowerCase().includes(q.toLowerCase()) || n.desc_en.toLowerCase().includes(q.toLowerCase()))
-  );
-
+  const [editFor, setEditFor] = useState<NewsItem | null>(null);
+  const [preview, setPreview] = useState<NewsItem | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [items, setItems] = useState<NewsItem[]>([...NEWS]);
+  const [q, setQ] = useState("");
+  const [loaded, setLoaded] = useState(false);
+
+  async function load() {
+    if (!isSupabaseConfigured()) { setLoaded(true); return; }
+    try {
+      const { data } = await createClient().from("news").select("*").order("date", { ascending: false });
+      if (data) setItems(data as unknown as NewsItem[]);
+    } catch { /* ignore */ }
+    setLoaded(true);
+  }
+  useEffect(() => { load(); }, []);
+
+  function openAdd() { setEditFor(null); setPhoto(null); setModal(true); }
+  function openEdit(n: NewsItem) { setEditFor(n); setPhoto(n.image || null); setModal(true); }
 
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -35,163 +42,191 @@ export default function AdminNewsPage() {
     setUploading(true);
     const r = await uploadSiteImage(f, "news");
     setUploading(false);
-    if (r && r.url) { setPhoto(r.url); show("✅ Photo upload වුණා — Add ඔබන්න"); }
+    if (r && r.url) { setPhoto(r.url); show("✅ Photo upload වුණා — Save ඔබන්න"); }
     else show(`⚠ ${r && r.error ? r.error : "upload failed"}`);
   }
 
-  async function addAnnouncement(e: React.FormEvent<HTMLFormElement>) {
+  async function submitItem(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const row: NewsItem = {
-      id: `news-${Date.now()}`,
+    const row = {
+      id: editFor?.id ?? `news-${Date.now()}`,
       category: String(fd.get("category")) as NewsItem["category"],
       badge_text: String(fd.get("badge")) || null,
       title_en: String(fd.get("title_en")),
       title_si: String(fd.get("title_si")),
       desc_en: String(fd.get("desc_en")),
       desc_si: String(fd.get("desc_si")),
-      date: new Date().toISOString().slice(0, 10),
-      image: photo || String(fd.get("image")) || "/images/news/notice.jpg",
+      date: editFor?.date ?? new Date().toISOString().slice(0, 10),
+      image: photo || String(fd.get("image")) || "",
       pinned: fd.get("pinned") === "on",
       published: fd.get("published") === "on",
     };
-    setItems((xs) => [row, ...xs]);
-    const err = await dbInsert("news", row as unknown as Record<string, unknown>);
+    const err = editFor
+      ? await dbUpdate("news", { id: editFor.id }, row)
+      : await dbInsert("news", row as unknown as Record<string, unknown>);
     setModal(false);
     setPhoto(null);
-    show(err ? `⚠ ${err}` : "✅ Announcement added");
+    await load();
+    show(err ? `⚠ ${err}` : editFor ? "✅ Announcement updated" : "✅ Announcement added");
   }
+
+  async function removeItem(n: NewsItem) {
+    setItems((xs) => xs.filter((x) => x.id !== n.id));
+    const err = await dbDelete("news", { id: n.id });
+    await load();
+    show(err ? `⚠ ${err}` : "✅ Deleted");
+  }
+
+  async function togglePin(n: NewsItem) {
+    setItems((xs) => xs.map((x) => (x.id === n.id ? { ...x, pinned: !x.pinned } : x)));
+    const err = await dbUpdate("news", { id: n.id }, { pinned: !n.pinned });
+    show(err ? `⚠ ${err}` : n.pinned ? "✅ Unpinned" : "✅ Pinned to homepage top");
+    await load();
+  }
+
+  const filtered = items.filter(
+    (n) => !q.trim() || n.title_en.toLowerCase().includes(q.toLowerCase()) || n.title_si.includes(q.trim())
+  );
 
   return (
     <div>
-      <AdminTopbar title="News & Notices" sub="Manage official notices, driver / job vacancies, and public announcements" />
+      <AdminTopbar title="News & Notices Management" sub="Publish announcements, tenders, and vacancies on the official website" />
       {node}
 
-      <div className="card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-            <Newspaper size={20} className="text-indigo-700" /> News &amp; Notices
-          </h2>
-          <button className="btn btn-primary" onClick={() => setModal(true)}>
-            <Plus size={16} /> Add Announcement
-          </button>
+      <div className="card p-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="relative flex-1 min-w-[240px]">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} className="field !pl-10" placeholder="Search announcements..." />
         </div>
-
-        <div className="flex flex-wrap items-center gap-3 mt-5">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} className="field !pl-10" placeholder="Search notices by headline or content..." />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {TABS.map((x) => (
-              <button
-                key={x}
-                onClick={() => setTab(x)}
-                className={`rounded-full px-4 py-2 text-[12px] font-bold border ${tab === x ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200"}`}
-              >
-                {x[0].toUpperCase() + x.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-2 mt-6">
-          {filtered.map((n) => (
-            <div key={n.id} className="rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="h-28 bg-gradient-to-br from-indigo-900 to-slate-800 relative">
-                <div className="absolute top-2.5 left-2.5 flex gap-1.5">
-                  <span className="badge-blue rounded-full px-2.5 py-0.5 text-[9.5px] font-bold uppercase">{n.category}</span>
-                  {n.pinned && <span className="badge-pinned rounded-full px-2.5 py-0.5 text-[9.5px] font-bold">📌 Pinned</span>}
-                  {n.published && <span className="badge-green rounded-full px-2.5 py-0.5 text-[9.5px] font-bold">Published</span>}
-                </div>
-                <div className="absolute bottom-2.5 right-3 text-white/50 text-[10px]">{n.date}</div>
-              </div>
-              <div className="p-4">
-                <div className="font-extrabold text-slate-900 text-[14px] leading-snug">{n.title_en}</div>
-                <p className="text-slate-500 text-[11.5px] mt-1.5 leading-relaxed line-clamp-2">{n.desc_en}</p>
-                <div className="flex items-center justify-between mt-3">
-                  <div className="flex gap-1">
-                    <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-amber-600" onClick={() => show(n.pinned ? "Unpinned" : "Pinned to homepage top")}>
-                      <Pin size={13} />
-                    </button>
-                    <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500" onClick={() => show("Preview")}>
-                      <Eye size={13} />
-                    </button>
-                  </div>
-                  <div className="flex gap-1">
-                    <button className="btn btn-outline !py-1 !px-2.5 !text-[11px]" onClick={() => show("Edit announcement")}>
-                      <Pencil size={12} /> Edit
-                    </button>
-                    <button
-                      className="w-8 h-8 rounded-lg border border-red-200 flex items-center justify-center text-red-500"
-                      onClick={() => setItems((xs) => xs.filter((x) => x.id !== n.id))}
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <button className="btn btn-primary" onClick={openAdd}>
+          <Plus size={16} /> Add Announcement
+        </button>
       </div>
 
+      <div className="space-y-4 mt-5">
+        {filtered.map((n) => (
+          <div key={n.id} className="card p-5 flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-4 flex-1 min-w-[260px]">
+              {n.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={n.image} alt={n.title_en} className="w-16 h-16 rounded-xl object-cover shrink-0" />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-slate-800 text-white/30 flex items-center justify-center shrink-0 text-[10px]">NEWS</div>
+              )}
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="badge-blue rounded-full px-2 py-0.5 text-[9.5px] font-bold">{n.category}</span>
+                  {n.pinned && <span className="badge-amber rounded-full px-2 py-0.5 text-[9.5px] font-bold">PINNED</span>}
+                  <span className="text-slate-400 text-[10px]">{n.date}</span>
+                </div>
+                <div className="font-extrabold text-slate-900 text-[14px] mt-1">{n.title_en}</div>
+                <div className="text-slate-500 text-[11.5px]">{n.title_si}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button className="btn btn-outline !py-1.5 !px-3 !text-[11.5px]" title="Preview" onClick={() => setPreview(n)}>
+                <Eye size={13} />
+              </button>
+              <button className="btn btn-outline !py-1.5 !px-3 !text-[11.5px]" title={n.pinned ? "Unpin" : "Pin to top"} onClick={() => togglePin(n)}>
+                <Pin size={13} /> {n.pinned ? "Unpin" : "Pin"}
+              </button>
+              <button className="btn btn-outline !py-1.5 !px-3 !text-[11.5px]" onClick={() => openEdit(n)}>
+                <Pencil size={13} /> Edit
+              </button>
+              <button className="btn btn-outline !py-1.5 !px-3 !text-[11.5px] !text-red-600 !border-red-200" onClick={() => removeItem(n)}>
+                <Trash2 size={13} /> Delete
+              </button>
+            </div>
+          </div>
+        ))}
+        {loaded && filtered.length === 0 && (
+          <p className="text-center text-slate-400 text-[13px]">News නෑ — "Add Announcement" ඔබලා එකතු කරන්න.</p>
+        )}
+      </div>
+
+      {preview && (
+        <AdminModal title={preview.title_en} sub={preview.title_si} onClose={() => setPreview(null)}>
+          {preview.image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview.image} alt="" className="w-full rounded-xl object-cover max-h-64 mb-4" />
+          )}
+          <p className="text-slate-600 text-[13.5px] leading-relaxed">{preview.desc_en}</p>
+          <p className="text-slate-500 text-[13px] leading-relaxed mt-3">{preview.desc_si}</p>
+          <div className="flex justify-end pt-4">
+            <button className="btn btn-outline" onClick={() => setPreview(null)}>Close</button>
+          </div>
+        </AdminModal>
+      )}
+
       {modal && (
-        <AdminModal title="Create New Announcement" onClose={() => setModal(false)} wide>
-          <form onSubmit={addAnnouncement} className="space-y-4">
+        <AdminModal
+          title={editFor ? "Edit Announcement" : "Add Announcement"}
+          sub={editFor ? `${editFor.title_en} — update කර Save ඔබන්න` : "News, notices, tenders, vacancies"}
+          onClose={() => { setModal(false); setPhoto(null); }}
+          wide
+        >
+          <form key={editFor ? `edit-${editFor.id}` : "add"} onSubmit={submitItem} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="field-label">Category *</label>
-                <select name="category" className="field" defaultValue="notice">
-                  <option value="vacancy">Job Vacancy (රැකියා නිවේදන)</option>
-                  <option value="notice">Special Notice (විශේෂ නිවේදන)</option>
-                  <option value="tender">Tender (ටෙන්ඩර්)</option>
-                  <option value="general">General (සාමාන්‍ය)</option>
+                <label className="field-label">Category</label>
+                <select name="category" className="field" defaultValue={editFor?.category ?? "notice"}>
+                  <option value="notice">Notice</option>
+                  <option value="vacancy">Vacancy</option>
+                  <option value="tender">Tender</option>
+                  <option value="general">General</option>
                 </select>
               </div>
               <div>
                 <label className="field-label">Badge Text (Optional)</label>
-                <input name="badge" className="field" placeholder="e.g. Job Vacancy / Urgent" />
+                <input name="badge" className="field" defaultValue={editFor?.badge_text ?? ""} placeholder="e.g. NEW" />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="field-label">Title (English) *</label>
+                <input name="title_en" required className="field" defaultValue={editFor?.title_en ?? ""} />
+              </div>
+              <div>
+                <label className="field-label">Title (Sinhala) *</label>
+                <input name="title_si" required className="field" defaultValue={editFor?.title_si ?? ""} />
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="field-label">Description (English)</label>
+                <textarea name="desc_en" rows={3} className="field" defaultValue={editFor?.desc_en ?? ""} />
+              </div>
+              <div>
+                <label className="field-label">Description (Sinhala)</label>
+                <textarea name="desc_si" rows={3} className="field" defaultValue={editFor?.desc_si ?? ""} />
               </div>
             </div>
             <div>
-              <label className="field-label">Headline / Title (Sinhala) *</label>
-              <input name="title_si" required className="field" placeholder="උදා: බර වාහන රියදුරන් බඳවා ගැනීම පිළිබඳ නිවේදනය" />
-            </div>
-            <div>
-              <label className="field-label">Headline / Title (English)</label>
-              <input name="title_en" className="field" placeholder="e.g. Call for Applications: Heavy Vehicle Driver Vacancies" />
-            </div>
-            <div>
-              <label className="field-label">Full Notice Description (Sinhala) *</label>
-              <textarea name="desc_si" required rows={4} className="field" placeholder="සම්පූර්ණ නිවේදන විස්තර..." />
-            </div>
-            <div>
-              <label className="field-label">Full Notice Description (English)</label>
-              <textarea name="desc_en" rows={4} className="field" placeholder="Full notice requirements, benefits, and application guidelines in English..." />
-            </div>
-            <div>
-              <label className="field-label">Notice Banner Image</label>
-              <div className="flex gap-2.5">
-                <label className="btn btn-outline flex-1 !justify-start cursor-pointer">
+              <label className="field-label">Cover Photo</label>
+              <div className="flex items-center gap-3">
+                {photo && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photo} alt="preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
+                )}
+                <label className="btn btn-outline cursor-pointer">
+                  <Upload size={14} /> {uploading ? "Uploading…" : photo ? "Change Photo" : "Upload from Device"}
                   <input type="file" accept="image/*" className="hidden" onChange={onPhoto} />
-                  {photo && <img src={photo} alt="preview" className="w-9 h-9 rounded-lg object-cover" />}
-                  ⬆ Choose Image File (jpg, .png, .webp)
                 </label>
-                <input name="image" className="field flex-1" placeholder="or enter image path / URL" />
               </div>
+              <input name="image" className="field mt-2.5" defaultValue={editFor?.image ?? ""} placeholder="or enter image path / URL" />
             </div>
-            <div className="flex flex-wrap items-center gap-6">
+            <div className="flex flex-wrap gap-5">
               <label className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-700">
-                <input type="checkbox" name="pinned" className="accent-indigo-700 w-4 h-4" /> Pin this notice to top of homepage
+                <input type="checkbox" name="pinned" defaultChecked={editFor?.pinned ?? false} /> Pinned to homepage top
               </label>
               <label className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-700">
-                <input type="checkbox" name="published" defaultChecked className="accent-indigo-700 w-4 h-4" /> Publish immediately (Visible on website)
+                <input type="checkbox" name="published" defaultChecked={editFor?.published ?? true} /> Published (public එකේ පේනවා)
               </label>
             </div>
             <div className="flex justify-end gap-2.5 pt-2">
-              <button type="button" className="btn btn-outline" onClick={() => setModal(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">✓ Add Announcement</button>
+              <button type="button" className="btn btn-outline" onClick={() => { setModal(false); setPhoto(null); }}>Cancel</button>
+              <button type="submit" className="btn btn-primary">{editFor ? <><Pencil size={15} /> Save Changes</> : "✓ Add Announcement"}</button>
             </div>
           </form>
         </AdminModal>

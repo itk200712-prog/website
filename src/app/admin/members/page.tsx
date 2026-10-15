@@ -4,9 +4,10 @@
 // Registered Members — All User & Admin Accounts (password display included)
 // ============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff, Pencil, Search, Trash2, UsersRound } from "lucide-react";
-import { AdminTopbar, dbDelete, dbUpdate, useNotice } from "@/components/admin";
+import { AdminModal, AdminTopbar, dbDelete, dbUpdate, useNotice } from "@/components/admin";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { decodePw } from "@/lib/auth";
 import { REGISTERED_USERS } from "@/lib/seed";
 
@@ -16,6 +17,32 @@ export default function AdminMembersPage() {
   const { show, node } = useNotice();
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<UserRow[]>([...REGISTERED_USERS]);
+  const [editFor, setEditFor] = useState<UserRow | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // DB (profiles) එකෙන් load — sample data නෙමෙයි, ඇත්ත accounts ම
+  async function load() {
+    if (!isSupabaseConfigured()) { setLoaded(true); return; }
+    try {
+      const { data } = await createClient().from("profiles").select("*");
+      if (data && data.length > 0) {
+        setRows(
+          (data as unknown as Record<string, string>[]).map((r) => ({
+            id: r.id,
+            full_name: r.full_name ?? "",
+            nic: r.nic ?? "",
+            phone: r.phone ?? "",
+            role: (r.role ?? "member") as UserRow["role"],
+            joined_date: r.created_at ? new Date(r.created_at).toLocaleDateString() : "—",
+            password_display: r.password_display ?? "",
+            auth_email: r.auth_email ?? "",
+          })) as UserRow[]
+        );
+      }
+    } catch { /* ignore */ }
+    setLoaded(true);
+  }
+  useEffect(() => { load(); }, []);
   const [visible, setVisible] = useState<Record<string, boolean>>({});
 
   const filtered = useMemo(() => {
@@ -98,7 +125,7 @@ export default function AdminMembersPage() {
                     <div className="flex items-center gap-1.5">
                       <button
                         className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-700"
-                        onClick={() => show("Edit mode — update fields මෙතනින්")}
+                        onClick={() => setEditFor(r)}
                       >
                         <Pencil size={14} />
                       </button>
@@ -107,7 +134,8 @@ export default function AdminMembersPage() {
                           className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-600"
                           onClick={async () => {
                             setRows((rs) => rs.filter((x) => x.id !== r.id));
-                            const err = await dbDelete("profiles", { nic: r.nic });
+                            const err = await dbDelete("profiles", r.id ? { id: r.id } : { nic: r.nic });
+                            await load();
                             show(err ? `⚠ ${err}` : "✅ Deleted");
                           }}
                         >
@@ -122,6 +150,60 @@ export default function AdminMembersPage() {
           </table>
         </div>
       </div>
+
+      {editFor && (
+        <AdminModal title="Edit Member" sub={`${editFor.full_name} — update කර Save ඔබන්න`} onClose={() => setEditFor(null)}>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              const patch = {
+                full_name: String(fd.get("full_name")),
+                phone: String(fd.get("phone")),
+                nic: String(fd.get("nic")),
+                auth_email: String(fd.get("auth_email")),
+                role: String(fd.get("role")),
+              };
+              const err = await dbUpdate("profiles", { id: editFor.id }, patch);
+              setEditFor(null);
+              await load();
+              show(err ? `⚠ ${err}` : "✅ Member updated");
+            }}
+            className="space-y-4"
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="field-label">Full Name</label>
+                <input name="full_name" required className="field" defaultValue={editFor.full_name} />
+              </div>
+              <div>
+                <label className="field-label">NIC</label>
+                <input name="nic" required className="field" defaultValue={editFor.nic} />
+              </div>
+              <div>
+                <label className="field-label">Phone</label>
+                <input name="phone" className="field" defaultValue={editFor.phone} />
+              </div>
+              <div>
+                <label className="field-label">Email</label>
+                <input name="auth_email" className="field" defaultValue={editFor.auth_email} />
+              </div>
+            </div>
+            <div>
+              <label className="field-label">Role</label>
+              <select name="role" className="field" defaultValue={editFor.role}>
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+                <option value="superadmin">Super Admin</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button type="button" className="btn btn-outline" onClick={() => setEditFor(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Save Changes</button>
+            </div>
+          </form>
+        </AdminModal>
+      )}
     </div>
   );
 }
