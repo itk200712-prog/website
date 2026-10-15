@@ -29,6 +29,7 @@ export default function AdminBusinessesPage() {
   const [units, setUnits] = useState<BusinessUnit[]>([...BUSINESSES]);
   const [mgrRows, setMgrRows] = useState<Array<{ role_en: string; role_si: string; name: string; location: string; phone: string }>>([]);
   const [coverPreview, setCoverPreview] = useState("");
+  const [logoPreview, setLogoPreview] = useState("");
   const [uploadTarget, setUploadTarget] = useState<"logo" | "cover" | null>(null);
   const logoRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
@@ -38,6 +39,7 @@ export default function AdminBusinessesPage() {
     setEditFor(b);
     setMgrRows(b.contacts.map((c) => ({ role_en: c.role_en, role_si: c.role_si, name: c.name, location: c.location, phone: c.phone })));
     setCoverPreview(b.cover ?? "");
+    setLogoPreview(b.logo ?? "");
   };
 
   const PRESETS: Record<string, string> = {
@@ -65,7 +67,10 @@ export default function AdminBusinessesPage() {
     show("⏳ Image එක upload වෙමින්...");
     const res = await uploadSiteImage(f, uploadTarget === "logo" ? "businesses" : "covers");
     if (res && res.url) {
-      if (uploadTarget === "logo" && logoRef.current) logoRef.current.value = res.url;
+      if (uploadTarget === "logo" && logoRef.current) {
+        logoRef.current.value = res.url;
+        setLogoPreview(res.url);
+      }
       if (uploadTarget === "cover") {
         if (coverRef.current) coverRef.current.value = res.url;
         setCoverPreview(res.url);
@@ -405,16 +410,21 @@ export default function AdminBusinessesPage() {
                 <ImageIcon size={16} /> Business Logo / Image
               </div>
               <div className="flex gap-2.5 mt-3">
-                <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-[9px] font-black text-slate-500">
-                  LOGO
-                </div>
-                <input ref={logoRef} name="logo" className="field flex-1" defaultValue={editFor.logo} placeholder="/images/sections/... or https://..." />
+                {logoPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoPreview} alt="logo preview" className="w-11 h-11 rounded-xl object-cover border border-slate-200" />
+                ) : (
+                  <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-[9px] font-black text-slate-500">
+                    LOGO
+                  </div>
+                )}
+                <input ref={logoRef} name="logo" className="field flex-1" defaultValue={editFor.logo} placeholder="/images/sections/... or https://..." onChange={(e) => setLogoPreview(e.target.value)} />
                 <button type="button" className="btn btn-outline" onClick={() => pickUpload("logo")}>⬆ Upload from Device</button>
               </div>
               <div className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mt-3">Or quick pick existing preset:</div>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {Object.keys(PRESETS).map((p) => (
-                  <button key={p} type="button" className="rounded-full border border-slate-200 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 hover:border-indigo-400" onClick={() => { if (logoRef.current) logoRef.current.value = PRESETS[p]; }}>
+                  <button key={p} type="button" className="rounded-full border border-slate-200 px-3 py-1.5 text-[10.5px] font-semibold text-slate-600 hover:border-indigo-400" onClick={() => { if (logoRef.current) logoRef.current.value = PRESETS[p]; setLogoPreview(PRESETS[p]); }}>
                     {p}
                   </button>
                 ))}
