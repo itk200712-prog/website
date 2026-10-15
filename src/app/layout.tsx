@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FloatingLang } from "@/components/floating-lang";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
@@ -28,6 +29,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body>
+        <FloatingLang />
         <LanguageProvider initialLang={lang}>{children}</LanguageProvider>
       </body>
     </html>

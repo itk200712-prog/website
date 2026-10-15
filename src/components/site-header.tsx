@@ -154,7 +154,6 @@ export function SiteHeader() {
             <Link href={L("/signin")} className="inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white text-slate-900 font-bold hover:bg-slate-100 transition">
               <UserRound size={14} /> {t.nav.signin}
             </Link>
-            <LangSwitcher tone="dark" />
             <button className="lg:hidden p-2 rounded-lg border border-slate-200" onClick={() => setMobile(!mobile)}>
               {mobile ? <X size={20} /> : <Menu size={20} />}
             </button>

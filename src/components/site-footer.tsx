@@ -177,9 +177,9 @@ export function SiteFooter() {
               )}
             </div>
             <div className="flex items-center gap-4">
-              <a href="#" className="hover:text-white">Privacy Policy</a>
+              <Link href={L("/privacy")} className="hover:text-white">Privacy Policy</Link>
               <span className="text-slate-700">|</span>
-              <a href="#" className="hover:text-white">Terms of Service</a>
+              <Link href={L("/terms")} className="hover:text-white">Terms of Service</Link>
               <span className="text-slate-700">|</span>
               <Link href={L("/admin")} className="hover:text-white flex items-center gap-1">
                 <ShieldCheck size={13} /> Admin Portal <ExternalLink size={11} />

@@ -1,70 +1,276 @@
 "use client";
 
-// Administrators (SUPER) — admin role management
+// ============================================================================
+// Administrators — add admins (login එක්ක) + section permissions (සමහර sections පමණක් edit)
+// ============================================================================
 
-import { ShieldCheck, UserPlus } from "lucide-react";
-import { AdminTopbar, useNotice } from "@/components/admin";
+import { useEffect, useState } from "react";
+import { Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { AdminModal, AdminTopbar, dbDelete, dbUpdate, useNotice, SECTION_KEYS } from "@/components/admin";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { encodePw } from "@/lib/auth";
 import { REGISTERED_USERS } from "@/lib/seed";
+
+type AdminRow = {
+  id: string;
+  full_name: string;
+  nic: string;
+  phone: string;
+  auth_email: string;
+  role: string;
+  sections: string;
+};
+
+const SECTION_LABELS: Record<string, string> = {
+  members: "Registered Members",
+  administrators: "Administrators",
+  applications: "Membership Applications",
+  data: "Data & Live Metrics",
+  board: "Board of Directors",
+  news: "News & Notices",
+  gallery: "Gallery Moderation",
+  messages: "Messages & Inquiries",
+  businesses: "Businesses & Services",
+  fuel: "Fuel Prices",
+  settings: "System Settings",
+};
 
 export default function AdminAdministratorsPage() {
   const { show, node } = useNotice();
-  const admins = REGISTERED_USERS.filter((u) => u.role === "superadmin" || u.role === "admin");
+  const [rows, setRows] = useState<AdminRow[]>([]);
+  const [modal, setModal] = useState(false);
+  const [editFor, setEditFor] = useState<AdminRow | null>(null);
+  const [sections, setSections] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  async function load() {
+    if (!isSupabaseConfigured()) {
+      setRows(REGISTERED_USERS.filter((u) => (u.role as string) !== "member").map((u) => ({
+        id: u.id, full_name: u.full_name, nic: u.nic, phone: u.phone, auth_email: u.auth_email, role: u.role, sections: "",
+      })));
+      setLoaded(true);
+      return;
+    }
+    try {
+      const { data } = await createClient().from("profiles").select("*").neq("role", "member");
+      if (data) setRows(data as unknown as AdminRow[]);
+    } catch { /* ignore */ }
+    setLoaded(true);
+  }
+  useEffect(() => { load(); }, []);
+
+  function openAdd() {
+    setEditFor(null);
+    setSections([]);
+    setModal(true);
+  }
+  function openEdit(r: AdminRow) {
+    setEditFor(r);
+    setSections((r.sections || "").split(",").map((s) => s.trim()).filter(Boolean));
+    setModal(true);
+  }
+
+  const toggle = (k: string) =>
+    setSections((xs) => (xs.includes(k) ? xs.filter((x) => x !== k) : [...xs, k]));
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const csv = sections.join(",");
+    if (editFor) {
+      const err = await dbUpdate("profiles", { id: editFor.id }, {
+        full_name: String(fd.get("full_name")),
+        phone: String(fd.get("phone")),
+        role: String(fd.get("role")),
+        sections: csv,
+      });
+      setModal(false);
+      await load();
+      show(err ? `⚠ ${err}` : "✅ Administrator updated");
+      return;
+    }
+    // අලුත් admin කෙනෙක් — login එක්ක create කරන්න
+    const email = String(fd.get("email"));
+    const password = String(fd.get("password"));
+    const sb = createClient();
+    const { data, error } = await sb.auth.signUp({ email, password });
+    if (error) {
+      show(`⚠ ${error.message}`);
+      return;
+    }
+    const uid = data.user?.id;
+    if (uid) {
+      const err = await dbUpdate("profiles", { id: uid }, {
+        full_name: String(fd.get("full_name")),
+        nic: String(fd.get("nic")),
+        phone: String(fd.get("phone")),
+        auth_email: email,
+        role: String(fd.get("role")),
+        sections: csv,
+        password_display: encodePw(password),
+      }) ?? await (async () => {
+        const { createClient: _ } = { createClient };
+        const { error: insErr } = await sb.from("profiles").upsert({
+          id: uid,
+          full_name: String(fd.get("full_name")),
+          nic: String(fd.get("nic")),
+          phone: String(fd.get("phone")),
+          auth_email: email,
+          role: String(fd.get("role")),
+          sections: csv,
+          password_display: encodePw(password),
+        });
+        return insErr ? insErr.message : null;
+      })();
+      show(err ? `⚠ ${err}` : "✅ Administrator created — දැන් ඒ ලොගින් වෙලා තෝරපු sections විතරක් edit කරන්න පුළුවන්");
+    }
+    setModal(false);
+    await load();
+  }
+
+  async function remove(r: AdminRow) {
+    if (r.role === "superadmin") return;
+    setRows((xs) => xs.filter((x) => x.id !== r.id));
+    const err = await dbDelete("profiles", { id: r.id });
+    await load();
+    show(err ? `⚠ ${err}` : "✅ Removed");
+  }
 
   return (
     <div>
-      <AdminTopbar title="Administrators" sub="Manage administrator accounts with elevated console access (SUPER only)" />
+      <AdminTopbar title="Administrators" sub="Add admins with login access and choose which sections each admin can edit" />
       {node}
 
       <div className="card p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-              <ShieldCheck size={20} className="text-indigo-700" /> Administrator Accounts
-              <span className="badge-blue rounded-full px-2.5 py-0.5 text-[11px] font-bold">{admins.length}</span>
+              <ShieldCheck size={20} className="text-indigo-700" /> Administrators & Section Permissions
             </h2>
             <p className="text-slate-500 text-[12px] mt-1">
-              Only Super Administrators can add, edit, or remove administrator accounts and change roles.
+              Admin කෙනෙක්ට අවශ්‍ය sections පමණක් තෝරන්න — එයාට login වෙලා ඒ sections විතරක් edit කරන්න පුළුවන්.
             </p>
           </div>
-          <button className="btn btn-primary" onClick={() => show("Add Administrator form — role grant SQL එකත් එක්ක")}>
-            <UserPlus size={16} /> Add Administrator
+          <button className="btn btn-primary" onClick={openAdd}>
+            <Plus size={16} /> Add Administrator
           </button>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-6">
-          {admins.map((a) => (
-            <div key={a.id} className="rounded-2xl border border-slate-200 p-5">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-[12px] font-black">
-                  {a.full_name.slice(0, 2).toUpperCase()}
+          {rows.map((r) => (
+            <div key={r.id ?? r.nic} className="rounded-2xl border border-slate-200 p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center text-[11px] font-black">
+                    {(r.full_name || "?").split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                  </div>
+                  <div>
+                    <div className="font-extrabold text-slate-900 text-[13px]">{r.full_name}</div>
+                    <div className="text-slate-500 text-[11px]">{r.auth_email}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-extrabold text-slate-900 text-[14px]">{a.full_name}</div>
-                  <div className="text-slate-400 text-[11px]">{a.auth_email}</div>
-                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${r.role === "superadmin" ? "badge-amber" : "badge-blue"}`}>
+                  {r.role}
+                </span>
               </div>
-              <div className="mt-3 space-y-1 text-[12px] text-slate-600">
-                <div>NIC: <span className="font-semibold">{a.nic}</span></div>
-                <div>Phone: <span className="font-semibold">{a.phone}</span></div>
-                <div>Joined: <span className="font-semibold">{a.joined_date}</span></div>
-              </div>
-              <div className="mt-3">
-                {a.role === "superadmin" ? (
-                  <span className="badge-amber rounded-full px-3 py-1 text-[10px] font-bold">SUPER ADMIN</span>
+              <div className="mt-2.5 text-[11px] text-slate-500">NIC: {r.nic} · {r.phone}</div>
+              <div className="mt-2 text-[10.5px] text-slate-500">
+                <span className="font-bold text-slate-600">Sections:</span>{" "}
+                {r.role === "superadmin" || !r.sections ? (
+                  <span className="text-emerald-600 font-semibold">All (full access)</span>
                 ) : (
-                  <span className="rounded-full bg-slate-900 text-white px-3 py-1 text-[10px] font-bold">ADMIN</span>
+                  r.sections.split(",").map((s) => SECTION_LABELS[s] ?? s).join(", ") || "—"
+                )}
+              </div>
+              <div className="flex gap-1.5 mt-3.5 justify-end">
+                <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-700" title="Edit sections" onClick={() => openEdit(r)}>
+                  <Pencil size={13} />
+                </button>
+                {r.role !== "superadmin" && (
+                  <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-600" title="Remove" onClick={() => remove(r)}>
+                    <Trash2 size={13} />
+                  </button>
                 )}
               </div>
             </div>
           ))}
         </div>
-
-        <div className="mt-6 rounded-2xl bg-indigo-50 border border-indigo-100 p-5 text-[12px] text-indigo-900 leading-relaxed">
-          <strong>Role grant (SQL Editor):</strong> අලුත් admin කෙනෙක් register වුණාට පස්සේ Supabase SQL Editor එකේ
-          <code className="mx-1 rounded bg-white px-1.5 py-0.5">update public.profiles set role=&apos;admin&apos;, status=&apos;active&apos; where nic=&apos;...&apos;;</code>
-          run කරන්න. protect_role_change() trigger එක මේක ආරක්ෂා කරයි.
-        </div>
+        {loaded && rows.length === 0 && (
+          <p className="text-center text-slate-400 text-[13px] mt-8">Administrators නෑ — "Add Administrator" ඔබන්න.</p>
+        )}
       </div>
+
+      {modal && (
+        <AdminModal
+          title={editFor ? "Edit Administrator" : "Add Administrator"}
+          sub={editFor ? `${editFor.full_name} — sections තෝරා Save ඔබන්න` : "Login එක්ක admin කෙනෙක් create කරන්න + එයාට edit කරන්න පුළුවන් sections තෝරන්න"}
+          onClose={() => setModal(false)}
+          wide
+        >
+          <form key={editFor ? `edit-${editFor.id}` : "add"} onSubmit={submit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="field-label">Full Name *</label>
+                <input name="full_name" required className="field" defaultValue={editFor?.full_name ?? ""} />
+              </div>
+              <div>
+                <label className="field-label">NIC *</label>
+                <input name="nic" required className="field" disabled={!!editFor} defaultValue={editFor?.nic ?? ""} />
+              </div>
+              <div>
+                <label className="field-label">Phone</label>
+                <input name="phone" className="field" defaultValue={editFor?.phone ?? ""} />
+              </div>
+              <div>
+                <label className="field-label">Role</label>
+                <select name="role" className="field" defaultValue={editFor?.role ?? "admin"} disabled={editFor?.role === "superadmin"}>
+                  <option value="admin">Admin (limited sections)</option>
+                  <option value="superadmin">Super Admin (all access)</option>
+                </select>
+              </div>
+            </div>
+            {!editFor && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="field-label">Login Email * (NIC@members.mpcs.lk)</label>
+                  <input name="email" type="email" required className="field" placeholder="e.g. perera@members.mpcs.lk" />
+                </div>
+                <div>
+                  <label className="field-label">Password *</label>
+                  <input name="password" type="text" required className="field" placeholder="e.g. Admin@123" />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="field-label">Editable Sections (sections මොනවද edit කරන්න පුළුවන්)</label>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-2">
+                {SECTION_KEYS.map((k) => (
+                  <label key={k} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 cursor-pointer hover:border-indigo-300">
+                    <input
+                      type="checkbox"
+                      checked={sections.includes(k)}
+                      onChange={() => toggle(k)}
+                      disabled={editFor?.role === "superadmin"}
+                    />
+                    <span className="text-[11.5px] font-semibold text-slate-700">{SECTION_LABELS[k] ?? k}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-slate-400 text-[10.5px] mt-2">
+                කිසිවක් නොතෝරා තැබුවොත් full access ලැබේ. උදාහරනයක් ලෙස &quot;Board of Directors&quot; පමණක් තෝරා ඇති admin කෙනෙකුට board details edit කිරීම පමණක් හැක.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button type="button" className="btn btn-outline" onClick={() => setModal(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">
+                {editFor ? "Save Changes" : <><UserPlus size={16} /> Create Administrator</>}
+              </button>
+            </div>
+          </form>
+        </AdminModal>
+      )}
     </div>
   );
 }

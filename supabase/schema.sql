@@ -265,6 +265,8 @@ create table if not exists public.system_settings (
 -- ---------------------------------------------------------------------------
 -- 11. RLS
 -- ---------------------------------------------------------------------------
+alter table public.profiles add column if not exists sections text default '';
+
 alter table public.profiles enable row level security;
 alter table public.business_units enable row level security;
 alter table public.business_services enable row level security;

@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, LogOut,
   Mail, Megaphone, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X,
@@ -15,50 +15,69 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 /* --------------------------------------------------------------- sidebar -- */
 const NAV = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badge: "" },
-  { href: "/admin/profile", label: "My Profile", icon: UserRound, badge: "SUPER" },
-  { href: "/admin/members", label: "Registered Members", icon: UsersRound, badge: "2" },
-  { href: "/admin/administrators", label: "Administrators", icon: ShieldCheck, badge: "SUPER" },
-  { href: "/admin/applications", label: "Membership Applications", icon: Megaphone, badge: "0" },
-  { href: "/admin/data", label: "Data & Live Metrics", icon: Database, badge: "" },
-  { href: "/admin/board", label: "Board of Directors", icon: UsersRound, badge: "9" },
-  { href: "/admin/news", label: "News & Notices", icon: Newspaper, badge: "3" },
-  { href: "/admin/gallery", label: "Gallery Moderation", icon: Images, badge: "1" },
-  { href: "/admin/messages", label: "Messages & Inquiries", icon: Mail, badge: "0" },
-  { href: "/admin/businesses", label: "Businesses & Services", icon: Building2, badge: "" },
-  { href: "/admin/fuel-prices", label: "Fuel Prices", icon: Fuel, badge: "" },
-  { href: "/admin/settings", label: "System Settings", icon: Settings, badge: "" },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, badge: "", key: "dashboard" },
+  { href: "/admin/profile", label: "My Profile", icon: UserRound, badge: "", key: "profile" },
+  { href: "/admin/members", label: "Registered Members", icon: UsersRound, badge: "", key: "members" },
+  { href: "/admin/administrators", label: "Administrators", icon: ShieldCheck, badge: "SUPER", key: "administrators" },
+  { href: "/admin/applications", label: "Membership Applications", icon: Megaphone, badge: "", key: "applications" },
+  { href: "/admin/data", label: "Data & Live Metrics", icon: Database, badge: "", key: "data" },
+  { href: "/admin/board", label: "Board of Directors", icon: UsersRound, badge: "", key: "board" },
+  { href: "/admin/news", label: "News & Notices", icon: Newspaper, badge: "", key: "news" },
+  { href: "/admin/gallery", label: "Gallery Moderation", icon: Images, badge: "", key: "gallery" },
+  { href: "/admin/messages", label: "Messages & Inquiries", icon: Mail, badge: "", key: "messages" },
+  { href: "/admin/businesses", label: "Businesses & Services", icon: Building2, badge: "", key: "businesses" },
+  { href: "/admin/fuel-prices", label: "Fuel Prices", icon: Fuel, badge: "", key: "fuel" },
+  { href: "/admin/settings", label: "System Settings", icon: Settings, badge: "", key: "settings" },
 ];
+
+/** section keys ලෙස භාවිතා වේ (administrators page එකෙන් grant කරයි) */
+export const SECTION_KEYS = NAV.map((n) => n.key).filter((k) => k !== "dashboard" && k !== "profile");
 
 export function AdminSidebar() {
   const path = usePathname();
+  const [allowed, setAllowed] = useState<string[] | null>(null); // null = loading
+
+  // section permissions load (superadmin/empty = සේරම ඉඩ)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!isSupabaseConfigured()) { setAllowed(null); return; }
+      try {
+        const sb = createClient();
+        const { data: u } = await sb.auth.getUser();
+        if (!u?.user) { setAllowed(null); return; }
+        const { data: prof } = await sb.from("profiles").select("role, sections").eq("id", u.user.id).single();
+        if (!alive) return;
+        if (prof?.role === "superadmin" || !prof?.sections) setAllowed(null);
+        else setAllowed(prof.sections.split(",").map((s: string) => s.trim()).filter(Boolean));
+      } catch { /* ignore */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const items = NAV.filter((n) => !allowed || allowed.length === 0 || n.key === "dashboard" || n.key === "profile" || allowed.includes(n.key));
+
   return (
-    <aside className="w-[250px] shrink-0 bg-[#0b1029] text-white min-h-screen sticky top-0 flex flex-col no-print">
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[9px] font-black">
+    <aside className="w-[218px] shrink-0 bg-[#0b1029] text-white min-h-screen sticky top-0 flex flex-col no-print">
+      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-white/10">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[8px] font-black">
           coop
         </div>
         <div>
-          <div className="font-extrabold text-[13px] leading-tight">PANDUWASNUWARA</div>
-          <div className="text-[10px] text-slate-400">Admin Console</div>
+          <div className="font-extrabold text-[11px] leading-tight">PANDUWASNUWARA</div>
+          <div className="text-[8.5px] text-slate-400 tracking-wide">Admin Console</div>
         </div>
       </div>
-      <div className="px-5 pt-4 pb-2 text-[9.5px] font-bold tracking-[0.18em] text-slate-500">NAVIGATION</div>
-      <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto pb-6">
-        {NAV.map((n) => {
+      <div className="px-4 pt-3.5 pb-1.5 text-[8.5px] font-bold tracking-[0.18em] text-slate-500">NAVIGATION</div>
+      <nav className="flex-1 px-2.5 space-y-0.5 overflow-y-auto pb-6">
+        {items.map((n) => {
           const active = path === n.href;
           return (
-            <Link key={n.href} href={n.href} className={`admin-nav-item ${active ? "active" : ""}`}>
-              <n.icon size={16} />
+            <Link key={n.href} href={n.href} className={`admin-nav-item !text-[11.5px] !py-[7px] ${active ? "active" : ""}`}>
+              <n.icon size={14} />
               <span className="flex-1">{n.label}</span>
               {n.badge && (
-                <span
-                  className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 ${
-                    n.badge === "SUPER" ? "bg-indigo-500/30 text-indigo-200" : "bg-white/10 text-slate-300"
-                  }`}
-                >
-                  {n.badge}
-                </span>
+                <span className="text-[8px] font-bold rounded-full px-1.5 py-0.5 bg-indigo-500/30 text-indigo-200">{n.badge}</span>
               )}
             </Link>
           );
