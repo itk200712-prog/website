@@ -1,14 +1,16 @@
 "use client";
 
 // ============================================================================
-// Data & Live Metrics — Excel/CSV import + download (member logic upload flow)
+// Data & Live Metrics — REAL Excel/CSV import + per-file PDF/CSV download
+// Format: Member Number, NIC, FULL NAME, ADDRESS, POSTAL ADDRESS, GENDER
 // ============================================================================
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Database, Download, FileSpreadsheet, Printer, UploadCloud, UsersRound, Vote,
 } from "lucide-react";
 import { AdminTopbar, dbInsert, useNotice } from "@/components/admin";
+import { authedClient } from "@/lib/supabase/client";
 import { MEMBER_FILES, SETTINGS, VOTER_FILES } from "@/lib/seed";
 
 const MODES = [
@@ -17,18 +19,264 @@ const MODES = [
   { key: "replace-all", label: "Replace entire existing list" },
 ];
 
-function ImportPanel({
-  kind, title, total, files,
-}: {
-  kind: "member" | "voter";
-  title: string;
-  total: number;
-  files: { file_name: string; rows: number }[];
-}) {
+const BATCH = 500;
+
+function stripExt(name: string) {
+  return name.replace(/\.(xlsx|xls|csv)$/i, "");
+}
+
+type ParsedRow = {
+  member_no: string;
+  nic: string;
+  full_name: string;
+  address: string;
+  postal_address: string;
+  gender: string;
+};
+
+function normalizeRow(r: Record<string, unknown>): ParsedRow {
+  const grab = (keys: string[]) => {
+    for (const k of Object.keys(r)) {
+      const kl = k.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (keys.includes(kl)) return String(r[k] ?? "").trim();
+    }
+    return "";
+  };
+  return {
+    member_no: grab(["membernumber", "memberno", "memberno", "no", "number", "serial", "serialno"]),
+    nic: grab(["nic", "nicno", "nicnumber", "nationalidentitycard", "identitycard"]),
+    full_name: grab(["fullname", "name", "membername"]),
+    address: grab(["address", "homeaddress"]),
+    postal_address: grab(["postaladdress", "postal", "mailingaddress"]),
+    gender: grab(["gender", "sex"]),
+  };
+}
+
+async function parseSpreadsheet(file: File): Promise<ParsedRow[]> {
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+  return json.map(normalizeRow).filter((r) => r.full_name || r.nic || r.member_no);
+}
+
+/* ------------------------------------------------------------------ PDF -- */
+async function buildPdf(label: string, kind: "member" | "voter", rows: ParsedRow[], onProgress: (pct: number) => void) {
+  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
+
+  const PER_PAGE = 30;
+  const pages: ParsedRow[][] = [];
+  for (let i = 0; i < rows.length; i += PER_PAGE) pages.push(rows.slice(i, i + PER_PAGE));
+  if (!pages.length) pages.push([]);
+
+  // hidden render container — browser fonts => perfect Sinhala
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;background:#fff;z-index:-1;";
+  document.body.appendChild(host);
+
+  const head = kind === "member"
+    ? ["Member No", "NIC", "Full Name", "Address", "Postal Address", "Gender"]
+    : ["Voter No", "NIC", "Full Name", "Address", "Postal Address", "Gender"];
+  const keyOf = kind === "member" ? "member_no" : "member_no"; // same shape
+  void keyOf;
+
+  const makePage = (pageRows: ParsedRow[], idx: number, total: number) => {
+    const el = document.createElement("div");
+    el.style.cssText = "width:794px;min-height:1123px;padding:42px 40px;box-sizing:border-box;background:#fff;font-family:'Iskoola Pota','Noto Sans Sinhala',sans-serif;";
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #3730a3;padding-bottom:12px;">
+        <div>
+          <div style="font-size:19px;font-weight:800;color:#1e1b4b;">Panduwasnuwara New MPCS</div>
+          <div style="font-size:12px;color:#6366f1;font-weight:700;">${kind === "member" ? "Member Register" : "Electoral Register"} · ${label}</div>
+        </div>
+        <div style="text-align:right;font-size:11px;color:#64748b;">
+          <div>${new Date().toLocaleDateString()} · ${rows.length.toLocaleString()} records</div>
+          <div>Page ${idx + 1} / ${total}</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:11px;">
+        <thead>
+          <tr style="background:#3730a3;color:#fff;">
+            ${head.map((h) => `<th style="padding:8px 6px;text-align:left;font-weight:700;">${h}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${pageRows
+            .map(
+              (r, i) => `<tr style="background:${i % 2 ? "#f5f7ff" : "#fff"};">
+            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.member_no || ""}</td>
+            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.nic || ""}</td>
+            <td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">${r.full_name || ""}</td>
+            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.address || ""}</td>
+            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.postal_address || ""}</td>
+            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.gender || ""}</td>
+          </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
+      <div style="margin-top:18px;font-size:10px;color:#94a3b8;text-align:center;">
+        Panduwasnuwara Multi-Purpose Cooperative Society · Reg. No කුරු/186 · Generated ${new Date().toLocaleString()}
+      </div>`;
+    return el;
+  };
+
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  for (let i = 0; i < pages.length; i++) {
+    const el = makePage(pages[i], i, pages.length);
+    host.appendChild(el);
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff" });
+    const img = canvas.toDataURL("image/jpeg", 0.92);
+    if (i > 0) doc.addPage();
+    doc.addImage(img, "JPEG", 0, 0, 595.28, 841.89);
+    host.removeChild(el);
+    onProgress(Math.round(((i + 1) / pages.length) * 100));
+  }
+  document.body.removeChild(host);
+  doc.save(`${label}-${kind === "member" ? "members" : "voters"}.pdf`);
+}
+
+function downloadCsv(label: string, rows: ParsedRow[]) {
+  const head = ["Member Number", "NIC", "FULL NAME", "ADDRESS", "POSTAL ADDRESS", "GENDER"];
+  const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+  const body = rows.map((r) => [r.member_no, r.nic, r.full_name, r.address, r.postal_address, r.gender].map(esc).join(","));
+  const blob = new Blob(["\uFEFF" + [head.join(","), ...body].join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${label}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ------------------------------------------------------------- panels ---- */
+function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string }) {
   const { show, node } = useNotice();
   const [mode, setMode] = useState("append");
-  const [chosen, setChosen] = useState<string[]>([]);
+  const [chosen, setChosen] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState("");
+  const [files, setFiles] = useState<{ file_name: string; rows: number }[]>([]);
+  const [selected, setSelected] = useState<string>("");
   const [fileOpen, setFileOpen] = useState(false);
+  const [anim, setAnim] = useState<{ pct: number; done: boolean; label: string } | null>(null);
+
+  const table = kind === "member" ? "member_rows" : "voter_rows";
+  const total = useMemo(() => files.reduce((a, b) => a + b.rows, 0), [files]);
+
+  async function loadFiles() {
+    const sb = await authedClient();
+    const { data } = await sb.from("data_files").select("file_name, rows").eq("kind", kind).order("rows", { ascending: false });
+    const real = ((data as { file_name: string; rows: number }[]) ?? []).map((f) => ({ file_name: f.file_name, rows: Number(f.rows) }));
+    setFiles(real.length ? real : kind === "member" ? [...MEMBER_FILES] : [...VOTER_FILES]);
+    if (!selected && real.length) setSelected(stripExt(real[0].file_name));
+  }
+
+  useEffect(() => {
+    loadFiles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function upload() {
+    if (!chosen.length) return show("⚠ කරුණාකර file එකක් තෝරන්න");
+    setBusy(true);
+    try {
+      const sb = await authedClient();
+      const names = chosen.map((f) => stripExt(f.name));
+
+      if (mode === "replace-all") {
+        setProg("Clearing existing list…");
+        await sb.from(table).delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        await sb.from("data_files").delete().eq("kind", kind);
+      } else if (mode === "replace-file") {
+        setProg("Replacing matching files…");
+        for (const n of names) {
+          await sb.from(table).delete().eq("file_name", n);
+          await sb.from("data_files").delete().eq("kind", kind).eq("file_name", n);
+        }
+      }
+
+      for (let fi = 0; fi < chosen.length; fi++) {
+        const file = chosen[fi];
+        const label = stripExt(file.name);
+        setProg(`Parsing ${file.name}…`);
+        const rows = await parseSpreadsheet(file);
+        if (!rows.length) {
+          show(`⚠ ${file.name} — හිස් (columns බලන්න: Member Number, NIC, FULL NAME, ADDRESS, POSTAL ADDRESS, GENDER)`);
+          continue;
+        }
+        for (let i = 0; i < rows.length; i += BATCH) {
+          const batch = rows.slice(i, i + BATCH).map((r) => ({ ...r, file_name: label }));
+          const { error } = await sb.from(table).insert(batch);
+          if (error) throw new Error(error.message);
+          setProg(`Uploading ${label} — ${Math.min(i + BATCH, rows.length).toLocaleString()} / ${rows.length.toLocaleString()} rows`);
+        }
+        await sb.from("data_files").delete().eq("kind", kind).eq("file_name", label);
+        await sb.from("data_files").insert({ kind, file_name: label, rows: rows.length });
+      }
+
+      // live totals -> main site counters
+      const { data: all } = await sb.from("data_files").select("rows").eq("kind", kind);
+      const sum = ((all as { rows: number }[]) ?? []).reduce((a, b) => a + Number(b.rows), 0);
+      const count = ((all as unknown[]) ?? []).length;
+      if (kind === "member") {
+        await sb.from("system_settings").upsert([
+          { key: "members_total", value: String(sum) },
+          { key: "members_files_count", value: String(count) },
+        ], { onConflict: "key" });
+      } else {
+        await sb.from("system_settings").upsert([
+          { key: "voters_total", value: String(sum) },
+          { key: "voters_files_count", value: String(count) },
+        ], { onConflict: "key" });
+      }
+      await dbInsert("data_imports", { kind, mode, files: names.join(",") });
+      show(`✅ ${chosen.length} file(s) processed — ${sum.toLocaleString()} ${kind === "member" ? "members" : "voters"} total`);
+      setChosen([]);
+      await loadFiles();
+    } catch (e) {
+      show(`⚠ ${(e as Error).message}`);
+    }
+    setProg("");
+    setBusy(false);
+  }
+
+  async function downloadPdf() {
+    const label = selected || stripExt(files[0]?.file_name ?? "register");
+    setAnim({ pct: 0, done: false, label });
+    try {
+      const sb = await authedClient();
+      let rows: ParsedRow[] = [];
+      const { data } = await sb.from(table).select("*").eq("file_name", label).limit(20000);
+      rows = (data as ParsedRow[]) ?? [];
+      if (!rows.length) {
+        // fallback: generated demo rows (pre-upload state)
+        const { getMemberRows, getVoterRows } = await import("@/lib/directory-rows");
+        const gen = (kind === "member" ? getMemberRows() : getVoterRows()) as unknown as (ParsedRow & { file_name: string })[];
+        rows = gen.filter((r) => stripExt(r.file_name || "") === label).map((r) => ({ ...r }));
+      }
+      await buildPdf(label, kind, rows, (pct) => setAnim({ pct, done: false, label }));
+      setAnim({ pct: 100, done: true, label });
+      setTimeout(() => setAnim(null), 1800);
+    } catch (e) {
+      setAnim(null);
+      show(`⚠ ${(e as Error).message}`);
+    }
+  }
+
+  function downloadSample(xlsx: boolean) {
+    const head = ["Member Number", "NIC", "FULL NAME", "ADDRESS", "POSTAL ADDRESS", "GENDER"];
+    const sample = [{ member_no: "001", nic: "199012345678", full_name: "නිමල් පෙරේරා", address: "හෙට්ටිපොල", postal_address: "හෙට්ටිපොල", gender: "Male" }];
+    if (xlsx) {
+      (async () => {
+        const XLSX = await import("xlsx");
+        const ws = XLSX.utils.json_to_sheet(sample, { header: head });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Members");
+        XLSX.writeFile(wb, `member-template.xlsx`);
+      })();
+    } else downloadCsv("member-template", sample);
+  }
 
   return (
     <div className="card p-6">
@@ -43,7 +291,7 @@ function ImportPanel({
       </div>
       <p className="text-slate-500 text-[12px] mt-1.5">
         {kind === "member"
-          ? "Upload a member spreadsheet file (.csv) to dynamically update the live members counter."
+          ? "Upload member spreadsheet files (.xlsx / .xls / .csv) — rows are parsed and counted automatically (කාරක සභා 52)."
           : "Upload verified voter records from the electoral register file to update the live eligible voters count."}
       </p>
 
@@ -57,11 +305,11 @@ function ImportPanel({
             multiple
             accept=".csv,.xlsx,.xls"
             className="hidden"
-            onChange={(e) => setChosen(Array.from(e.target.files ?? []).map((f) => f.name))}
+            onChange={(e) => setChosen(Array.from(e.target.files ?? []))}
           />
           <span className="btn btn-outline !py-2 !px-4 !text-[12px]">Choose Files</span>
           <span className="text-slate-500 text-[12.5px]">
-            {chosen.length ? chosen.join(", ") : "No file chosen"}
+            {chosen.length ? chosen.map((f) => f.name).join(", ") : "No file chosen"}
           </span>
         </label>
         <div className="mt-2.5 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-2.5 text-[11px] text-indigo-900 leading-relaxed">
@@ -78,15 +326,14 @@ function ImportPanel({
         ))}
       </div>
 
-      <button
-        className="btn btn-primary w-full mt-4"
-        onClick={async () => {
-          const err = await dbInsert("data_imports", { kind, mode, files: chosen.join(",") });
-          show(err ? `⚠ ${err}` : `✅ ${kind} files processed (${mode})`);
-        }}
-      >
-        <UploadCloud size={16} /> Upload &amp; Process File
+      <button className="btn btn-primary w-full mt-4 disabled:opacity-60" disabled={busy} onClick={upload}>
+        <UploadCloud size={16} /> {busy ? (prog || "Processing…") : "Upload & Process File"}
       </button>
+      {busy && (
+        <div className="mt-2.5 h-1.5 rounded-full bg-indigo-100 overflow-hidden">
+          <div className="h-full rounded-full bg-indigo-600 transition-all duration-500" style={{ width: "100%", animation: "pulse 1s infinite" }} />
+        </div>
+      )}
 
       {/* download */}
       <div className="border-t border-slate-100 mt-6 pt-5">
@@ -98,25 +345,46 @@ function ImportPanel({
             <button className="field !w-auto min-w-[200px] flex items-center justify-between gap-3 font-semibold" onClick={() => setFileOpen(!fileOpen)}>
               <span className="flex items-center gap-2">
                 <FileSpreadsheet size={15} className="text-slate-400" />
-                All Files ({total.toLocaleString()})
+                {selected || `All Files (${total.toLocaleString()})`}
               </span>
               <span className="text-slate-400">⌄</span>
             </button>
             {fileOpen && (
-              <div className="absolute z-40 mt-2 w-64 card p-2 shadow-xl">
+              <div className="absolute z-40 mt-2 w-64 card p-2 shadow-xl max-h-72 overflow-y-auto">
                 {files.map((f) => (
-                  <div key={f.file_name} className="px-3 py-2 rounded-lg hover:bg-slate-50 text-[12px] flex justify-between">
-                    <span>{f.file_name}</span>
+                  <button
+                    key={f.file_name}
+                    className="w-full px-3 py-2 rounded-lg hover:bg-indigo-50 text-[12px] flex justify-between"
+                    onClick={() => {
+                      setSelected(stripExt(f.file_name));
+                      setFileOpen(false);
+                    }}
+                  >
+                    <span className="font-semibold text-slate-800">{stripExt(f.file_name)}</span>
                     <span className="text-slate-400 tabular-nums">{f.rows.toLocaleString()}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
           </div>
-          <button className="btn btn-amber !py-2 !px-4 !text-[12px]" onClick={() => window.print()}>
+          <button className="btn btn-amber !py-2 !px-4 !text-[12px]" onClick={downloadPdf}>
             <Printer size={14} /> Download (PDF)
           </button>
-          <button className="btn btn-primary !py-2 !px-4 !text-[12px]" onClick={() => show("CSV export — Supabase connected නම් file එක බාගැනේ")}>
+          <button
+            className="btn btn-primary !py-2 !px-4 !text-[12px]"
+            onClick={async () => {
+              const label = selected || stripExt(files[0]?.file_name ?? "register");
+              const sb = await authedClient();
+              const { data } = await sb.from(table).select("*").eq("file_name", label).limit(20000);
+              let rows = (data as ParsedRow[]) ?? [];
+              if (!rows.length) {
+                const { getMemberRows, getVoterRows } = await import("@/lib/directory-rows");
+                rows = ((kind === "member" ? getMemberRows() : getVoterRows()) as unknown as (ParsedRow & { file_name: string })[])
+                  .filter((r) => stripExt(r.file_name || "") === label);
+              }
+              downloadCsv(label, rows);
+            }}
+          >
             <Download size={14} /> Download (CSV)
           </button>
         </div>
@@ -126,10 +394,10 @@ function ImportPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-[12px] font-bold text-slate-700">Expected Columns Format:</div>
           <div className="flex gap-2">
-            <button className="btn btn-outline !py-1.5 !px-3 !text-[11px]" onClick={() => show("Sample .xlsx template download")}>
+            <button className="btn btn-outline !py-1.5 !px-3 !text-[11px]" onClick={() => downloadSample(true)}>
               📋 Sample (.xlsx)
             </button>
-            <button className="btn btn-outline !py-1.5 !px-3 !text-[11px]" onClick={() => show("Sample CSV template download")}>
+            <button className="btn btn-outline !py-1.5 !px-3 !text-[11px]" onClick={() => downloadSample(false)}>
               ⬇ Sample CSV
             </button>
           </div>
@@ -142,6 +410,33 @@ function ImportPanel({
           {kind === "voter" && " Verified voters count automatically syncs."}
         </p>
       </div>
+
+      {/* animated PDF overlay */}
+      {anim && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/55 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-3xl p-8 w-[340px] text-center shadow-2xl">
+            {!anim.done ? (
+              <>
+                <div className="mx-auto w-16 h-16 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
+                <div className="mt-4 font-extrabold text-slate-900 text-[15px]">
+                  Preparing <span className="text-indigo-700">{anim.label}</span> PDF…
+                </div>
+                <div className="mt-3 h-2 rounded-full bg-indigo-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-emerald-500 transition-all duration-300" style={{ width: `${anim.pct}%` }} />
+                </div>
+                <div className="mt-2 text-[11px] text-slate-500 tabular-nums">{anim.pct}% — {kind === "member" ? "Member register" : "Electoral register"}</div>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </div>
+                <div className="mt-4 font-extrabold text-emerald-700 text-[15px]">✅ {anim.label}.pdf downloaded!</div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -152,27 +447,14 @@ export default function AdminDataPage() {
       <AdminTopbar title="Data & Live Metrics" sub="Manage operational data registries — member spreadsheets & electoral register files" />
 
       <div className="card p-5 mb-6 border-l-4 border-indigo-600 text-[12.5px] text-slate-600 leading-relaxed">
-        Manage operational data registries. Uploading member spreadsheets (CSV/Excel) and official electoral register files
-        automatically reflects on the real-time homepage live counter every 5 seconds.
+        <b className="text-slate-900">කාරක සභා 52 · සාමාජිකයන් {SETTINGS.members_total.toLocaleString()} · චන්ද හිමියන් {SETTINGS.voters_total.toLocaleString()}</b>
+        <br />
+        එක් එක් කාරක සභාවේ සාමාජික ලැයිස්තුව Excel ගොනුවක් ලෙස උඩුගත කරන්න. එය Member Number, NIC, FULL NAME, ADDRESS, POSTAL ADDRESS, GENDER යන කොලම වලින් සමන්විත විය යුතුයි. උඩුගත කළ පසු සැබෑ සාමාජික ගණන ස්වයංක්‍රීයව ගණනය වී ප්‍රධාන වෙබ් අඩවියේ පෙන්වයි. Download වලින් එක් එක් ගොනුවේ සාමාජිකයන්ගේ දත්ත සහිත PDF එකක් ලබා ගත හැක.
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-7">
-        {[
-          { label: "Total Members", value: SETTINGS.members_total.toLocaleString(), icon: <UsersRound size={18} />, tone: "blue" },
-          { label: "Verified Eligible Voters", value: SETTINGS.voters_total.toLocaleString(), icon: <Vote size={18} />, tone: "green" },
-          { label: "Active Registered Businesses", value: "13", icon: <Database size={18} />, tone: "amber" },
-          { label: "Years of Service Configuration", value: `${SETTINGS.years_of_service}+ Yrs`, icon: <Database size={18} />, tone: "slate" },
-        ].map((s) => (
-          <div key={s.label} className="card p-5">
-            <div className="text-slate-500 text-[12px] font-semibold">{s.label}</div>
-            <div className="text-3xl font-black text-slate-900 mt-1.5 tabular-nums">{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ImportPanel kind="member" title="Import Members (CSV / Excel)" total={SETTINGS.members_total} files={MEMBER_FILES} />
-        <ImportPanel kind="voter" title="Upload Electoral Register (Eligible Voters)" total={SETTINGS.voters_total} files={VOTER_FILES} />
+      <div className="grid gap-6 xl:grid-cols-2">
+        <ImportPanel kind="member" title="Members Directory Registry (කාරක සභා 52)" />
+        <ImportPanel kind="voter" title="Electoral Register / චන්ද හිමි ලැයිස්තුව" />
       </div>
     </div>
   );

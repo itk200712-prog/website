@@ -39,6 +39,23 @@ export function ApplyForm() {
     } catch {
       /* demo mode */
     }
+    // ✅ save to DB so Admin → Membership Applications පැනලයේ පේනවා (mail එකට යනවා වගේම)
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      await createClient().from("membership_applications").insert({
+        name_si: String(fd.get("name_si") || ""),
+        name_en: String(fd.get("name_en") || ""),
+        address: String(fd.get("address") || ""),
+        postal_address: String(fd.get("postal") || ""),
+        nic: String(fd.get("nic") || ""),
+        phone: String(fd.get("phone") || ""),
+        email: String(fd.get("email") || null),
+        certified_form_url: fileName || null,
+        status: "pending",
+      });
+    } catch {
+      /* offline — email still sent */
+    }
     setSent(true);
     setBusy(false);
   }

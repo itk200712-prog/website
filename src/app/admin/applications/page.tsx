@@ -2,9 +2,10 @@
 
 // Membership Applications Management — approve / reject / edit
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, FileText, RefreshCw, Search, XCircle } from "lucide-react";
 import { AdminTopbar, AdminStatCard, dbUpdate, useNotice } from "@/components/admin";
+import { authedClient } from "@/lib/supabase/client";
 
 type App = {
   id: string;
@@ -24,6 +25,26 @@ export default function AdminApplicationsPage() {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>("all");
   const [apps, setApps] = useState<App[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const sb = await authedClient();
+      const { data } = await sb.from("membership_applications").select("*").order("created_at", { ascending: false });
+      if (data)
+        setApps(
+          data.map((r: Record<string, unknown>) => ({
+            id: String(r.id),
+            app_no: String(r.app_no ?? ""),
+            name: String(r.name_en || r.name_si || "—"),
+            nic: String(r.nic ?? ""),
+            phone: String(r.phone ?? ""),
+            address: String(r.address ?? ""),
+            status: (String(r.status ?? "pending") as App["status"]),
+            date: new Date(String(r.created_at ?? Date.now())).toLocaleDateString(),
+          }))
+        );
+    })();
+  }, []);
 
   const counts = {
     all: apps.length,
