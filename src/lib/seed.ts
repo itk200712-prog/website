@@ -212,7 +212,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "Official agency for Ristbury and Tiara confectionery products — fresh stock supply for retail shops and special events.",
     desc_si:
       "රිස්බරි සහ ටියාරා රසකැවිලි නිෂ්පාදන සඳහා නිල නියෝජිතායතනය — සිල්ලර කඩ සහ විශේෂ අවස්ථා සඳහා නැවුම් තොග සැපයුමක් සපයයි.",
-    logo: "/images/sections/ristbury-tiara.png",
+    logo: "/images/businesses/ristbury-tiara.jpg",
     cover: null,
     is_new: true,
     active: true,
@@ -381,7 +381,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "The Rural Bank is the heart of our society — safe, member-focused banking right in your village. Deposit with confidence and grow with us.",
     desc_si:
       "අපේ සමිතියේ හදවත වන්නේ ග්‍රාමීය බැංකුවයි — ඔබේ ගමේදීම ආරක්ෂිත, සාමාජික කේන්ද්‍රීය බැංකු සේවාවක්. විශ්වාසයෙන් තැන්පත් කර අපත් සමඟ වර්ධනය වන්න.",
-    logo: "/images/sections/rural-bank.png",
+    logo: "/images/businesses/rural-bank.jpg",
     cover: null,
     is_new: false,
     active: true,
@@ -480,7 +480,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "From rice and dhal to soaps and stationery — the Consumer Section supplies quality essential goods at fair prices. Member discounts available year-round.",
     desc_si:
       "බත් සහ පරිප්පු සිට සබන් සහ ලිපි ද්‍රව්‍ය දක්වා — පාරිභෝගික අංශය සාධාරණ මිල ගණන්වලට ගුණාත්මක අත්‍යවශ්‍ය භාණ්ඩ සපයයි. වසර පුරා සාමාජික වට්ටම් ඇත.",
-    logo: "/images/sections/consumer.png",
+    logo: "/images/businesses/consumer.jpg",
     cover: null,
     is_new: false,
     active: true,
@@ -589,7 +589,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "Official agency for Maliban biscuits — supplying shops, retailers, and wholesalers at competitive agency rates. Reliable and timely island-wide distribution.",
     desc_si:
       "මාලිබන් බිස්කට් සඳහා නිල නියෝජිතායතනය — කඩ, සිල්ලර වෙළෙන්දන් සහ තොග වෙළෙන්දන් තරඟකාරී නියෝජිත ගාස්තුවලට සපයයි. විශ්වාසනීය හා නියමිත වේලාවට දිවයින පුරා බෙදාහැරීම.",
-    logo: "/images/sections/maliban-biscuits.png",
+    logo: "/images/businesses/maliban-biscuits.jpg",
     cover: null,
     is_new: false,
     active: true,
@@ -628,7 +628,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "Official distributor for Maliban milk powder products — from daily milk powder to infant milk formulas. Regular delivery across the region.",
     desc_si:
       "මාලිබන් කිරි පිටි නිෂ්පාදන සඳහා නිල බෙදාහරින්නා — දෛනික කිරි පිටි සිට ළදරු කිරි මිශ්‍රණ දක්වා. කලාපය පුරා නිතිපතා බෙදාහැරීම.",
-    logo: "/images/sections/maliban-kiri.png",
+    logo: "/images/businesses/maliban-kiri.jpg",
     cover: null,
     is_new: false,
     active: true,
@@ -667,7 +667,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "Official agency for Nature's Secrets herbal beauty products — supplying Aloe Vera, White Sandalwood, and herbal care ranges.",
     desc_si:
       "නේචර්ස් සීක්‍රට්ස් ශාකසාර සුන්දරත්ව නිෂ්පාදන සඳහා නිල නියෝජිතායතනය — ඇලෝවෙරා, සුදු හඳුන් සහ ශාකසාර රැකවරණ පෙළ සපයයි.",
-    logo: "/images/sections/natures-secrets.png",
+    logo: "/images/businesses/natures-secrets.jpg",
     cover: null,
     is_new: false,
     active: true,
@@ -706,7 +706,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "Hemas products agency — supplying Baby Cheramy baby care, Kumarika hair care, personal care, and household items.",
     desc_si:
       "හෙමාස් නිෂ්පාදන නියෝජිතායතනය — බේබි චෙරමි ළදරු රැකවරණ, කුමාරිකා කෙස් රැකවරණ, පුද්ගලික රැකවරණ සහ නිවාස භාණ්ඩ සපයයි.",
-    logo: "/images/sections/hemas.png",
+    logo: "/images/businesses/hemas.jpg",
     cover: null,
     is_new: false,
     active: true,
@@ -745,7 +745,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "Full service fuel filling station providing petrol and diesel; priority lines and fuel pass facilities for society members. Includes air, water, and convenience shop.",
     desc_si:
       "පෙට්‍රල් සහ ඩීසල් සපයන සම්පූර්ණ සේවා ඉන්ධන පිරවුම්හලක්; සමිති සාමාජිකයින්ට ප්‍රමුඛතා පෝලිම් සහ ඉන්ධන පාස් පහසුකම්. වාතය, ජලය සහ පහසුකම් වෙළඳසැලක් ඇතුළත් වේ.",
-    logo: "/images/sections/fuel-station.png",
+    logo: "/images/businesses/fuel-station.jpg",
     cover: null,
     is_new: true,
     active: true,
@@ -783,7 +783,7 @@ export const BUSINESSES: BusinessUnit[] = [
       "Co-operative funeral care section providing financial assistance and compassionate funeral services for member families during difficult times.",
     desc_si:
       "අසීරු අවස්ථාවලදී සාමාජික පවුල් සඳහා මූල්‍ය සහාය සහ කරුණාවන්ත අන්තිම කටයුතු සේවා සපයන සමූපකාර අන්තිම කටයුතු රැකවරණ අංශයකි.",
-    logo: "/images/sections/funeral.png",
+    logo: "/images/businesses/funeral.jpg",
     cover: null,
     is_new: false,
     active: true,

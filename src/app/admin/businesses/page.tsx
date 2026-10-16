@@ -7,12 +7,13 @@
 //   ✅ Business card "Services (N)" click → Services tab with that business pre-selected
 // ============================================================================
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight, Building2, CheckCircle2, ExternalLink, Image as ImageIcon, Pencil, Plus, RefreshCw, Search, Trash2,
 } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
 import { uploadSiteImage } from "@/lib/supabase/storage";
+import { authedClient } from "@/lib/supabase/client";
 import { BUSINESSES } from "@/lib/seed";
 import type { BusinessUnit, BusinessService } from "@/lib/types";
 
@@ -31,9 +32,31 @@ export default function AdminBusinessesPage() {
   const [coverPreview, setCoverPreview] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
   const [uploadTarget, setUploadTarget] = useState<"logo" | "cover" | null>(null);
+  const [addLogo, setAddLogo] = useState("");
   const logoRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // ✅ DB එකෙන් load — add/edit/delete refresh වලදී නැති වෙන්නෑ
+  useEffect(() => {
+    (async () => {
+      try {
+        const sb = await authedClient();
+        const { data } = await sb.from("business_units").select("*").order("order");
+        if (data && data.length) {
+          const svcs = await sb.from("business_services").select("*").order("order");
+          const contacts = await sb.from("business_contacts").select("*");
+          const branches = await sb.from("business_branches").select("*");
+          setUnits(data.map((b: Record<string, unknown>) => ({
+            ...(b as unknown as BusinessUnit),
+            services: (svcs.data ?? []).filter((x: { business_slug: string }) => x.business_slug === (b as { slug: string }).slug),
+            contacts: (contacts.data ?? []).filter((x: { business_slug: string }) => x.business_slug === (b as { slug: string }).slug),
+            branches: (branches.data ?? []).filter((x: { business_slug: string }) => x.business_slug === (b as { slug: string }).slug),
+          })) as BusinessUnit[]);
+        }
+      } catch { /* seed fallback */ }
+    })();
+  }, []);
 
   const openEdit = (b: BusinessUnit) => {
     setEditFor(b);
@@ -43,15 +66,15 @@ export default function AdminBusinessesPage() {
   };
 
   const PRESETS: Record<string, string> = {
-    "Rural Bank": "/images/sections/rural-bank.png",
-    "Consumer Section": "/images/sections/consumer.png",
-    "Maliban Biscuits": "/images/sections/maliban-biscuits.png",
-    "Maliban Milk": "/images/sections/maliban-kiri.png",
-    "Nature's Secrets": "/images/sections/natures-secrets.png",
-    "Hemas Agency": "/images/sections/hemas.png",
-    "Ristbury Tiara": "/images/sections/ristbury-tiara.png",
-    "Fuel Station": "/images/sections/fuel-station.png",
-    "Funeral Services": "/images/sections/funeral.png",
+    "Rural Bank": "/images/businesses/rural-bank.jpg",
+    "Consumer Section": "/images/businesses/consumer.jpg",
+    "Maliban Biscuits": "/images/businesses/maliban-biscuits.jpg",
+    "Maliban Milk": "/images/businesses/maliban-kiri.jpg",
+    "Nature's Secrets": "/images/businesses/natures-secrets.jpg",
+    "Hemas Agency": "/images/businesses/hemas.jpg",
+    "Ristbury Tiara": "/images/businesses/ristbury-tiara.jpg",
+    "Fuel Station": "/images/businesses/fuel-station.jpg",
+    "Funeral Services": "/images/businesses/funeral.jpg",
     "Main Logo": "/images/sections/gold-loan.png",
   };
 
@@ -190,6 +213,9 @@ export default function AdminBusinessesPage() {
                   className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-red-600"
                   onClick={async () => {
                     setUnits((xs) => xs.filter((x) => x.slug !== b.slug));
+                    await dbDelete("business_services", { business_slug: b.slug });
+                    await dbDelete("business_contacts", { business_slug: b.slug });
+                    await dbDelete("business_branches", { business_slug: b.slug });
                     const err = await dbDelete("business_units", { slug: b.slug });
                     show(err ? `⚠ ${err}` : "✅ Deleted");
                   }}
@@ -502,7 +528,7 @@ export default function AdminBusinessesPage() {
                 tagline_si: String(fd.get("tagline_si")),
                 desc_en: String(fd.get("desc_en")),
                 desc_si: String(fd.get("desc_si")),
-                logo: "/images/sections/new.png",
+                logo: addLogo || "/images/sections/new.png",
                 cover: null,
                 is_new: fd.get("is_new") === "on",
                 active: fd.get("active") === "on",
@@ -552,6 +578,27 @@ export default function AdminBusinessesPage() {
             <div>
               <label className="field-label">Full Description (Sinhala)</label>
               <textarea name="desc_si" rows={3} className="field" placeholder="සාරාංශ විස්තරයක්..." />
+            </div>
+            <div>
+              <label className="field-label">Business Logo (Main Logo)</label>
+              <div className="flex items-center gap-3">
+                {addLogo && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={addLogo} alt="preview" className="w-12 h-12 rounded-xl object-cover border border-slate-200" />
+                )}
+                <label className="btn btn-outline cursor-pointer">
+                  <ImageIcon size={14} /> {addLogo ? "Change Logo" : "Upload Logo from Device"}
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!f) return;
+                    show("⏳ Logo එක upload වෙමින්...");
+                    const res = await uploadSiteImage(f, "businesses");
+                    if (res && res.url) { setAddLogo(res.url); show("✅ Logo එක upload වුණා — Create කරන්න"); }
+                    else show(`⚠ ${res && res.error ? res.error : "Upload failed"}`);
+                  }} />
+                </label>
+              </div>
             </div>
             <div>
               <label className="field-label">Public Page URL</label>

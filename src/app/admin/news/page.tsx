@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { Eye, Pencil, Pin, Plus, Search, Trash2, Upload } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { NEWS } from "@/lib/seed";
 import type { NewsItem } from "@/lib/types";
@@ -26,7 +26,7 @@ export default function AdminNewsPage() {
   async function load() {
     if (!isSupabaseConfigured()) { setLoaded(true); return; }
     try {
-      const { data } = await createClient().from("news").select("*").order("date", { ascending: false });
+      const { data } = await (await authedClient()).from("news").select("*").order("date", { ascending: false });
       if (data) setItems(data as unknown as NewsItem[]);
     } catch { /* ignore */ }
     setLoaded(true);

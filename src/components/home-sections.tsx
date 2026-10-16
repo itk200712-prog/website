@@ -324,10 +324,15 @@ export function HomeSections({
         <div className="grid gap-5 md:grid-cols-3">
           {newsList.map((n) => (
             <Link key={n.id} href={L("/news")} className="card card-hover overflow-hidden">
-              <div className="h-44 bg-gradient-to-br from-indigo-900 to-slate-800 relative">
-                <div className="absolute inset-0 flex items-center justify-center text-white/30">
-                  <Newspaper size={44} />
-                </div>
+              <div className="h-44 bg-gradient-to-br from-indigo-900 to-slate-800 relative overflow-hidden">
+                {n.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={n.image} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-white/30">
+                    <Newspaper size={44} />
+                  </div>
+                )}
                 <div className="absolute top-3 left-3 flex gap-2">
                   <span className="badge-blue rounded-full px-2.5 py-0.5 text-[10px] font-bold">
                     {n.category === "vacancy" ? "VACANCY" : "NOTICE"}

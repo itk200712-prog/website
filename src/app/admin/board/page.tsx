@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Image as ImageIcon, Pencil, Plus, Search, Trash2, Upload, UserPlus, UsersRound } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { BOARD } from "@/lib/seed";
 import type { BoardMember } from "@/lib/types";
@@ -45,7 +45,7 @@ export default function AdminBoardPage() {
   async function load() {
     if (!isSupabaseConfigured()) { setLoaded(true); return; }
     try {
-      const { data } = await createClient().from("board_members").select("*").order("order");
+      const { data } = await (await authedClient()).from("board_members").select("*").order("order");
       if (data && data.length > 0) setMembers(data as unknown as Row[]);
     } catch { /* ignore */ }
     setLoaded(true);
