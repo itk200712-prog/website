@@ -60,7 +60,9 @@ export async function loginWithNic(
 ): Promise<{ error: string | null; role?: string }> {
   if (!isSupabaseConfigured()) return { error: "Supabase වින්‍යාස වී නොමැත (.env.local)" };
   const sb = createClient();
-  const email = nicToEmail(nic);
+  // ✅ NIC field එකේ email එකක් දැම්මත් වැඩ (පරණ accounts වලට safety net)
+  const raw = nic.trim();
+  const email = raw.includes("@") ? raw : nicToEmail(raw);
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) {
     if (/email not confirmed/i.test(error.message || "")) {
@@ -68,7 +70,7 @@ export async function loginWithNic(
     }
     // Superadmin seed uses superadmin@mpcs.lk — try fallback email forms
     const alt = await sb.auth.signInWithPassword({
-      email: nic.trim().toLowerCase() === "superadmin" ? "superadmin@mpcs.lk" : email,
+      email: raw.toLowerCase() === "superadmin" ? "superadmin@mpcs.lk" : email,
       password,
     });
     if (alt.error) {

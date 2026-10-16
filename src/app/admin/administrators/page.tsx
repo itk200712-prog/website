@@ -117,7 +117,12 @@ export default function AdminAdministratorsPage() {
         sections: csv,
         password_display: encodePw(password),
       }, { onConflict: "id" });
-      show(upErr ? `⚠ ${upErr.message}` : "✅ Administrator created — දැන් ඒ login වෙලා තෝරපු sections විතරක් edit කරන්න පුළුවන්");
+      if (upErr) show(`⚠ ${upErr.message}`);
+      else if (data.user && !data.user.email_confirmed_at) {
+        show("⚠ Admin එක හැදුණා — නමුත් Supabase \"Confirm email\" ON නිසා login නැවතෙනවා! Dashboard: Authentication → Providers → Email → Confirm email OFF කරන්න");
+      } else {
+        show("✅ Administrator created — දැන් NIC + password එකෙන් login වෙනවා!");
+      }
     }
     setModal(false);
     await load();
