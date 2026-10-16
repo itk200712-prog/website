@@ -9,8 +9,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut,
-  Mail, Megaphone, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X,
-} from "lucide-react";
+  Mail, Megaphone, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X, Save } from "lucide-react";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 /* --------------------------------------------------------------- sidebar -- */
@@ -29,14 +28,16 @@ const NAV = [
   { href: "/admin/fuel-prices", label: "Fuel Prices", icon: Fuel, badge: "", key: "fuel" },
   { href: "/admin/f28", label: "F28", icon: Lock, badge: "", key: "f28" },
   { href: "/admin/settings", label: "System Settings", icon: Settings, badge: "", key: "settings" },
+  { href: "/admin/backup", label: "Backup & Restore", icon: Save, badge: "SUPER", key: "backup" },
 ];
 
 /** section keys ලෙස භාවිතා වේ (administrators page එකෙන් grant කරයි) */
-export const SECTION_KEYS = NAV.map((n) => n.key).filter((k) => k !== "dashboard" && k !== "profile");
+export const SECTION_KEYS = NAV.map((n) => n.key).filter((k) => k !== "dashboard" && k !== "profile" && k !== "backup");
 
 export function AdminSidebar() {
   const path = usePathname();
   const [allowed, setAllowed] = useState<string[] | null>(null); // null = loading
+  const [isSuper, setIsSuper] = useState(false);
 
   // section permissions load (superadmin/empty = සේරම ඉඩ)
   useEffect(() => {
@@ -49,6 +50,7 @@ export function AdminSidebar() {
         if (!u?.user) { setAllowed(null); return; }
         const { data: prof } = await sb.from("profiles").select("role, sections").eq("id", u.user.id).single();
         if (!alive) return;
+        setIsSuper(prof?.role === "superadmin");
         if (prof?.role === "superadmin" || !prof?.sections) setAllowed(null);
         else setAllowed(prof.sections.split(",").map((s: string) => s.trim()).filter(Boolean));
       } catch { /* ignore */ }
@@ -56,7 +58,10 @@ export function AdminSidebar() {
     return () => { alive = false; };
   }, []);
 
-  const items = NAV.filter((n) => !allowed || allowed.length === 0 || n.key === "dashboard" || n.key === "profile" || allowed.includes(n.key));
+  const items = NAV.filter((n) => {
+    if (n.key === "backup") return isSuper; // superadmin only — never grantable
+    return !allowed || allowed.length === 0 || n.key === "dashboard" || n.key === "profile" || allowed.includes(n.key);
+  });
 
   return (
     <aside className="w-[218px] shrink-0 bg-[#0b1029] text-white min-h-screen sticky top-0 flex flex-col no-print">

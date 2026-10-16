@@ -635,3 +635,30 @@ drop policy if exists "f28_members_all" on public.f28_members;
 create policy "f28_members_all" on public.f28_members for all to authenticated using (true) with check (true);
 drop policy if exists "f28_items_all" on public.f28_items;
 create policy "f28_items_all" on public.f28_items for all to authenticated using (true) with check (true);
+
+-- ===========================================================================
+-- 13. Backup & Restore (superadmin only) — backup_secrets + site_images_backup
+-- ===========================================================================
+create table if not exists public.backup_secrets (
+  key text primary key,
+  value text not null default ''
+);
+create table if not exists public.site_images_backup (
+  path text primary key,
+  data_base64 text default '',
+  content_type text default ''
+);
+alter table public.backup_secrets enable row level security;
+alter table public.site_images_backup enable row level security;
+drop policy if exists backup_secrets_super on public.backup_secrets;
+create policy backup_secrets_super on public.backup_secrets for all
+  using (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'))
+  with check (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'));
+drop policy if exists site_images_backup_super on public.site_images_backup;
+create policy site_images_backup_super on public.site_images_backup for all
+  using (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'))
+  with check (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'));
+insert into public.backup_secrets (key, value) values
+  ('backup_download_password','MPCS@Backup#2026'),
+  ('backup_import_password','MPCS@Restore#2026')
+on conflict (key) do nothing;

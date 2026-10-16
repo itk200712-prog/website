@@ -5,17 +5,34 @@
 // ============================================================================
 
 import Link from "next/link";
-import { useState } from "react";
-import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck, Lock } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { BUSINESSES } from "@/lib/seed";
+import { authedClient } from "@/lib/supabase/client";
 
 export function SiteHeader() {
   const { t, lang, setLang } = useLang();
   const L = (p: string) => `/${lang}${p === "/" ? "" : p}`;
   const [open, setOpen] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
+  const [f28, setF28] = useState(false);
+
+  // F28: authenticate කරපු members ලට පමණයි header එකේ පේන්නේ
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const sb = await authedClient();
+        const { data: u } = await sb.auth.getUser();
+        if (!u?.user) return;
+        const { data } = await sb.from("f28_members").select("status").eq("user_id", u.user.id).maybeSingle();
+        if (alive && data && data.status === "active") setF28(true);
+      } catch { /* not logged in */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const publicBusinesses = BUSINESSES.filter((b) => b.active);
 
@@ -146,6 +163,11 @@ export function SiteHeader() {
             <Link href={L("/news")} className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5">
               <Newspaper size={15} /> {t.nav.news}
             </Link>
+            {f28 && (
+              <Link href={L("/dashboard/f28")} className="px-3 py-2 rounded-lg bg-amber-400/15 text-amber-300 hover:bg-amber-400/25 flex items-center gap-1.5 font-bold">
+                <Lock size={15} /> F28
+              </Link>
+            )}
             <Link href={L("/contact")} className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5">
               <Phone size={15} /> {t.nav.contact}
             </Link>
@@ -178,6 +200,7 @@ export function SiteHeader() {
             ["/board", t.nav.board],
             ["/gallery", t.nav.gallery],
             ["/news", t.nav.news],
+            ...(f28 ? ([["/dashboard/f28", "F28"]] as [string, string][]) : []),
             ["/contact", t.nav.contact],
             ["/signin", t.nav.signin],
             ["/register", t.nav.register],
