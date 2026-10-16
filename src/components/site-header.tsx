@@ -22,6 +22,15 @@ export function SiteHeader() {
   const [meOpen, setMeOpen] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
+  const [glide, setGlide] = useState({ x: 0, w: 0, on: false });
+  function glideTo(el: HTMLElement | null) {
+    const nav = navRef.current;
+    if (!nav || !el) return;
+    const r = el.getBoundingClientRect();
+    const nr = nav.getBoundingClientRect();
+    setGlide({ x: r.left - nr.left, w: r.width, on: true });
+  }
   const openMenu = (k: string) => {
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     setOpen(k);
@@ -66,14 +75,24 @@ export function SiteHeader() {
           </Link>
 
           {/* desktop nav */}
-          <nav className="hidden lg:flex items-center gap-0.5 text-[13px] font-semibold text-slate-200 whitespace-nowrap">
-            <Link href={L("/")} className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5">
+          <nav
+            ref={navRef}
+            className="hidden lg:flex items-center gap-0.5 text-[13px] font-semibold text-slate-200 whitespace-nowrap relative"
+            onMouseLeave={() => setGlide((g) => ({ ...g, on: false }))}
+          >
+            {/* sliding hover glider */}
+            <span
+              aria-hidden
+              className="absolute bottom-0 left-0 h-[3px] rounded-full bg-gradient-to-r from-amber-400 via-fuchsia-400 to-indigo-400 transition-all duration-300 ease-out pointer-events-none"
+              style={{ width: glide.w, transform: `translateX(${glide.x}px)`, opacity: glide.on ? 1 : 0 }}
+            />
+            <Link href={L("/")} onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5">
               <Home size={15} /> {t.nav.home}
             </Link>
 
             {/* Businesses dropdown */}
             <div className="relative" onMouseEnter={() => openMenu("biz")} onMouseLeave={closeMenuSoon}>
-              <button className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1">
+              <button onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1">
                 <Building2 size={15} /> {t.nav.businesses} <ChevronDown size={14} />
               </button>
               {open === "biz" && (
@@ -120,7 +139,7 @@ export function SiteHeader() {
 
             {/* Membership dropdown */}
             <div className="relative" onMouseEnter={() => openMenu("mem")} onMouseLeave={closeMenuSoon}>
-              <button className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1">
+              <button onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1">
                 <UsersRound size={15} /> {t.nav.membership} <ChevronDown size={14} />
               </button>
               {open === "mem" && (
@@ -183,18 +202,18 @@ export function SiteHeader() {
               )}
             </div>
 
-            <Link href={L("/gallery")} className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5">
+            <Link href={L("/gallery")} onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5">
               <Images size={15} /> {t.nav.gallery}
             </Link>
-            <Link href={L("/news")} className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5">
+            <Link href={L("/news")} onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5">
               <Newspaper size={15} /> {t.nav.news}
             </Link>
             {f28 && (
-              <Link href={L("/dashboard/f28")} className="px-3 py-2 rounded-lg bg-amber-400/15 text-amber-300 hover:bg-amber-400/25 flex items-center gap-1.5 font-bold">
+              <Link href={L("/dashboard/f28")} onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg bg-amber-400/15 text-amber-300 hover:bg-amber-400/25 transition-colors flex items-center gap-1.5 font-bold">
                 <Lock size={15} /> F28
               </Link>
             )}
-            <Link href={L("/contact")} className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1.5">
+            <Link href={L("/contact")} onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1.5">
               <Phone size={15} /> {t.nav.contact}
             </Link>
           </nav>

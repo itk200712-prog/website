@@ -1,18 +1,18 @@
 "use client";
 
 // ============================================================================
-// Sign In — NIC + password login + WhatsApp password recovery
+// Sign In — NIC + password login + WhatsApp password recovery (professional split layout)
 // ============================================================================
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowLeft, Eye, EyeOff, Lock, LogIn, MessageCircle, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Eye, EyeOff, Lock, LogIn, MessageCircle, ShieldCheck, UserRound, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { logActivity } from "@/lib/activity";
 import { loginWithNic } from "@/lib/auth";
 
 export default function SignInPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,53 +34,119 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="card w-full max-w-md p-8 sm:p-10">
-        <Link href="/" className="inline-flex items-center gap-2 text-slate-500 text-[13px] font-semibold hover:text-slate-800">
-          <ArrowLeft size={15} /> {t.auth.backHome}
-        </Link>
-        <div className="flex flex-col items-center mt-4">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-            <Lock size={24} />
+    <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr]">
+      {/* ================= branding panel ================= */}
+      <div className="relative hidden lg:flex flex-col justify-between p-12 text-white overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/hero/hero-1.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(160deg, rgba(11,18,48,0.94) 0%, rgba(23,37,84,0.86) 55%, rgba(30,42,120,0.72) 100%)",
+          }}
+        />
+        <div className="relative flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[11px] font-black tracking-wide shadow">
+            coop
           </div>
-          <h1 className="mt-4 text-3xl font-extrabold text-slate-900">{t.auth.signinTitle}</h1>
-          <p className="text-slate-500 text-[13px] mt-1.5">{t.auth.signinSub}</p>
+          <div className="leading-tight">
+            <div className="font-extrabold text-white text-[14px]">{t.brand}</div>
+            <div className="text-[9.5px] text-white/60 tracking-wide uppercase">Panduwasnuwara New MPCS</div>
+          </div>
         </div>
 
-        <form onSubmit={submit} className="mt-8 space-y-4">
-          <div>
-            <label className="field-label">{t.auth.nic}</label>
-            <input name="nic" required className="field" placeholder="e.g. 200478922123 or 851234567V" />
+        <div className="relative max-w-md">
+          <h2 className="text-4xl font-black leading-tight">
+            {lang === "si" ? "නැවත සාදරයෙන් පිළිගනිමු" : "Welcome Back"}
+          </h2>
+          <p className="mt-4 text-white/75 text-[14px] leading-relaxed">
+            {lang === "si"
+              ? "ඔබේ සාමාජික profile එක, F28 ඉන්ධන portal එක සහ පරිපාලන පැනල වෙත ප්‍රවේශ වීමට sign in කරන්න."
+              : "Sign in to access your member profile, the F28 fuel portal, and administrative panels."}
+          </p>
+          <div className="mt-8 space-y-3">
+            {[
+              { icon: <ShieldCheck size={16} />, en: "Secure NIC + password authentication", si: "ආරක්ෂිත NIC + මුරපද සත්‍යාපනය" },
+              { icon: <UserRound size={16} />, en: "Member dashboard & profile management", si: "සාමාජික dashboard සහ profile කළමනාකරණය" },
+              { icon: <BadgeCheck size={16} />, en: "Official society portal · Reg: කුරු/186", si: "නිල සමිති portal එක · ලියාපදිංචි: කුරු/186" },
+            ].map((f) => (
+              <div key={f.en} className="flex items-center gap-3 text-white/85 text-[13px]">
+                <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-emerald-300 shrink-0">
+                  {f.icon}
+                </div>
+                {lang === "si" ? f.si : f.en}
+              </div>
+            ))}
           </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="field-label">{t.auth.password}</label>
-              <button type="button" onClick={() => setWaOpen(true)} className="text-indigo-700 text-[12px] font-bold hover:underline">
-                {t.auth.forgot}
-              </button>
-            </div>
-            <div className="relative">
-              <input name="password" required type={show ? "text" : "password"} className="field !pr-11" placeholder="••••••••" />
-              <button
-                type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                onClick={() => setShow(!show)}
-              >
-                {show ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
-            </div>
-          </div>
-          {error && <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[12.5px] px-4 py-2.5">{error}</div>}
-          <button type="submit" disabled={busy} className="btn btn-primary w-full">
-            <LogIn size={16} /> {busy ? "..." : t.auth.signinBtn}
-          </button>
-        </form>
+        </div>
 
-        <div className="mt-6 text-center text-[13px] text-slate-500">
-          {t.auth.noAccount}{" "}
-          <Link href="/register" className="text-indigo-700 font-bold hover:underline">
-            {t.auth.registerHere}
+        <div className="relative text-[11px] text-white/50">
+          © {new Date().getFullYear()} Panduwasnuwara New Multi Purpose Co-Operative Society LTD · {SITE_REG}
+        </div>
+      </div>
+
+      {/* ================= form panel ================= */}
+      <div className="flex items-center justify-center p-5 sm:p-10 bg-slate-50">
+        <div className="w-full max-w-[430px]">
+          <Link href="/" className="inline-flex items-center gap-2 text-slate-500 text-[12.5px] font-semibold hover:text-slate-800 transition-colors">
+            <ArrowLeft size={15} /> {t.auth.backHome}
           </Link>
+
+          <div className="mt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-800 text-white flex items-center justify-center shadow-lg shadow-indigo-200">
+                <Lock size={21} />
+              </div>
+              <div>
+                <h1 className="text-[26px] font-extrabold text-slate-900 leading-tight">{t.auth.signinTitle}</h1>
+                <p className="text-slate-500 text-[12.5px]">{t.auth.signinSub}</p>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={submit} className="mt-7 space-y-4">
+            <div>
+              <label className="field-label">{t.auth.nic}</label>
+              <input name="nic" required className="field !py-3 !text-[14px]" placeholder="e.g. 200478922123 or 851234567V" />
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="field-label">{t.auth.password}</label>
+                <button type="button" onClick={() => setWaOpen(true)} className="text-indigo-700 text-[12px] font-bold hover:underline">
+                  {t.auth.forgot}
+                </button>
+              </div>
+              <div className="relative">
+                <input name="password" required type={show ? "text" : "password"} className="field !pr-11 !py-3 !text-[14px]" placeholder="••••••••" />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  onClick={() => setShow(!show)}
+                >
+                  {show ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+            </div>
+            {error && <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[12.5px] px-4 py-2.5">{error}</div>}
+            <button type="submit" disabled={busy} className="btn btn-primary w-full !py-3 !text-[14px]">
+              <LogIn size={17} /> {busy ? "..." : t.auth.signinBtn}
+            </button>
+          </form>
+
+          <div className="mt-7 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center">
+            <div className="text-[13px] text-slate-500">
+              {t.auth.noAccount}{" "}
+              <Link href="/register" className="text-indigo-700 font-bold hover:underline">
+                {t.auth.registerHere}
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-5 flex items-center justify-center gap-2 text-[11px] text-slate-400">
+            <ShieldCheck size={13} className="text-emerald-500" />
+            {lang === "si" ? "මෙය ආරක්ෂිත නිල ප්‍රවේශ portal එකකි" : "This is a secure official access portal"}
+          </div>
         </div>
       </div>
 
@@ -89,6 +155,8 @@ export default function SignInPage() {
     </div>
   );
 }
+
+const SITE_REG = "කුරු/186";
 
 function WhatsAppRecovery({ onClose }: { onClose: () => void }) {
   const { t } = useLang();

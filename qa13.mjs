@@ -1,0 +1,18 @@
+import { chromium } from "playwright-core";
+const B = "https://website-blond-eta-94.vercel.app";
+const out = {};
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1560, height: 800 } });
+await p.goto(B + "/", { waitUntil: "networkidle" });
+await p.waitForTimeout(2500);
+const body = await p.locator("body").innerText();
+out.directorsShown = (body.match(/Chairman|Director/g) || []).length;
+out.officialMembers = body.includes("Official Members") || body.includes("නිල සාමාජිකයින්");
+out.adminOfficers = body.includes("Administrative Officer") || body.includes("නිලධාරී");
+out.boardCards = await p.locator(".card").count();
+await p.screenshot({ path: "/home/user/qa/home-hero-board.png" });
+await p.evaluate(() => window.scrollTo(0, 700));
+await p.waitForTimeout(600);
+await p.screenshot({ path: "/home/user/qa/home-board2.png" });
+await b.close();
+console.log(JSON.stringify(out, null, 1));
