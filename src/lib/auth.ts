@@ -72,7 +72,7 @@ export async function loginWithNic(
       password,
     });
     if (alt.error) {
-      if (/email not confirmed/i.test(alt.message || "")) {
+      if (/email not confirmed/i.test(alt.error?.message || "")) {
         return { error: "Email confirm වී නැත — Supabase හි \"Confirm email\" OFF කරලා admin ට කියන්න" };
       }
       return { error: "Invalid NIC or password" };
