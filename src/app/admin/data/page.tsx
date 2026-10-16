@@ -256,7 +256,11 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
           continue;
         }
         for (let i = 0; i < rows.length; i += BATCH) {
-          const batch = rows.slice(i, i + BATCH).map((r) => ({ ...r, file_name: label }));
+          // ✅ voter_rows එකේ voter_no column — member_no නොවෙන විදිහට map වෙනවා
+          const batch = rows.slice(i, i + BATCH).map((r) => {
+            const base = { nic: r.nic, full_name: r.full_name, address: r.address, postal_address: r.postal_address, gender: r.gender, file_name: label };
+            return kind === "member" ? { ...base, member_no: r.member_no } : { ...base, voter_no: r.member_no };
+          });
           const { error } = await sb.from(table).insert(batch);
           if (error) throw new Error(error.message);
           setProg(`Uploading ${label} — ${Math.min(i + BATCH, rows.length).toLocaleString()} / ${rows.length.toLocaleString()} rows`);

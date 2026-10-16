@@ -7,16 +7,51 @@
 //  Voters: VOTER NO | FULL NAME | NIC | ADDRESS | GENDER
 // ============================================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building2, Check, Download, FileSpreadsheet, Layers, Printer, Search, Users } from "lucide-react";
 import { useLang } from "@/lib/i18n";
-import {
-  getMemberRows,
-  getVoterRows,
-  MEMBER_FILES,
-  VOTER_FILES,
-} from "@/lib/directory-rows";
+import { createAnonClient } from "@/lib/supabase/anon";
 import type { DataFile, MemberRow, VoterRow } from "@/lib/types";
+
+/* ✅ member number ස්වාභාවික අනුපිළිවෙල (1/01, 1/02 … 33/02 … 41/01) */
+function natKey(s: string): (string | number)[] {
+  return String(s || "")
+    .split(/(\d+)/)
+    .filter(Boolean)
+    .map((p) => (/^\d+$/.test(p) ? Number(p) : p.toLowerCase()));
+}
+function cmpNat(a: string, b: string): number {
+  const ka = natKey(a);
+  const kb = natKey(b);
+  for (let i = 0; i < Math.max(ka.length, kb.length); i++) {
+    const x = ka[i];
+    const y = kb[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    if (typeof x === "number" && typeof y === "number") {
+      if (x !== y) return x - y;
+    } else {
+      const sx = String(x);
+      const sy = String(y);
+      if (sx !== sy) return sx < sy ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+async function fetchAllRows(table: "member_rows" | "voter_rows"): Promise<AnyRow[]> {
+  const sb = createAnonClient();
+  const out: AnyRow[] = [];
+  const BATCH = 1000;
+  for (let from = 0; from < 60000; from += BATCH) {
+    const { data, error } = await sb.from(table).select("*").range(from, from + BATCH - 1);
+    if (error) break;
+    const got = (data ?? []) as unknown as AnyRow[];
+    out.push(...got);
+    if (got.length < BATCH) break;
+  }
+  return out;
+}
 
 type AnyRow = (MemberRow | VoterRow) & { member_no?: string; voter_no?: string };
 
@@ -41,11 +76,31 @@ export function DirectoryTable({
   const [page, setPage] = useState(1);
   const perPage = 25;
 
-  const allRows: AnyRow[] = useMemo(
-    () => (kind === "member" ? (getMemberRows() as AnyRow[]) : (getVoterRows() as AnyRow[])),
-    [kind]
-  );
-  const files = kind === "member" ? MEMBER_FILES : VOTER_FILES;
+  const [allRows, setAllRows] = useState<AnyRow[]>([]);
+  const [files, setFiles] = useState<DataFile[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // ✅ REAL uploaded data පමණයි — demo rows නෑ. member_no අනුව ස්වාභාවික අනුපිළිවෙල (1/01 සිට).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const table = kind === "member" ? "member_rows" : "voter_rows";
+      const rows = await fetchAllRows(table);
+      rows.sort((a, b) =>
+        cmpNat((a.member_no ?? a.voter_no ?? "") as string, (b.member_no ?? b.voter_no ?? "") as string) ||
+        String(a.file_name || "").localeCompare(String(b.file_name || ""))
+      );
+      const sb = createAnonClient();
+      const { data: fl } = await sb.from("data_files").select("file_name, rows").eq("kind", kind);
+      if (!alive) return;
+      setAllRows(rows);
+      setFiles(((fl as unknown as DataFile[]) ?? []).map((f) => ({ ...f, rows: Number(f.rows) })));
+      setLoading(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [kind]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -91,7 +146,7 @@ export function DirectoryTable({
               <h1 className="text-2xl font-extrabold text-slate-900 flex flex-wrap items-center gap-3">
                 {title}
                 <span className="badge-blue rounded-full px-3 py-1 text-[12px] font-bold tabular-nums">
-                  {totalRows.toLocaleString()} {isMember ? "Members" : "Voters"}
+                  {allRows.length.toLocaleString()} {isMember ? "Members" : "Voters"}
                 </span>
               </h1>
               <p className="text-slate-500 text-[13px] mt-1">{sub}</p>
@@ -123,7 +178,7 @@ export function DirectoryTable({
             >
               <FileSpreadsheet size={16} className="text-slate-400" />
               {file === "all"
-                ? `${t.memberPage.allFiles} (${totalRows.toLocaleString()})`
+                ? `${t.memberPage.allFiles} (${allRows.length.toLocaleString()})`
                 : file}
               <span className="ml-auto text-slate-400 text-[10px]">{fileOpen ? "▲" : "▼"}</span>
             </button>
@@ -152,10 +207,10 @@ export function DirectoryTable({
                     }}
                   >
                     <span className="flex items-center gap-2">
-                      <Layers size={13} /> {t.memberPage.allFiles} ({totalRows.toLocaleString()})
+                      <Layers size={13} /> {t.memberPage.allFiles} ({allRows.length.toLocaleString()})
                     </span>
                     <span className="flex items-center gap-2 text-slate-500">
-                      <span className="tabular-nums">{totalRows.toLocaleString()}</span>
+                      <span className="tabular-nums">{allRows.length.toLocaleString()}</span>
                       {file === "all" && <Check size={13} className="text-indigo-600" />}
                     </span>
                   </button>
@@ -186,10 +241,10 @@ export function DirectoryTable({
                 </div>
                 <div className="flex items-center justify-between px-3 pt-2 mt-1 border-t border-slate-100 text-[11px] text-slate-500">
                   <span>
-                    {t.memberPage.totalFiles}: <strong className="text-slate-700">{totalFiles}</strong>
+                    {t.memberPage.totalFiles}: <strong className="text-slate-700">{files.length || totalFiles}</strong>
                   </span>
                   <span>
-                    {t.memberPage.totalRows}: <strong className="text-slate-700">{totalRows.toLocaleString()}</strong>
+                    {t.memberPage.totalRows}: <strong className="text-slate-700">{allRows.length.toLocaleString()}</strong>
                   </span>
                 </div>
               </div>
@@ -215,7 +270,13 @@ export function DirectoryTable({
             {view.length === 0 ? (
               <tr>
                 <td colSpan={isMember ? 6 : 5} className="text-center text-slate-400 py-10">
-                  {lang === "si" ? "දත්ත හමු නොවීය" : "No records found"}
+                  {loading
+                    ? (lang === "si" ? "දත්ත ලැබෙමින්…" : "Loading data…")
+                    : allRows.length === 0
+                      ? (lang === "si"
+                          ? "තවම Excel දත්ත upload කර නැත — /admin/data එකෙන් upload කරන්න"
+                          : "No uploaded data yet — upload Excel from /admin/data")
+                      : (lang === "si" ? "දත්ත හමු නොවීය" : "No records found")}
                 </td>
               </tr>
             ) : (
