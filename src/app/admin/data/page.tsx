@@ -104,9 +104,10 @@ function parseRows(grid: unknown[][]): ParsedRow[] {
 async function parseSpreadsheet(file: File): Promise<ParsedRow[]> {
   const XLSX = await import("xlsx");
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
+  // ✅ raw: true — member numbers "33/02" වගේ text විදිහටම තියෙන්න ඕනේ (date විදිහට නොවෙන)
+  const wb = XLSX.read(buf, { type: "array", raw: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", raw: false });
+  const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", raw: true });
   return parseRows(grid as unknown[][]);
 }
 

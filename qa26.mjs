@@ -40,6 +40,18 @@ const stat = await page.evaluate(() => {
 console.log("home stats:", stat);
 await page.screenshot({ path: "qa26-home.png", clip: { x: 0, y: 130, width: 1440, height: 280 } });
 
+// ---- cleanup: test rows ඉවත් (ඔයාගේ excel එකට DB එක පිරිසිදුව තියන්න) ----
+const cleaned = await page.evaluate(async () => {
+  const at = localStorage.getItem("mpcs_at");
+  const H = { apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkYWJseG9wYnl6eXFkeXBodGliIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwNjg1ODAsImV4cCI6MjEwNzY0NDU4MH0.uuetb0ZcTs3WDB5Adz7PmgZ-_EN4g_E-lXbOgtBMr5w", Authorization: "Bearer " + at, "Content-Type": "application/json" };
+  const base = "https://gdablxopbyzyqdyphtib.supabase.co/rest/v1";
+  await fetch(base + "/member_rows?id=neq.00000000-0000-0000-0000-000000000000", { method: "DELETE", headers: H });
+  await fetch(base + "/data_files?kind=eq.member", { method: "DELETE", headers: H });
+  const chk = await fetch(base + "/member_rows?select=id", { headers: { apikey: H.apikey } });
+  return (await chk.json()).length;
+});
+console.log("cleanup: member_rows after =", cleaned, "(0 expected)");
+
 // ---- cleanup (මේ test rows ඉවත් — ඔයාගේ excel එකට ඉඩ) ----
 await page.goto(`${SITE}/admin/data`, { waitUntil: "networkidle" });
 await page.waitForTimeout(2000);
