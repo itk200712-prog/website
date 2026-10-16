@@ -94,14 +94,18 @@ export default function AdminAdministratorsPage() {
     const password = String(fd.get("password"));
     const sb = createClient();
     const { data, error } = await sb.auth.signUp({ email, password });
-    if (error) {
+    if (error && !/already registered/i.test(error.message || "")) {
       show(`⚠ ${error.message}`);
       return;
     }
-    const uid = data.user?.id;
+    let uid = data?.user?.id;
+    if (!uid && error && /already registered/i.test(error.message || "")) {
+      show(`⚠ මේ email එකෙන් account එකක් තියෙනවා — වෙන email එකක් දාන්න`);
+      return;
+    }
     if (uid) {
-      // ✅ direct upsert — profile row නැත්නම් හැදෙනවා, තියෙනවා නම් update වෙනවා
-      const { error: upErr } = await sb.from("profiles").upsert({
+      // ✅ direct upsert (AUTHED) — profile row නැත්නම් හැදෙනවා, තියෙනවා නම් update වෙනවා
+      const { error: upErr } = await (await authedClient()).from("profiles").upsert({
         id: uid,
         full_name: String(fd.get("full_name")),
         nic: String(fd.get("nic")),

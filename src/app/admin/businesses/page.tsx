@@ -512,7 +512,9 @@ export default function AdminBusinessesPage() {
                 services: [],
               };
               setUnits((xs) => [...xs, row]);
-              const err = await dbInsert("business_units", row as unknown as Record<string, unknown>);
+              // ⚠ DB එකේ business_units columns වලට විතරක් insert (contacts/branches/services වෙනම tables)
+              const { contacts: _c, branches: _b, services: _s, ...unitRow } = row;
+              const err = await dbInsert("business_units", unitRow as unknown as Record<string, unknown>);
               setAddOpen(false);
               show(err ? `⚠ ${err}` : "✅ Business created");
             }}

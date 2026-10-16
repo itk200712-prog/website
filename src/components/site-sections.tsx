@@ -189,6 +189,19 @@ export function InquiryForm({ department, compact }: { department?: string; comp
     } catch {
       /* offline / demo — form UI එක ක්‍රියා කරයි */
     }
+    // ✅ Messages & Inquiries tab එකටත් පේලියක් දානවා (best-effort)
+    try {
+      const { dbInsert } = await import("@/components/admin");
+      await dbInsert("messages", {
+        name: String(fd.get("name") || ""),
+        phone: String(fd.get("phone") || ""),
+        email: String(fd.get("email") || ""),
+        department: String(fd.get("department") || "General Society Inquiry"),
+        subject: String(fd.get("department") || "General Society Inquiry"),
+        message: String(fd.get("message") || ""),
+        status: "unread",
+      });
+    } catch { /* ignore */ }
     setSent(true);
     setBusy(false);
     form.reset();
