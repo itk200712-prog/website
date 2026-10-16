@@ -347,10 +347,10 @@ export function HomeSections({
             {/* stats (live refresh) — vision/mission එකට උඩින් */}
             <div className="grid gap-5">
               <div className="grid grid-cols-2 gap-4">
-                <GlassStat kind="members" value={live.members} label={c.statMembers} tag="CSV / EXCEL" live />
-                <GlassStat kind="voters" value={live.voters} label={c.statVoters} tag="ELECTORAL" live />
-                <GlassStat kind="divisions" value={live.divisions} label={c.statDivisions} tag="BUSINESS" live />
-                <GlassStat kind="years" value={live.years} suffix="+" label={c.statYears} tag="SINCE 1976" live />
+                <GlassStat kind="members" value={live.members} label={c.statMembers} tag="CSV / EXCEL" live resetKey={live.tick} />
+                <GlassStat kind="voters" value={live.voters} label={c.statVoters} tag="ELECTORAL" live resetKey={live.tick} />
+                <GlassStat kind="divisions" value={live.divisions} label={c.statDivisions} tag="BUSINESS" live resetKey={live.tick} />
+                <GlassStat kind="years" value={live.years} suffix="+" label={c.statYears} tag="SINCE 1976" live resetKey={live.tick} />
               </div>
 
               {/* vision — glass */}
@@ -642,15 +642,15 @@ export function HomeSections({
 const GLASS = "rounded-3xl bg-white/55 backdrop-blur-xl border border-white/70 shadow-[0_20px_50px_-18px_rgba(15,23,42,0.25)]";
 
 function MiniCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
-  const [n, setN] = useState(value);
+  const [n, setN] = useState(0); // මුල සිට count වෙන්න
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setN(value);
       return;
     }
-    const from = n;
-    const dur = 800;
+    const from = 0;
+    const dur = 900;
     const t0 = performance.now();
     let raf = 0;
     const tick = (t: number) => {
@@ -679,6 +679,7 @@ function GlassStat({
   label,
   tag,
   live,
+  resetKey,
 }: {
   kind: keyof typeof GLASS_ICONS;
   value: number;
@@ -686,6 +687,7 @@ function GlassStat({
   label: string;
   tag: string;
   live?: boolean;
+  resetKey?: number;
 }) {
   const Icon = GLASS_ICONS[kind];
   return (
@@ -705,7 +707,7 @@ function GlassStat({
         </div>
       </div>
       <div className="mt-2.5 text-[28px] font-black text-slate-900 tabular-nums leading-none">
-        <MiniCounter value={value} suffix={suffix} />
+        <MiniCounter key={resetKey} value={value} suffix={suffix} />
       </div>
       <div className="text-slate-500 text-[12.5px] mt-1">{label}</div>
     </div>
@@ -714,61 +716,41 @@ function GlassStat({
 
 function useLiveStats(init: { members: number; voters: number; divisions: number; years: number }) {
   const [stats, setStats] = useState(init);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
-    async function pullSettings(onlyMembers: boolean) {
+    // ✅ REAL counts — member_rows / voter_rows / business_units ඇත්ත ගණන්
+    async function pull() {
       try {
         const sb = createClient();
-        const { data } = await sb.from("system_settings").select("key,value");
-        if (!alive || !data) return;
-        const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
-        setStats((s) => {
-          const next = { ...s };
-          if (map.has("members_total")) {
-            const m = Number(map.get("members_total"));
-            if (!Number.isNaN(m)) next.members = m;
-          }
-          if (!onlyMembers) {
-            if (map.has("voters_total")) {
-              const v = Number(map.get("voters_total"));
-              if (!Number.isNaN(v)) next.voters = v;
-            }
-            if (map.has("years_of_service")) {
-              const y = Number(map.get("years_of_service"));
-              if (!Number.isNaN(y)) next.years = y;
-            }
-          }
-          return next;
-        });
+        const [m, v, b, st] = await Promise.all([
+          sb.from("member_rows").select("id", { count: "exact", head: true }),
+          sb.from("voter_rows").select("id", { count: "exact", head: true }),
+          sb.from("business_units").select("id,active"),
+          sb.from("system_settings").select("key,value").eq("key", "years_of_service"),
+        ]);
+        if (!alive) return;
+        const divisions = (b.data ?? []).filter((r: { active?: unknown }) => r.active !== false && r.active !== "false").length;
+        const y = Number(st.data?.[0]?.value);
+        setStats((s) => ({
+          members: typeof m.count === "number" ? m.count : s.members,
+          voters: typeof v.count === "number" ? v.count : s.voters,
+          divisions,
+          years: Number.isNaN(y) ? s.years : y,
+        }));
+        setTick((t) => t + 1); // counter එක ආයේ මුල ඉඳන් count වෙන්න
       } catch {
-        /* offline — පෙර අගයම තියෙනවා */
+        /* offline — පෙර අගයම */
       }
     }
-    async function pullBiz() {
-      try {
-        const sb = createClient();
-        const { data } = await sb.from("business_units").select("id,active");
-        if (!alive || !data) return;
-        const count = data.filter((r: { active?: unknown }) => r.active !== false && r.active !== "false").length;
-        setStats((s) => ({ ...s, divisions: count }));
-      } catch {
-        /* offline */
-      }
-    }
-    pullSettings(true);
-    pullBiz();
-    const t2 = window.setInterval(() => pullSettings(true), 2000); // members — තත්පර 2න් 2ට
-    const t3 = window.setInterval(() => {
-      pullSettings(false);
-      pullBiz();
-    }, 3000); // voters / divisions / years — තත්පර 3න් 3ට
+    pull();
+    const iv = window.setInterval(pull, 3000); // හතරම — තත්පර 3න් 3ට රීෆ්‍රෙශ්
     return () => {
       alive = false;
-      clearInterval(t2);
-      clearInterval(t3);
+      clearInterval(iv);
     };
   }, []);
-  return stats;
+  return { ...stats, tick };
 }
 
 function BoardGlassCard({ person, onOpen }: { person: BoardMember; onOpen: (p: BoardMember) => void }) {
