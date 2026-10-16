@@ -21,9 +21,10 @@ import {
   MapPin,
   Mail,
   Clock,
-  Images,
-} from "lucide-react";
+  Images, X, GraduationCap, Users, CheckCircle2, Building2} from "lucide-react";
+import { useEffect, useState } from "react";
 import { HeroSlideshow } from "@/components/hero-slideshow";
+import { createClient } from "@/lib/supabase/client";
 import { SectionHead, StatCard, PersonCard } from "@/components/site-sections";
 import { HomeClientBits } from "@/components/home-client";
 import { useLang } from "@/lib/i18n";
@@ -161,13 +162,23 @@ export function HomeSections({
   const rest = news.filter((n) => !n.pinned).slice(0, 3);
   const newsList = [...pinned, ...rest].slice(0, 3);
 
+  const [person, setPerson] = useState<BoardMember | null>(null);
+  const live = useLiveStats({
+    members: settings.members_total,
+    voters: settings.voters_total,
+    divisions: businesses.length,
+    years: settings.years_of_service,
+  });
+  const sortedBoard = board.filter((p) => p.category !== "officer").slice().sort((a, b) => a.order - b.order);
+  const officerList = board.filter((p) => p.category === "officer").slice().sort((a, b) => a.order - b.order);
+
   return (
     <main>
       {/* ================= HERO ================= */}
       <section className="hero-dark relative overflow-hidden text-white">
         <HeroSlideshow images={settings.hero_images} />
         <div className="hero-overlay" />
-        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-40 sm:pb-56 min-h-[82vh] flex flex-col justify-center">
+        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-20 min-h-[80vh] flex flex-col justify-center">
           <h1 className="text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl">{t.brandFull}</h1>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -196,9 +207,12 @@ export function HomeSections({
         </div>
       </section>
 
-      {/* ================= BOARD — hero photo එකේ යට කොටස උඩින් floating ================= */}
-      <section className="relative z-40 -mt-24 sm:-mt-32 max-w-7xl mx-auto px-4 sm:px-6 pb-16">
-        <div className="rounded-3xl bg-white shadow-2xl border border-slate-200 p-6 sm:p-10">
+      {/* ================= BOARD — background සීමාවට යටින්, glass profile cards ================= */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-slate-100 via-indigo-50/70 to-slate-50">
+        <div className="absolute -top-28 -left-28 w-[420px] h-[420px] rounded-full bg-indigo-300/30 blur-3xl" />
+        <div className="absolute top-1/3 -right-28 w-[420px] h-[420px] rounded-full bg-fuchsia-300/25 blur-3xl" />
+        <div className="absolute bottom-0 left-1/4 w-[420px] h-[420px] rounded-full bg-amber-200/30 blur-3xl" />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14 sm:py-16">
           <SectionHead
             badge={c.boardBadge}
             title={c.boardTitle}
@@ -209,73 +223,93 @@ export function HomeSections({
               </Link>
             }
           />
-          {/* සියලුම අධ්‍යක්ෂවරුන් — යටට යන්න ලැයිස්තුවක්, details එක්ක */}
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {board
-              .filter((p) => p.category !== "officer")
-              .map((p) => (
-                <PersonCard key={`${p.order}-${p.name_en}`} person={p} />
-              ))}
+          {/* සියලුම සාමාජිකයින් order පිළිවෙලට — පේලියකට 4ක් */}
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {sortedBoard.map((p) => (
+              <BoardGlassCard key={`${p.order}-${p.name_en}`} person={p} onOpen={setPerson} />
+            ))}
           </div>
 
           {/* Official Members — Administrative Officers (නිලධාරීන්) */}
-          {board.some((p) => p.category === "officer") && (
-            <div className="mt-10">
+          {officerList.length > 0 && (
+            <div className="mt-12">
               <div className="flex items-center gap-4">
-                <div className="h-px flex-1 bg-slate-200" />
+                <div className="h-px flex-1 bg-slate-300/70" />
                 <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-indigo-700 text-center">
                   {c.officersTitle}
                 </div>
-                <div className="h-px flex-1 bg-slate-200" />
+                <div className="h-px flex-1 bg-slate-300/70" />
               </div>
-              <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {board
-                  .filter((p) => p.category === "officer")
-                  .map((p) => (
-                    <PersonCard key={`${p.order}-${p.name_en}`} person={p} />
-                  ))}
+              <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                {officerList.map((p) => (
+                  <BoardGlassCard key={`${p.order}-${p.name_en}`} person={p} onOpen={setPerson} />
+                ))}
               </div>
             </div>
           )}
         </div>
       </section>
 
-      {/* ================= ABOUT ================= */}
-      <section className="bg-white border-y border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
-          <div className="grid gap-10 lg:grid-cols-2 items-start">
-            <div>
+      {person && <PersonModal person={person} onClose={() => setPerson(null)} />}
+
+      {/* ================= ABOUT — glass quality + live stats ================= */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-100">
+        <div className="absolute top-10 -right-24 w-[380px] h-[380px] rounded-full bg-sky-200/30 blur-3xl" />
+        <div className="absolute bottom-0 -left-24 w-[380px] h-[380px] rounded-full bg-indigo-200/30 blur-3xl" />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14 sm:py-16">
+          <div className="grid gap-8 lg:grid-cols-2 items-start">
+            {/* about glass card */}
+            <div className="rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_20px_50px_-18px_rgba(15,23,42,0.22)] p-8 sm:p-10">
               <div className="flex items-center gap-2 text-[11px] font-bold tracking-[0.22em] uppercase text-indigo-700">
                 <Landmark size={15} /> {c.aboutBadge}
               </div>
               <h2 className="mt-3 text-2xl sm:text-4xl font-black text-slate-900 leading-snug">{c.aboutTitle}</h2>
               <p className="mt-5 text-slate-600 leading-relaxed text-[15px]">{c.aboutP1}</p>
               <p className="mt-4 text-slate-600 leading-relaxed text-[15px]">{c.aboutP2}</p>
-              <p className="mt-5 text-[12.5px] font-bold text-indigo-700 tracking-wide">{c.principles}</p>
+              <div className="mt-6 rounded-2xl bg-gradient-to-r from-indigo-50 to-fuchsia-50 border border-indigo-100 px-4 py-3">
+                <div className="text-[12.5px] font-bold text-indigo-700 tracking-wide">{c.principles}</div>
+              </div>
             </div>
+
+            {/* stats (live refresh) — vision/mission එකට උඩින් */}
             <div className="grid gap-5">
-              {/* stats — vision/mission එකට උඩින් (2ක්) */}
               <div className="grid grid-cols-2 gap-4">
-                <StatCard kind="members" value={settings.members_total} label={c.statMembers} tag="CSV / EXCEL" />
-                <StatCard kind="voters" value={settings.voters_total} label={c.statVoters} tag="ELECTORAL" />
+                <GlassStat kind="members" value={live.members} label={c.statMembers} tag="CSV / EXCEL" live />
+                <GlassStat kind="voters" value={live.voters} label={c.statVoters} tag="ELECTORAL" live />
+                <GlassStat kind="divisions" value={live.divisions} label={c.statDivisions} tag="BUSINESS" live />
+                <GlassStat kind="years" value={live.years} suffix="+" label={c.statYears} tag="SINCE 1976" live />
               </div>
-              <div className="card p-7">
-                <div className="flex items-center gap-2.5 text-indigo-700">
-                  <Eye size={18} /> <h3 className="font-extrabold text-slate-900">{c.vision}</h3>
+
+              {/* vision — glass */}
+              <div className="rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_20px_50px_-18px_rgba(15,23,42,0.22)] p-7 relative overflow-hidden">
+                <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-amber-200/40 blur-2xl" />
+                <div className="relative flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center shadow-lg shadow-amber-200">
+                    <Eye size={18} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-amber-600">Vision</div>
+                    <h3 className="font-extrabold text-slate-900 text-[16px]">{c.vision}</h3>
+                  </div>
                 </div>
-                <p className="mt-3 text-slate-600 text-[14.5px] leading-relaxed">{c.visionText}</p>
+                <p className="mt-3.5 text-slate-600 text-[14.5px] leading-relaxed relative">{c.visionText}</p>
               </div>
-              <div className="card p-7">
-                <div className="flex items-center gap-2.5 text-indigo-700">
-                  <Target size={18} /> <h3 className="font-extrabold text-slate-900">{c.mission}</h3>
+
+              {/* mission — glass */}
+              <div className="rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_20px_50px_-18px_rgba(15,23,42,0.22)] p-7 relative overflow-hidden">
+                <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-indigo-200/40 blur-2xl" />
+                <div className="relative flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <Target size={18} />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-indigo-600">Mission</div>
+                    <h3 className="font-extrabold text-slate-900 text-[16px]">{c.mission}</h3>
+                  </div>
                 </div>
-                <p className="mt-3 text-slate-600 text-[14.5px] leading-relaxed">{c.missionText}</p>
+                <p className="mt-3.5 text-slate-600 text-[14.5px] leading-relaxed relative">{c.missionText}</p>
               </div>
-              {/* stats — යටින් (2ක්) */}
-              <div className="grid grid-cols-2 gap-4">
-                <StatCard kind="divisions" value={businesses.length} label={c.statDivisions} tag="BUSINESS" />
-                <StatCard kind="years" value={settings.years_of_service} suffix="+" label={c.statYears} tag="SINCE 1976" />
-              </div>
+
               <div className="flex">
                 <Link href={L("/businesses")} className="btn btn-primary">{c.all}</Link>
               </div>
@@ -465,5 +499,285 @@ export function HomeSections({
         </div>
       </section>
     </main>
+  );
+}
+
+
+// ============================================================================
+//  Glass profile card + popup modal + live-refreshing stats
+// ============================================================================
+
+const GLASS = "rounded-3xl bg-white/55 backdrop-blur-xl border border-white/70 shadow-[0_20px_50px_-18px_rgba(15,23,42,0.25)]";
+
+function MiniCounter({ value, suffix = "" }: { value: number; suffix?: string }) {
+  const [n, setN] = useState(value);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setN(value);
+      return;
+    }
+    const from = n;
+    const dur = 800;
+    const t0 = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / dur);
+      setN(Math.round(from + (value - from) * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <>
+      {n.toLocaleString()}
+      {suffix}
+    </>
+  );
+}
+
+const GLASS_ICONS = { members: Users, voters: CheckCircle2, divisions: Building2, years: Clock } as const;
+
+function GlassStat({
+  kind,
+  value,
+  suffix = "",
+  label,
+  tag,
+  live,
+}: {
+  kind: keyof typeof GLASS_ICONS;
+  value: number;
+  suffix?: string;
+  label: string;
+  tag: string;
+  live?: boolean;
+}) {
+  const Icon = GLASS_ICONS[kind];
+  return (
+    <div className="rounded-2xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_16px_40px_-16px_rgba(15,23,42,0.22)] p-5 transition-transform duration-300 hover:-translate-y-1">
+      <div className="flex items-center justify-between">
+        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200">
+          <Icon size={19} />
+        </div>
+        <div className="flex items-center gap-1.5">
+          {live && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+          )}
+          <span className="text-[9px] font-bold tracking-[0.16em] text-slate-400 uppercase">{tag}</span>
+        </div>
+      </div>
+      <div className="mt-2.5 text-[28px] font-black text-slate-900 tabular-nums leading-none">
+        <MiniCounter value={value} suffix={suffix} />
+      </div>
+      <div className="text-slate-500 text-[12.5px] mt-1">{label}</div>
+    </div>
+  );
+}
+
+function useLiveStats(init: { members: number; voters: number; divisions: number; years: number }) {
+  const [stats, setStats] = useState(init);
+  useEffect(() => {
+    let alive = true;
+    async function pullSettings(onlyMembers: boolean) {
+      try {
+        const sb = createClient();
+        const { data } = await sb.from("system_settings").select("key,value");
+        if (!alive || !data) return;
+        const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
+        setStats((s) => {
+          const next = { ...s };
+          if (map.has("members_total")) {
+            const m = Number(map.get("members_total"));
+            if (!Number.isNaN(m)) next.members = m;
+          }
+          if (!onlyMembers) {
+            if (map.has("voters_total")) {
+              const v = Number(map.get("voters_total"));
+              if (!Number.isNaN(v)) next.voters = v;
+            }
+            if (map.has("years_of_service")) {
+              const y = Number(map.get("years_of_service"));
+              if (!Number.isNaN(y)) next.years = y;
+            }
+          }
+          return next;
+        });
+      } catch {
+        /* offline — පෙර අගයම තියෙනවා */
+      }
+    }
+    async function pullBiz() {
+      try {
+        const sb = createClient();
+        const { data } = await sb.from("business_units").select("id,active");
+        if (!alive || !data) return;
+        const count = data.filter((r: { active?: unknown }) => r.active !== false && r.active !== "false").length;
+        setStats((s) => ({ ...s, divisions: count }));
+      } catch {
+        /* offline */
+      }
+    }
+    pullSettings(true);
+    pullBiz();
+    const t2 = window.setInterval(() => pullSettings(true), 2000); // members — තත්පර 2න් 2ට
+    const t3 = window.setInterval(() => {
+      pullSettings(false);
+      pullBiz();
+    }, 3000); // voters / divisions / years — තත්පර 3න් 3ට
+    return () => {
+      alive = false;
+      clearInterval(t2);
+      clearInterval(t3);
+    };
+  }, []);
+  return stats;
+}
+
+function BoardGlassCard({ person, onOpen }: { person: BoardMember; onOpen: (p: BoardMember) => void }) {
+  const { lang } = useLang();
+  const pill: Record<BoardMember["category"], { label: string; cls: string }> = {
+    chairman: { label: lang === "si" ? "සභාපති" : "Chairman", cls: "bg-amber-100 text-amber-700 border-amber-200" },
+    "vice-chairman": { label: lang === "si" ? "උප සභාපති" : "Vice Chairman", cls: "bg-sky-100 text-sky-700 border-sky-200" },
+    director: { label: lang === "si" ? "අධ්‍යක්ෂ" : "Director", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    officer: { label: lang === "si" ? "නිලධාරී" : "Administrative Officer", cls: "bg-rose-100 text-rose-700 border-rose-200" },
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(person)}
+      className={`group text-left ${GLASS} p-5 transition-all duration-300 hover:-translate-y-1.5 hover:bg-white/75 hover:shadow-[0_28px_60px_-18px_rgba(15,23,42,0.35)] cursor-pointer`}
+    >
+      <div className="relative mx-auto w-24 h-24 rounded-2xl overflow-hidden ring-2 ring-white/80 shadow-lg bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center">
+        {person.photo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={person.photo} alt={person.name_en} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-xl font-black text-indigo-700">
+            {person.name_en.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+          </span>
+        )}
+      </div>
+      <div className="mt-3 text-center">
+        <span className={`inline-block rounded-full px-2.5 py-0.5 text-[9.5px] font-bold border ${pill[person.category].cls}`}>
+          {pill[person.category].label}
+        </span>
+        <div className="font-extrabold text-slate-900 mt-2 leading-snug text-[13.5px]">
+          {lang === "si" ? person.name_si || person.name_en : person.name_en}
+        </div>
+        <div className="text-slate-500 text-[11.5px]">{lang === "si" ? person.position_si : person.position_en}</div>
+        <div className="mt-2 text-[10.5px] text-slate-400 truncate">🎓 {person.qualification}</div>
+        <div className="mt-2.5 text-[10.5px] font-bold text-indigo-700 opacity-0 group-hover:opacity-100 transition-opacity">
+          {lang === "si" ? "වැඩි විස්තර බලන්න →" : "View Full Profile →"}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function PersonModal({ person, onClose }: { person: BoardMember; onClose: () => void }) {
+  const { lang } = useLang();
+  return (
+    <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg rounded-3xl bg-white/85 backdrop-blur-2xl border border-white/70 shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative h-32 bg-gradient-to-r from-indigo-700 via-indigo-600 to-purple-700">
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/20 hover:bg-white/35 text-white flex items-center justify-center transition"
+          >
+            <X size={17} />
+          </button>
+        </div>
+        <div className="px-8 pb-8">
+          <div className="w-28 h-28 rounded-3xl overflow-hidden ring-4 ring-white shadow-xl -mt-14 bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center">
+            {person.photo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={person.photo} alt={person.name_en} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-3xl font-black text-indigo-700">
+                {person.name_en.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+              </span>
+            )}
+          </div>
+          <h2 className="mt-4 text-2xl font-black text-slate-900 leading-tight">
+            {lang === "si" ? person.name_si || person.name_en : person.name_en}
+          </h2>
+          <div className="text-slate-500 text-[13px] mt-0.5">
+            {lang === "si" ? person.name_en : person.name_si} · {lang === "si" ? person.position_si : person.position_en}
+          </div>
+
+          <div className="mt-5 space-y-2.5">
+            <div className="flex items-center gap-3 rounded-2xl bg-white/70 border border-white/80 px-4 py-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
+                <GraduationCap size={17} />
+              </div>
+              <div>
+                <div className="text-[9.5px] font-bold tracking-[0.14em] uppercase text-slate-400">
+                  {lang === "si" ? "සුදුසුකම්" : "Qualification"}
+                </div>
+                <div className="text-slate-700 text-[13px] font-semibold">{person.qualification}</div>
+              </div>
+            </div>
+            {person.phone && (
+              <a
+                href={`tel:${person.phone.replace(/\s/g, "")}`}
+                className="flex items-center gap-3 rounded-2xl bg-white/70 border border-white/80 px-4 py-3 hover:bg-white transition"
+              >
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Phone size={17} />
+                </div>
+                <div>
+                  <div className="text-[9.5px] font-bold tracking-[0.14em] uppercase text-slate-400">
+                    {lang === "si" ? "දුරකථනය" : "Phone"}
+                  </div>
+                  <div className="text-slate-700 text-[13px] font-semibold">{person.phone}</div>
+                </div>
+              </a>
+            )}
+            {person.email && (
+              <a
+                href={`mailto:${person.email}`}
+                className="flex items-center gap-3 rounded-2xl bg-white/70 border border-white/80 px-4 py-3 hover:bg-white transition"
+              >
+                <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center shrink-0">
+                  <Mail size={17} />
+                </div>
+                <div>
+                  <div className="text-[9.5px] font-bold tracking-[0.14em] uppercase text-slate-400">
+                    {lang === "si" ? "විද්‍යුත් තැපෑල" : "Email"}
+                  </div>
+                  <div className="text-slate-700 text-[13px] font-semibold">{person.email}</div>
+                </div>
+              </a>
+            )}
+            {person.address && (
+              <div className="flex items-center gap-3 rounded-2xl bg-white/70 border border-white/80 px-4 py-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                  <MapPin size={17} />
+                </div>
+                <div>
+                  <div className="text-[9.5px] font-bold tracking-[0.14em] uppercase text-slate-400">
+                    {lang === "si" ? "ලිපිනය" : "Address"}
+                  </div>
+                  <div className="text-slate-700 text-[13px] font-semibold">{person.address}</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button onClick={onClose} className="btn btn-primary w-full mt-6">
+            {lang === "si" ? "වසන්න" : "Close"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
