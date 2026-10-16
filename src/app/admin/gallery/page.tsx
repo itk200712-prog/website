@@ -21,16 +21,24 @@ export default function AdminGalleryPage() {
   const [items, setItems] = useState<GalleryItem[]>([...GALLERY]);
   const [loaded, setLoaded] = useState(false);
 
-  // DB එකෙන් load — comments field එක table එකේ නැති නිසා [] default
+  // DB එකෙන් load — ✅ comments gallery_comments table එකෙන්
   async function load() {
     if (!isSupabaseConfigured()) { setLoaded(true); return; }
     try {
       const { data } = await createClient().from("gallery_items").select("*");
+      const { data: cm } = await createClient().from("gallery_comments").select("*").order("created_at", { ascending: true });
       if (data && data.length > 0) {
         setItems(
           (data as unknown as GalleryItem[]).map((g) => ({
             ...g,
-            comments: Array.isArray(g.comments) ? g.comments : [],
+            comments: (cm ?? [])
+              .filter((c: { item_id: string }) => c.item_id === g.id)
+              .map((c: { id: string; author: string; text: string; created_at: string }) => ({
+                id: String(c.id),
+                author: String(c.author ?? ""),
+                text: String(c.text ?? ""),
+                created_at: String(c.created_at ?? ""),
+              })),
             likes: typeof g.likes === "number" ? g.likes : 0,
           }))
         );
@@ -151,8 +159,21 @@ export default function AdminGalleryPage() {
               ) : (
                 <div className="space-y-1.5 mt-1.5">
                   {g.comments.map((c) => (
-                    <div key={c.id} className="text-[12px] text-slate-600">
-                      <strong>{c.author}:</strong> {c.text}
+                    <div key={c.id} className="flex items-start gap-2 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
+                      <div className="text-[12px] text-slate-600 flex-1">
+                        <strong>{c.author}:</strong> {c.text}
+                      </div>
+                      <button
+                        className="shrink-0 w-6 h-6 rounded-full bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors"
+                        title="Delete comment"
+                        onClick={async () => {
+                          await createClient().from("gallery_comments").delete().eq("id", c.id);
+                          await load();
+                          show("✅ Comment deleted");
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
                     </div>
                   ))}
                 </div>

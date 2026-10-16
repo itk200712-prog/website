@@ -707,3 +707,16 @@ create policy activity_admin_write on public.admin_activity_logs for all using (
 drop policy if exists "site_images_anon_upload" on storage.objects;
 create policy "site_images_anon_upload" on storage.objects for insert
   with check (bucket_id = 'site-images');
+
+
+-- ---------------------------------------------------------------------------
+-- 17. GALLERY LIKES + COMMENTS (signed-in members ලට like/comment කරන්න)
+-- ---------------------------------------------------------------------------
+drop policy if exists "gallery_items_member_like" on public.gallery_items;
+create policy "gallery_items_member_like" on public.gallery_items for update
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');
+
+drop policy if exists "gallery_comments_member_insert" on public.gallery_comments;
+create policy "gallery_comments_member_insert" on public.gallery_comments for insert
+  with check (auth.role() = 'authenticated');

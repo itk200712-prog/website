@@ -1,24 +1,205 @@
 "use client";
 
 // ============================================================================
-// Gallery grid — photo + Title + Description හැම විටම user ට පේනවා ✅
+// Gallery grid — photo + Title + Description + ✅ Like & Comment (sign-in required)
 // ============================================================================
 
-import { useState } from "react";
-import { Heart, ImageIcon, MessageSquare, X } from "lucide-react";
-import type { GalleryItem } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { Heart, ImageIcon, LogIn, MessageSquare, Send, X } from "lucide-react";
+import type { GalleryComment, GalleryItem } from "@/lib/types";
+import { authedClient } from "@/lib/supabase/client";
 
-const ASPECT: Record<GalleryItem["aspect"], string> = {
+const ASPECT: Record<string, string> = {
   "4:3": "4 / 3",
   "16:9": "16 / 9",
   "1:1": "1 / 1",
   "3:2": "3 / 2",
 };
 
-export function GalleryGrid({ items }: { items: GalleryItem[] }) {
+export type Me = { id: string; name: string; role?: string } | null;
+
+export function useMe(): Me {
+  const [me, setMe] = useState<Me>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const sb = await authedClient();
+        const { data: u } = await sb.auth.getUser();
+        if (!u?.user) return;
+        const { data: prof } = await sb.from("profiles").select("full_name, role").eq("id", u.user.id).maybeSingle();
+        if (alive) setMe({ id: u.user.id, name: prof?.full_name || u.user.email || "Member", role: prof?.role });
+      } catch {
+        /* not logged in */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return me;
+}
+
+// ============================================================================
+// Like + Comment block — cards සහ lightbox දෙකේම use කරන්න
+// ============================================================================
+export function GallerySocial({
+  item,
+  me,
+  onLike,
+  onComment,
+  compact = false,
+}: {
+  item: GalleryItem;
+  me: Me;
+  onLike: (newCount: number) => void;
+  onComment: (c: GalleryComment) => void;
+  compact?: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [text, setText] = useState("");
+  const [needSignin, setNeedSignin] = useState(false);
+  const [liked, setLiked] = useState(false);
+
+  useEffect(() => {
+    try {
+      const map = JSON.parse(localStorage.getItem("mpcs_liked_gallery") || "{}");
+      setLiked(!!map[item.id]);
+    } catch {
+      /* ignore */
+    }
+  }, [item.id]);
+
+  async function toggleLike() {
+    if (!me) {
+      setNeedSignin(true);
+      return;
+    }
+    const newCount = Math.max(0, (item.likes ?? 0) + (liked ? -1 : 1));
+    setLiked(!liked);
+    onLike(newCount);
+    try {
+      const map = JSON.parse(localStorage.getItem("mpcs_liked_gallery") || "{}");
+      if (!liked) map[item.id] = true;
+      else delete map[item.id];
+      localStorage.setItem("mpcs_liked_gallery", JSON.stringify(map));
+    } catch {
+      /* ignore */
+    }
+    try {
+      const sb = await authedClient();
+      await sb.from("gallery_items").update({ likes: newCount }).eq("id", item.id);
+    } catch {
+      /* offline — count local එක පෙන්වයි */
+    }
+  }
+
+  async function postComment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!me) {
+      setNeedSignin(true);
+      return;
+    }
+    const t = text.trim();
+    if (!t) return;
+    setBusy(true);
+    const c: GalleryComment = {
+      id: `tmp-${Date.now()}`,
+      author: me.name,
+      text: t,
+      created_at: new Date().toISOString(),
+    };
+    onComment(c);
+    setText("");
+    try {
+      const sb = await authedClient();
+      await sb.from("gallery_comments").insert({ item_id: item.id, author: me.name, text: t });
+    } catch {
+      /* DB RLS — SQL block එක run කරලා නැත්නම් local එකේ පෙන්වයි */
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-4 text-[12.5px] text-slate-500">
+        <button
+          type="button"
+          onClick={toggleLike}
+          className={`flex items-center gap-1.5 font-semibold transition-colors ${liked ? "text-rose-600" : "hover:text-rose-600"}`}
+        >
+          <Heart size={15} className={liked ? "fill-rose-500 text-rose-500" : ""} />
+          {item.likes ?? 0} Likes
+        </button>
+        <span className="flex items-center gap-1.5">
+          <MessageSquare size={15} /> {(item.comments?.length ?? 0)} Comments
+        </span>
+      </div>
+
+      {needSignin && (
+        <a
+          href="/signin"
+          className="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-[11.5px] font-bold text-amber-700 hover:bg-amber-100 transition-colors"
+        >
+          <LogIn size={13} /> Like / Comment කරන්න Sign In විය යුතුයි — Sign In →
+        </a>
+      )}
+
+      {/* comments list */}
+      {(item.comments?.length ?? 0) > 0 && (
+        <div className={`mt-3 space-y-2 ${compact ? "" : ""}`}>
+          {item.comments.map((c) => (
+            <div key={c.id} className="rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-[9px] font-black shrink-0">
+                  {c.author.trim().charAt(0).toUpperCase() || "?"}
+                </div>
+                <div className="text-[11.5px] font-bold text-slate-800">{c.author}</div>
+                <div className="text-[9.5px] text-slate-400 ml-auto">
+                  {new Date(c.created_at).toLocaleDateString()}
+                </div>
+              </div>
+              <div className="text-[12px] text-slate-600 mt-1 leading-relaxed">{c.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* comment form */}
+      <form onSubmit={postComment} className="mt-3 flex gap-2">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={me ? "ඔබේ අදහස ලියන්න..." : "Comment කරන්න Sign In වන්න..."}
+          className="field !py-2.5 !text-[12.5px] flex-1"
+          onFocus={() => {
+            if (!me) setNeedSignin(true);
+          }}
+        />
+        <button type="submit" disabled={busy || !text.trim()} className="btn btn-primary !py-2 !px-4 !text-[12px]">
+          <Send size={13} />
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// like/comment state එකට helper — parent එකේ items update කරන්න
+export function updateItem(items: GalleryItem[], id: string, patch: Partial<GalleryItem>): GalleryItem[] {
+  return items.map((g) => (g.id === id ? { ...g, ...patch } : g));
+}
+
+export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
+  const [items, setItems] = useState<GalleryItem[]>(initial);
   const [open, setOpen] = useState<GalleryItem | null>(null);
+  const me = useMe();
+
+  useEffect(() => {
+    setItems(initial);
+  }, [initial]);
+
   const idx = open ? items.findIndex((x) => x.id === open.id) : -1;
-  const [liked, setLiked] = useState<Record<string, boolean>>({});
+  const current = open ? items.find((x) => x.id === open.id) ?? open : null;
 
   return (
     <>
@@ -49,21 +230,19 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
                 {g.aspect}
               </span>
             </button>
-            {/* ✅ title + description හැම විටම පේනවා */}
             <figcaption className="p-5">
               <h3 className="font-extrabold text-slate-900 leading-snug">{g.title}</h3>
               <p className="text-slate-500 text-[12.5px] mt-1.5 leading-relaxed">{g.description}</p>
-              <div className="flex items-center gap-4 mt-3.5 text-[12px] text-slate-500">
-                <button
-                  className="flex items-center gap-1.5 hover:text-rose-600"
-                  onClick={() => setLiked((l) => ({ ...l, [g.id]: !l[g.id] }))}
-                >
-                  <Heart size={14} className={liked[g.id] ? "fill-rose-500 text-rose-500" : ""} />
-                  {(g.likes ?? 0) + (liked[g.id] ? 1 : 0)} Likes
-                </button>
-                <span className="flex items-center gap-1.5">
-                  <MessageSquare size={14} /> {(g.comments?.length ?? 0)} Comments
-                </span>
+              <div className="mt-3.5 border-t border-slate-100 pt-3">
+                <GallerySocial
+                  item={g}
+                  me={me}
+                  onLike={(n) => setItems((xs) => updateItem(xs, g.id, { likes: n }))}
+                  onComment={(c) =>
+                    setItems((xs) => updateItem(xs, g.id, { comments: [...(xs.find((x) => x.id === g.id)?.comments ?? []), c] }))
+                  }
+                  compact
+                />
               </div>
             </figcaption>
           </figure>
@@ -71,17 +250,17 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
       </div>
       )}
 
-      {/* lightbox — title + description මෙතනත් */}
-      {open && (
+      {/* lightbox — title + description + like/comment */}
+      {current && (
         <div
           className="fixed inset-0 z-[90] bg-slate-900/80 flex items-center justify-center p-4 no-print"
           onClick={() => setOpen(null)}
         >
-          <div className="card max-w-3xl w-full p-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="relative bg-slate-800" style={{ aspectRatio: ASPECT[open.aspect] }}>
-              {open.image ? (
+          <div className="card max-w-3xl w-full p-0 overflow-hidden max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="relative bg-slate-800" style={{ aspectRatio: ASPECT[current.aspect] ?? "4 / 3" }}>
+              {current.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={open.image} alt={open.title} className="absolute inset-0 w-full h-full object-cover" />
+                <img src={current.image} alt={current.title} className="absolute inset-0 w-full h-full object-cover" />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-white/25">
                   <ImageIcon size={64} />
@@ -97,14 +276,20 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
                 <>
                   <button
                     className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
-                    onClick={(e) => { e.stopPropagation(); setOpen(items[(idx - 1 + items.length) % items.length]); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpen(items[(idx - 1 + items.length) % items.length]);
+                    }}
                     aria-label="Previous"
                   >
                     ‹
                   </button>
                   <button
                     className="absolute right-16 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
-                    onClick={(e) => { e.stopPropagation(); setOpen(items[(idx + 1) % items.length]); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpen(items[(idx + 1) % items.length]);
+                    }}
                     aria-label="Next"
                   >
                     ›
@@ -113,16 +298,25 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
               )}
             </div>
             <div className="p-6">
-              <h3 className="text-xl font-extrabold text-slate-900">{open.title}</h3>
-              <p className="text-slate-500 text-[13.5px] mt-2 leading-relaxed">{open.description}</p>
+              <h3 className="text-xl font-extrabold text-slate-900">{current.title}</h3>
+              <p className="text-slate-500 text-[13.5px] mt-2 leading-relaxed">{current.description}</p>
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <GallerySocial
+                  item={current}
+                  me={me}
+                  onLike={(n) => setItems((xs) => updateItem(xs, current.id, { likes: n }))}
+                  onComment={(c) =>
+                    setItems((xs) =>
+                      updateItem(xs, current.id, { comments: [...(xs.find((x) => x.id === current.id)?.comments ?? []), c] })
+                    )
+                  }
+                />
+              </div>
               <div className="flex items-center gap-4 mt-4 text-[12.5px] text-slate-500 border-t border-slate-100 pt-4">
-                <span className="flex items-center gap-1.5">
-                  <Heart size={14} className="fill-rose-500 text-rose-500" /> {open.likes} Likes
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <MessageSquare size={14} /> {(open.comments?.length ?? 0)} Comments
-                </span>
-                <span className="badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold ml-auto">{open.aspect}</span>
+                <span className="badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold">{current.aspect}</span>
+                <button onClick={() => setOpen(null)} className="btn btn-outline !py-1.5 !px-4 !text-[11.5px] ml-auto">
+                  Close
+                </button>
               </div>
             </div>
           </div>
@@ -130,4 +324,14 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
       )}
     </>
   );
+}
+
+// admin comments delete එකට
+export async function deleteGalleryComment(id: string): Promise<void> {
+  try {
+    const sb = await authedClient();
+    await sb.from("gallery_comments").delete().eq("id", id);
+  } catch {
+    /* ignore */
+  }
 }

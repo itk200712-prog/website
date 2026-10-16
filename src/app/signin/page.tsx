@@ -87,8 +87,10 @@ export default function SignInPage() {
       </div>
 
       {/* ================= form panel ================= */}
-      <div className="flex items-center justify-center p-5 sm:p-10 bg-slate-50">
-        <div className="w-full max-w-[430px]">
+      <div className="relative flex items-center justify-center p-5 sm:p-10 bg-slate-50 overflow-hidden">
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-indigo-200/40 blur-3xl" />
+        <div className="absolute bottom-[-6rem] -left-24 w-96 h-96 rounded-full bg-fuchsia-200/35 blur-3xl" />
+        <div className="relative w-full max-w-[430px]">
           <Link href="/" className="inline-flex items-center gap-2 text-slate-500 text-[12.5px] font-semibold hover:text-slate-800 transition-colors">
             <ArrowLeft size={15} /> {t.auth.backHome}
           </Link>

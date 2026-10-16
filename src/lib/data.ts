@@ -85,12 +85,20 @@ export async function getGallery(): Promise<GalleryItem[]> {
     const sb = createAnonClient();
     const { data, error } = await sb.from("gallery_items").select("*");
     if (error || !data) return GALLERY;
-    // DB rows: comments/likes/aspect නැති විය හැක — safe defaults (client crash වළක්වයි)
+    // ✅ comments gallery_comments table එකෙන් එකතු කරන්න (bug fix)
+    const { data: cm } = await sb.from("gallery_comments").select("*").order("created_at", { ascending: true });
     return (data as unknown as GalleryItem[]).map((g) => ({
       ...g,
-      comments: Array.isArray(g.comments) ? g.comments : [],
+      comments: (cm ?? [])
+        .filter((c: { item_id: string }) => c.item_id === g.id)
+        .map((c: { id: string; author: string; text: string; created_at: string }) => ({
+          id: String(c.id),
+          author: String(c.author ?? ""),
+          text: String(c.text ?? ""),
+          created_at: String(c.created_at ?? ""),
+        })),
       likes: typeof g.likes === "number" ? g.likes : 0,
-      aspect: g.aspect ?? "landscape",
+      aspect: g.aspect ?? "4:3",
     }));
   }, GALLERY);
 }

@@ -22,6 +22,8 @@ import {
   Mail,
   Clock,
   Images, X, GraduationCap, Users, CheckCircle2, Building2} from "lucide-react";
+import { GallerySocial, useMe, updateItem, type Me } from "@/components/gallery-grid";
+import type { GalleryComment } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { HeroSlideshow } from "@/components/hero-slideshow";
 import { createClient } from "@/lib/supabase/client";
@@ -164,8 +166,11 @@ export function HomeSections({
 
   const [person, setPerson] = useState<BoardMember | null>(null);
   const [gal, setGal] = useState<GalleryItem | null>(null);
-  const galList = gallery;
+  const [galItems, setGalItems] = useState<GalleryItem[]>(gallery);
+  const me = useMe();
+  const galList = galItems;
   const galIdx = gal ? galList.findIndex((x) => x.id === gal.id) : -1;
+  const galCurrent = gal ? galList.find((x) => x.id === gal.id) ?? gal : null;
   const live = useLiveStats({
     members: settings.members_total,
     voters: settings.voters_total,
@@ -262,12 +267,12 @@ export function HomeSections({
           onClick={() => setGal(null)}
         >
           <div
-            className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl bg-white/90 backdrop-blur-xl border border-white/50"
+            className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl bg-white/90 backdrop-blur-xl border border-white/50 max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative bg-slate-900">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={gal.image} alt={gal.title} className="w-full max-h-[62vh] object-contain" />
+              <img src={galCurrent?.image} alt={gal.title} className="w-full max-h-[62vh] object-contain" />
               <button
                 onClick={() => setGal(null)}
                 className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center transition"
@@ -297,6 +302,18 @@ export function HomeSections({
               </div>
               <h3 className="mt-1.5 text-xl font-extrabold text-slate-900">{gal.title}</h3>
               {gal.description && <p className="mt-2 text-slate-600 text-[13.5px] leading-relaxed">{gal.description}</p>}
+              {galCurrent && (
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <GallerySocial
+                    item={galCurrent}
+                    me={me as Me}
+                    onLike={(n) => setGalItems((xs) => updateItem(xs, galCurrent.id, { likes: n }))}
+                    onComment={(c: GalleryComment) =>
+                      setGalItems((xs) => updateItem(xs, galCurrent.id, { comments: [...(xs.find((x) => x.id === galCurrent.id)?.comments ?? []), c] }))
+                    }
+                  />
+                </div>
+              )}
               <button onClick={() => setGal(null)} className="btn btn-primary mt-5 w-full">
                 {lang === "si" ? "වසන්න" : "Close"}
               </button>
@@ -366,9 +383,6 @@ export function HomeSections({
                 <p className="mt-3.5 text-slate-600 text-[14.5px] leading-relaxed relative">{c.missionText}</p>
               </div>
 
-              <div className="flex">
-                <Link href={L("/businesses")} className="btn btn-primary">{c.all}</Link>
-              </div>
             </div>
           </div>
         </div>
@@ -380,13 +394,8 @@ export function HomeSections({
           badge={c.bizBadge}
           title={c.bizTitle}
           sub={c.bizSub}
-          right={
-            <Link href={L("/businesses")} className="btn btn-outline">
-              {c.all}
-            </Link>
-          }
         />
-        <HomeClientBits businesses={businesses.slice(0, 8)} />
+        <HomeClientBits businesses={businesses} />
       </section>
 
       {/* ================= GALLERY ================= */}
@@ -774,8 +783,28 @@ function BoardGlassCard({ person, onOpen }: { person: BoardMember; onOpen: (p: B
     <button
       type="button"
       onClick={() => onOpen(person)}
-      className={`group text-left ${GLASS} p-5 transition-all duration-300 hover:-translate-y-1.5 hover:bg-white/75 hover:shadow-[0_28px_60px_-18px_rgba(15,23,42,0.35)] cursor-pointer`}
+      className={`group text-left ${GLASS} p-5 relative overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:bg-white/75 hover:shadow-[0_28px_60px_-18px_rgba(15,23,42,0.35)] cursor-pointer`}
     >
+      {/* animated dots decoration */}
+      <svg
+        className="absolute -top-1 -right-1 w-12 h-12 pointer-events-none"
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        aria-hidden
+      >
+        <g fill="currentColor" opacity="0.4" className="dots-a text-indigo-500">
+          <path d="m12,3C7.04,3,3,7.04,3,12s4.04,9,9,9,9-4.04,9-9S16.96,3,12,3Zm-5.25,12.25c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Zm.5-3.5c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Zm2.5,6.5c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Zm.5-3.5c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Zm3,3c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Z" />
+        </g>
+        <g fill="currentColor" opacity="1" className="dots-b text-indigo-600">
+          <path d="M7.25 9.75A1 1 0 1 0 7.25 11.75 1 1 0 1 0 7.25 9.75z" />
+          <path d="M9.75 16.25A1 1 0 1 0 9.75 18.25 1 1 0 1 0 9.75 16.25z" />
+          <path d="M10.25 12.75A1 1 0 1 0 10.25 14.75 1 1 0 1 0 10.25 12.75z" />
+          <path d="M6.75 13.25A1 1 0 1 0 6.75 15.25 1 1 0 1 0 6.75 13.25z" />
+          <path d="M13.25 15.75A1 1 0 1 0 13.25 17.75 1 1 0 1 0 13.25 15.75z" />
+        </g>
+      </svg>
       <div className="relative mx-auto w-24 h-24 rounded-2xl overflow-hidden ring-2 ring-white/80 shadow-lg bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center">
         {person.photo ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -820,7 +849,7 @@ function PersonModal({ person, onClose }: { person: BoardMember; onClose: () => 
           </button>
         </div>
         <div className="px-8 pb-8">
-          <div className="w-28 h-28 rounded-3xl overflow-hidden ring-4 ring-white shadow-xl -mt-14 bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center">
+          <div className="relative z-10 w-32 h-32 rounded-3xl overflow-hidden ring-4 ring-white shadow-xl -mt-16 bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center">
             {person.photo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={person.photo} alt={person.name_en} className="w-full h-full object-cover" />

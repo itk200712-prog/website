@@ -223,14 +223,19 @@ export function SiteHeader() {
             {me ? (
               <div className="relative">
                 <button
-                  className="inline-flex items-center gap-2 !py-2 !px-3.5 !text-[12.5px] rounded-full bg-white/10 text-white font-bold border border-white/25 hover:bg-white/20 transition"
+                  className="inline-flex items-center gap-2.5 !py-1.5 !px-2.5 !text-[12px] rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-lg shadow-black/20 backdrop-blur transition-all hover:shadow-white/10"
                   onClick={() => setMeOpen(!meOpen)}
                 >
-                  <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-900 flex items-center justify-center text-[11px] font-black">
+                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 via-orange-400 to-fuchsia-500 text-white flex items-center justify-center text-[12px] font-black ring-2 ring-white/40 shadow-md">
                     {me.name.trim().charAt(0).toUpperCase()}
                   </span>
-                  <span className="hidden sm:inline max-w-[110px] truncate">{me.name}</span>
-                  <ChevDown size={13} className="hidden sm:inline" />
+                  <span className="hidden sm:flex flex-col items-start leading-tight">
+                    <span className="max-w-[110px] truncate font-bold text-white">{me.name}</span>
+                    <span className="text-[9px] font-semibold tracking-[0.12em] uppercase text-amber-300/90">
+                      {lang === "si" ? "සාමාජික" : "Member"}
+                    </span>
+                  </span>
+                  <ChevDown size={13} className="hidden sm:inline text-white/70" />
                 </button>
                 {meOpen && (
                   <div className="absolute right-0 mt-2 w-48 card p-1.5 shadow-xl z-50">
