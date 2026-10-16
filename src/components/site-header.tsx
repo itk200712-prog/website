@@ -265,7 +265,11 @@ export function SiteHeader() {
                 </Link>
               </>
             )}
-            <button className="lg:hidden p-2 rounded-lg border border-slate-200" onClick={() => setMobile(!mobile)}>
+            <button
+              className="lg:hidden p-2.5 rounded-xl border border-white/25 bg-white/10 hover:bg-white/20 text-white transition-colors"
+              onClick={() => setMobile(!mobile)}
+              aria-label="Menu"
+            >
               {mobile ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
