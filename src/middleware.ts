@@ -27,11 +27,12 @@ export async function middleware(request: NextRequest) {
       : "si";
   const isBareKept = BARE_PREFIXES.some((p) => stripped === p || stripped.startsWith(`${p}/`));
 
-  // ---- Supabase session (admin protection) --------------------------------
+  // ---- Supabase session (admin protection) — /admin එකට පමණයි ------------
+  // ⚡ public pages වලට Supabase getUser() නැති නිසා navigation delay එක අඩුයි
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (url && anon) {
+  if (url && anon && stripped.startsWith("/admin")) {
     const supabase = createServerClient(url, anon, {
       cookies: {
         getAll() {

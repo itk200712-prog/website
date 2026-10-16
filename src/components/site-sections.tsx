@@ -103,19 +103,8 @@ export function ContactCards({ contacts, sub }: { contacts: BusinessContact[]; s
 }
 
 export function SendInquiryCard({ department }: { department: string }) {
-  const { t } = useLang();
-  return (
-    <div className="card p-6 max-w-md border-2 border-indigo-100 bg-indigo-50/40">
-      <div className="w-11 h-11 rounded-2xl bg-indigo-700 text-white flex items-center justify-center">
-        <MessageSquare size={20} />
-      </div>
-      <h3 className="mt-3 text-lg font-extrabold text-slate-900">{t.labels.sendInquiry}</h3>
-      <p className="text-slate-500 text-[13px] mt-1 leading-relaxed">{t.labels.sendInquirySub}</p>
-      <Link href={`/contact?dept=${department}`} className="btn btn-primary w-full mt-4">
-        <Send size={16} /> {t.labels.sendInquiry}
-      </Link>
-    </div>
-  );
+  // ✅ user requirement: සයිට් එකේ යට send query තැන — screenshot එකේ form design එකම
+  return <InquiryForm department={department} />;
 }
 
 export function PersonCard({ person }: { person: BoardMember }) {
@@ -239,7 +228,7 @@ export function InquiryForm({ department, compact }: { department?: string; comp
         </div>
         <div>
           <label className="field-label">{t.contactPage.phone} *</label>
-          <input name="phone" required className="field" placeholder="07XXXXXXX" />
+          <input name="phone" required className="field" placeholder="077XXXXXX" />
         </div>
         <div>
           <label className="field-label">{t.contactPage.email}</label>
