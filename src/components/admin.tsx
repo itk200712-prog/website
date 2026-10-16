@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, LogOut,
+  BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut,
   Mail, Megaphone, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X,
 } from "lucide-react";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -27,6 +27,7 @@ const NAV = [
   { href: "/admin/messages", label: "Messages & Inquiries", icon: Mail, badge: "", key: "messages" },
   { href: "/admin/businesses", label: "Businesses & Services", icon: Building2, badge: "", key: "businesses" },
   { href: "/admin/fuel-prices", label: "Fuel Prices", icon: Fuel, badge: "", key: "fuel" },
+  { href: "/admin/f28", label: "F28", icon: Lock, badge: "", key: "f28" },
   { href: "/admin/settings", label: "System Settings", icon: Settings, badge: "", key: "settings" },
 ];
 

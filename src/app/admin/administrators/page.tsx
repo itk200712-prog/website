@@ -33,6 +33,7 @@ const SECTION_LABELS: Record<string, string> = {
   messages: "Messages & Inquiries",
   businesses: "Businesses & Services",
   fuel: "Fuel Prices",
+  f28: "F28 (සමිතියේ ගිනුම්)",
   settings: "System Settings",
 };
 

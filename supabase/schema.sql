@@ -610,3 +610,28 @@ select u.id, 'Super Administrator', 'SUPERADMIN', '0372291012', 'superadmin@memb
 from auth.users u
 where u.email = 'superadmin@members.mpcs.lk'
   and not exists (select 1 from public.profiles p where p.nic = 'SUPERADMIN');
+
+-- ============================================================================
+-- F28 — සමිතියේ ගිනුම් (Profit & Loss) — selected members ට පමනක්
+-- ============================================================================
+create table if not exists public.f28_members (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique,
+  nic text default '',
+  full_name text default '',
+  status text not null default 'active',
+  created_at timestamptz default now()
+);
+create table if not exists public.f28_items (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text default '',
+  file_url text default '',
+  created_at timestamptz default now()
+);
+alter table public.f28_members enable row level security;
+alter table public.f28_items enable row level security;
+drop policy if exists "f28_members_all" on public.f28_members;
+create policy "f28_members_all" on public.f28_members for all to authenticated using (true) with check (true);
+drop policy if exists "f28_items_all" on public.f28_items;
+create policy "f28_items_all" on public.f28_items for all to authenticated using (true) with check (true);

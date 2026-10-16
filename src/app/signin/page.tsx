@@ -28,7 +28,7 @@ export default function SignInPage() {
       setError(err);
       return;
     }
-    window.location.href = role === "superadmin" || role === "admin" ? "/admin" : "/";
+    window.location.href = role === "superadmin" || role === "admin" ? "/admin" : "/dashboard";
   }
 
   return (
