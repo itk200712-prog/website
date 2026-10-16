@@ -48,10 +48,18 @@ function parseRows(grid: unknown[][]): ParsedRow[] {
   const rowsIn = grid.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
   if (!rowsIn.length) return [];
   const norm = (x: unknown) => String(x ?? "").toLowerCase().replace(/[^a-z0-9\u0d80-\u0dff]/g, "");
+  const hit = (c: string, keys: string[]) => keys.some((k) => c === k || (k.length > 1 && c.includes(k)));
+
+  // ✅ NIC තියෙන files (ලියාපදිංචි ලේඛන) වල header නෑ — මුලින්ම මේක බලන්න
+  const probe = rowsIn.slice(0, 6);
+  const col1Nic = probe.filter((r) => NIC_LIKE.test(String(r[1] ?? "").trim())).length;
+  const col2Nic = probe.filter((r) => NIC_LIKE.test(String(r[2] ?? "").trim())).length;
+  const looksData = col1Nic >= 1 || col2Nic >= 1;
+
+  // header detection: දැන් වැඩ කරන්නේ data-file නොවන විට පමණයි
   const row0 = rowsIn[0].map(norm);
-  const hit = (c: string, keys: string[]) => keys.some((k) => c === k || (c.length > 2 && (c.includes(k) || k.includes(c)) && c.length > 3));
   const matches = row0.filter((c) => Object.values(HINTS).flat().some((k) => hit(c, [k]))).length;
-  const hasHeader = matches >= 2;
+  const hasHeader = !looksData && matches >= 2;
 
   if (hasHeader) {
     const idxOf = (keys: string[]) => row0.findIndex((c) => hit(c, keys));
@@ -80,9 +88,6 @@ function parseRows(grid: unknown[][]): ParsedRow[] {
   }
 
   // ✅ header නැති ඔයාගේ excel format එක — කොලම අනුව: අංකය, NIC, නම, ලිපිනය, තැපැල්, ස්ත්‍රී/පුරුෂ
-  const probe = rowsIn.slice(0, 5);
-  const col1Nic = probe.filter((r) => NIC_LIKE.test(String(r[1] ?? "").trim())).length;
-  const col2Nic = probe.filter((r) => NIC_LIKE.test(String(r[2] ?? "").trim())).length;
   return rowsIn
     .map((r) => {
       const c = r.map((x) => String(x ?? "").trim());
