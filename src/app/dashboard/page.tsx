@@ -2,14 +2,15 @@
 
 // ============================================================================
 // User Dashboard — login වූ member කෙනෙකුගේ dashboard එක
-//   උඩ section එකේ options: Dashboard | F28 (authenticate කරපු අයට පමනක්!)
+//   Profile: Name + NIC + Password Change · F28 (authenticate කරපු අයට පමනක්!)
 // ============================================================================
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FileSpreadsheet, Home, Lock, LogOut, UserRound } from "lucide-react";
+import { Eye, EyeOff, FileSpreadsheet, Home, KeyRound, Lock, LogOut, Save, UserRound } from "lucide-react";
 import { authedClient, clearTokens } from "@/lib/supabase/client";
+import { decodePw, encodePw } from "@/lib/auth";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -26,6 +27,13 @@ export default function DashboardPage() {
   const r = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -45,10 +53,41 @@ export default function DashboardPage() {
         phone: (prof?.phone as string) || "",
         f28: f28?.status === "active",
       });
+      setCurrentPw(decodePw(prof?.password_display ?? ""));
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function changePassword() {
+    if (!me) return;
+    if (newPw.length < 8) return setMsg("⚠ අලුත් password එක අවම අකුරු 8ක් විය යුතුයි");
+    if (newPw !== confirmPw) return setMsg("⚠ අලුත් password දෙක ගැලපෙන්නෙ නෑ");
+    setBusy(true);
+    setMsg("");
+    try {
+      const sb = await authedClient();
+      const { error: authErr } = await sb.auth.updateUser({ password: newPw });
+      if (authErr) {
+        setMsg(`⚠ ${authErr.message}`);
+        setBusy(false);
+        return;
+      }
+      const { error: dbErr } = await sb.from("profiles").update({ password_display: encodePw(newPw) }).eq("id", me.id);
+      if (dbErr) {
+        setMsg(`⚠ ${dbErr.message}`);
+        setBusy(false);
+        return;
+      }
+      setCurrentPw(newPw);
+      setNewPw("");
+      setConfirmPw("");
+      setMsg("✅ Password එක වෙනස් කළා — දැන් නව password එකෙන් login විය හැක!");
+    } catch (e) {
+      setMsg(`⚠ ${(e as Error).message}`);
+    }
+    setBusy(false);
+  }
 
   if (loading) {
     return (
@@ -116,6 +155,64 @@ export default function DashboardPage() {
             <h3 className="mt-3 font-extrabold text-slate-900">Website</h3>
             <p className="mt-1 text-slate-500 text-[12.5px]">සමිතියේ නවතම පුවත්, සේවා සහ තොරතුරු බලන්න.</p>
             <Link href="/si" className="btn btn-outline mt-3 !py-1.5 !text-[12px]">වෙබ් අඩවිය →</Link>
+          </div>
+        </div>
+
+        {/* ✅ Profile details + password change */}
+        <div className="grid gap-5 lg:grid-cols-2 mt-6">
+          <div className="card p-6">
+            <div className="flex items-center gap-2.5 text-slate-900 font-extrabold text-[16px]">
+              <UserRound size={19} className="text-indigo-700" /> මගේ විස්තර (My Details)
+            </div>
+            <div className="border-t border-slate-100 my-4" />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Name</span>
+                <span className="text-[13.5px] font-extrabold text-slate-900">{me?.full_name || "—"}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">NIC</span>
+                <span className="text-[13.5px] font-extrabold text-slate-900 tabular-nums">{me?.nic || "—"}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Phone</span>
+                <span className="text-[13.5px] font-extrabold text-slate-900 tabular-nums">{me?.phone || "—"}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="card p-6">
+            <div className="flex items-center gap-2.5 text-slate-900 font-extrabold text-[16px]">
+              <KeyRound size={19} className="text-amber-600" /> Password එක වෙනස් කරන්න
+            </div>
+            <div className="border-t border-slate-100 my-4" />
+            <div className="space-y-3.5">
+              <div>
+                <label className="field-label">දැනට තියෙන Password එක</label>
+                <div className="relative">
+                  <input className="field !pr-11" type={showPw ? "text" : "password"} value={currentPw} readOnly />
+                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" onClick={() => setShowPw(!showPw)}>
+                    {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="field-label">අලුත් Password එක *</label>
+                <input className="field" type={showPw ? "text" : "password"} placeholder="අවම අකුරු 8ක්" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label">අලුත් Password එක ආයේ *</label>
+                <input className="field" type={showPw ? "text" : "password"} value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
+              </div>
+              {msg && (
+                <div className={`rounded-xl px-4 py-2.5 text-[11.5px] font-semibold ${msg.startsWith("✅") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600"}`}>
+                  {msg}
+                </div>
+              )}
+              <button className="btn btn-amber w-full disabled:opacity-60" disabled={busy} onClick={changePassword}>
+                <Save size={16} /> {busy ? "Updating…" : "Password එක වෙනස් කරන්න"}
+              </button>
+            </div>
           </div>
         </div>
       </section>

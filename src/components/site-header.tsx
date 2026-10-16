@@ -152,20 +152,32 @@ export function SiteHeader() {
                       </div>
                     </Link>
                     <div className="border-t border-slate-100 my-1" />
-                    <Link href={L("/register")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
-                      <UserRound size={18} className="text-slate-500" />
-                      <div>
-                        <div className="text-[13px] font-bold text-slate-800">{t.nav.register}</div>
-                        <div className="text-[11px] text-slate-500">Create a new cooperative account</div>
-                      </div>
-                    </Link>
-                    <Link href={L("/signin")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
-                      <UserRound size={18} className="text-indigo-700" />
-                      <div>
-                        <div className="text-[13px] font-bold text-slate-800">{t.nav.signin}</div>
-                        <div className="text-[11px] text-slate-500">Access your existing profile</div>
-                      </div>
-                    </Link>
+                    {me ? (
+                      <Link href={L("/dashboard")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                        <UserRound size={18} className="text-indigo-700" />
+                        <div>
+                          <div className="text-[13px] font-bold text-slate-800">{me.name} — Profile</div>
+                          <div className="text-[11px] text-slate-500">මගේ විස්තර, F28 සහ password එක වෙනස් කිරීම</div>
+                        </div>
+                      </Link>
+                    ) : (
+                      <>
+                        <Link href={L("/register")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                          <UserRound size={18} className="text-slate-500" />
+                          <div>
+                            <div className="text-[13px] font-bold text-slate-800">{t.nav.register}</div>
+                            <div className="text-[11px] text-slate-500">Create a new cooperative account</div>
+                          </div>
+                        </Link>
+                        <Link href={L("/signin")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                          <UserRound size={18} className="text-indigo-700" />
+                          <div>
+                            <div className="text-[13px] font-bold text-slate-800">{t.nav.signin}</div>
+                            <div className="text-[11px] text-slate-500">Access your existing profile</div>
+                          </div>
+                        </Link>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
