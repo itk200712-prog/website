@@ -186,7 +186,7 @@ export default function AdminBusinessesPage() {
                 <div className="min-w-0">
                   <div className="font-extrabold text-slate-900 text-[14.5px] leading-snug">{b.name_en}</div>
                   {b.tagline_en && <div className="text-slate-500 text-[11.5px] truncate">{b.tagline_en}</div>}
-                  <div className="text-slate-400 text-[10px] mt-0.5">key: /{b.slug}</div>
+                  <div className="text-slate-400 text-[10px] mt-0.5">/{b.slug}</div>
                 </div>
               </div>
               {b.desc_en && <p className="text-slate-500 text-[11.5px] leading-relaxed mt-2.5 line-clamp-2">{b.desc_en}</p>}

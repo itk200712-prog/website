@@ -24,7 +24,7 @@ export function FloatingLang() {
 
   return (
     <div className="fixed z-[80] bottom-4 right-4 sm:bottom-6 sm:right-6 no-print">
-      <div className="flex items-center gap-1 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/20 shadow-2xl p-1">
+      <div className="flex items-center gap-0.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/20 shadow-2xl p-1">
         <span className="pl-2 pr-0.5 text-white/70">
           <Languages size={15} />
         </span>
@@ -32,7 +32,7 @@ export function FloatingLang() {
           <button
             key={l}
             onClick={() => switchTo(l)}
-            className={`px-3 sm:px-3.5 py-1.5 rounded-full text-[11.5px] sm:text-[12px] font-bold transition ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-[11.5px] font-bold transition ${
               lang === l ? "bg-white text-slate-900 shadow" : "text-white/80 hover:text-white hover:bg-white/10"
             }`}
           >

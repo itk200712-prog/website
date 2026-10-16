@@ -32,7 +32,6 @@ export function BusinessCard({ b }: { b: BusinessUnit }) {
       <h3 className="mt-4 text-lg font-extrabold text-slate-900 leading-snug">
         {lang === "si" ? b.name_si || b.name_en : b.name_en}
       </h3>
-      <div className="text-[12px] text-slate-400 mt-0.5">key: /{b.slug}</div>
       {(lang === "si" ? b.tagline_si : b.tagline_en) && (
         <div className="text-amber-700 font-semibold text-[13px] mt-2">
           {lang === "si" ? b.tagline_si : b.tagline_en}

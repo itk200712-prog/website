@@ -28,9 +28,9 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
           <p className="mt-1.5 text-slate-500 text-[13px]">Admin → Gallery එකෙන් ඡායාරූප upload කළ පසු මෙහි පෙන්වයි.</p>
         </div>
       ) : (
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="columns-1 sm:columns-2 lg:columns-3 gap-6">
         {items.map((g) => (
-          <figure key={g.id} className="card card-hover overflow-hidden">
+          <figure key={g.id} className="card card-hover overflow-hidden mb-6 break-inside-avoid inline-block w-full">
             <button
               className="w-full block relative bg-slate-800"
               style={{ aspectRatio: ASPECT[g.aspect] ?? "4 / 3" }}
