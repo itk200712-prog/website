@@ -662,3 +662,22 @@ insert into public.backup_secrets (key, value) values
   ('backup_download_password','MPCS@Backup#2026'),
   ('backup_import_password','MPCS@Restore#2026')
 on conflict (key) do nothing;
+
+-- ===========================================================================
+-- 14. Fuel Station live stock (F28 members ලට පමණි) + call number setting
+-- ===========================================================================
+create table if not exists public.fuel_stock (
+  id uuid primary key default gen_random_uuid(),
+  fuel_type text not null default 'petrol92',
+  amount numeric not null default 0,
+  note text default '',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table public.fuel_stock enable row level security;
+drop policy if exists fuel_stock_select on public.fuel_stock;
+create policy fuel_stock_select on public.fuel_stock for select
+  using (public.is_admin() or exists (select 1 from public.f28_members where user_id = auth.uid() and status = 'active'));
+drop policy if exists fuel_stock_write on public.fuel_stock;
+create policy fuel_stock_write on public.fuel_stock for all using (public.is_admin()) with check (public.is_admin());
+insert into public.system_settings (key, value) values ('fuel_contact_phone', '') on conflict (key) do nothing;

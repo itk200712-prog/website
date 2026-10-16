@@ -8,10 +8,11 @@ import Link from "next/link";
 import {
   ChevronRight, Clock, Fuel, Home, MapPin, Phone, Search, ShieldCheck, Star, TrendingUp, UserRound, Wallet,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/i18n";
 import { ContactCards, SectionHead, SendInquiryCard, ServiceCard } from "@/components/site-sections";
 import type { BusinessUnit, FuelPrice } from "@/lib/types";
+import { authedClient } from "@/lib/supabase/client";
 import { RURAL_BANK_BRANCHES } from "@/lib/seed";
 
 /* ---------------------------------------------------------------- hero ---- */
@@ -297,6 +298,177 @@ export function BusinessContacts({ b }: { b: BusinessUnit }) {
             </p>
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* --------------------------------------------- fuel live stock (F28 only) -- */
+type StockRow = { id: string; fuel_type: string; amount: number | string; note?: string; created_at?: string; updated_at?: string };
+
+const STOCK_META: Record<string, { en: string; si: string; color: string }> = {
+  petrol92: { en: "Petrol 92", si: "ඔක්ටේන් 92", color: "#ef4444" },
+  super_diesel: { en: "Super Diesel", si: "සුපර් ඩීසල්", color: "#f59e0b" },
+  kerosene: { en: "Kerosene", si: "කිරෝසින් / භූමිතෙල්", color: "#3b82f6" },
+};
+
+function useCountUp(target: number, run: boolean) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!run) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - t0) / 900);
+      setN(target * (1 - Math.pow(1 - k, 3)));
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, run]);
+  return n;
+}
+
+function StockCard({ type, amount, price, idx }: { type: string; amount: number; price: number; idx: number }) {
+  const meta = STOCK_META[type] ?? { en: type, si: type, color: "#64748b" };
+  const liters = useCountUp(amount, true);
+  const value = useCountUp(amount * price, true);
+  return (
+    <div
+      className="rounded-3xl border-2 bg-white p-6 relative overflow-hidden fuel-fade-up"
+      style={{ borderColor: meta.color + "55", animationDelay: `${idx * 0.15}s` }}
+    >
+      <div className="absolute -right-8 -top-8 w-28 h-28 rounded-full opacity-20" style={{ background: meta.color }} />
+      <div className="flex items-center justify-between relative">
+        <div>
+          <div className="text-lg font-extrabold text-slate-900">{meta.en}</div>
+          <div className="text-slate-500 text-[12.5px]">{meta.si}</div>
+        </div>
+        <span className="rounded-full px-3 py-1 text-[10.5px] font-bold text-white" style={{ background: meta.color }}>
+          LIVE
+        </span>
+      </div>
+      <div className="mt-5">
+        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Live Stock</div>
+        <div className="text-3xl font-black text-slate-900 tabular-nums">
+          {liters.toLocaleString()} <span className="text-sm font-bold text-slate-500">L</span>
+        </div>
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-slate-100 overflow-hidden">
+        <div className="h-full rounded-full fuel-shimmer" style={{ width: `${Math.min(100, (amount / 5000) * 100)}%`, background: meta.color }} />
+      </div>
+      <div className="mt-4">
+        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Stock Value</div>
+        <div className="text-2xl font-black tabular-nums" style={{ color: meta.color }}>
+          Rs. {value.toLocaleString()}
+        </div>
+        <div className="text-[10.5px] text-slate-400 mt-0.5">Rs. {price.toFixed(2)} / L</div>
+      </div>
+    </div>
+  );
+}
+
+export function FuelLiveStockSection() {
+  const [allowed, setAllowed] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [rows, setRows] = useState<StockRow[]>([]);
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [phone, setPhone] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const sb = await authedClient();
+        const { data: u } = await sb.auth.getUser();
+        if (!u?.user) { setReady(true); return; }
+        const { data: m } = await sb.from("f28_members").select("status").eq("user_id", u.user.id).maybeSingle();
+        if (!m || m.status !== "active") { setReady(true); return; }
+        setAllowed(true);
+        const [st, pr, ph] = await Promise.all([
+          sb.from("fuel_stock").select("*").order("created_at", { ascending: false }).limit(200),
+          sb.from("fuel_prices").select("*"),
+          sb.from("system_settings").select("value").eq("key", "fuel_contact_phone").maybeSingle(),
+        ]);
+        setRows((st.data as StockRow[]) ?? []);
+        setPrices(Object.fromEntries(((pr.data as { type: string; price: number }[]) ?? []).map((r) => [r.type, Number(r.price)])));
+        setPhone((ph.data as { value: string } | null)?.value ?? "");
+      } catch { /* not allowed */ }
+      setReady(true);
+    })();
+  }, []);
+
+  if (ready && !allowed) return null; // non-F28 අයට section එක පේන්නෙම නෑ
+
+  // දැනට තියෙන තොගය = එක් එක් type එකේ අන්තිම entry එකේ ගණන
+  const latest: Record<string, number> = {};
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (!seen.has(r.fuel_type)) {
+      seen.add(r.fuel_type);
+      latest[r.fuel_type] = Number(r.amount);
+    }
+  }
+  const lastUpdate = rows.reduce((acc, r) => {
+    const t = new Date(r.updated_at || r.created_at || 0).getTime();
+    return t > acc ? t : acc;
+  }, 0);
+  const stale = !lastUpdate || Date.now() - lastUpdate > 24 * 60 * 60 * 1000;
+  const totalValue = Object.entries(latest).reduce((a, [type, amt]) => a + amt * (prices[type] ?? 0), 0);
+
+  return (
+    <section className="bg-slate-50 border-y border-slate-200 relative overflow-hidden">
+      <style>{`
+        @keyframes fuelFadeUp { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+        @keyframes fuelShimmer { 0% { filter: brightness(1); } 50% { filter: brightness(1.25); } 100% { filter: brightness(1); } }
+        @keyframes fuelPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.35); } 50% { box-shadow: 0 0 0 10px rgba(239,68,68,0); } }
+        .fuel-fade-up { animation: fuelFadeUp .7s ease both; }
+        .fuel-shimmer { animation: fuelShimmer 2.2s ease-in-out infinite; }
+        .fuel-pulse { animation: fuelPulse 1.8s ease-out infinite; }
+      `}</style>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+          <div>
+            <div className="flex items-center gap-2 text-[11px] font-bold tracking-[0.22em] uppercase text-indigo-600">
+              <ShieldCheck size={15} /> F28 Members Only
+            </div>
+            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900">Live Stock &amp; Value</h2>
+            <p className="text-slate-500 text-sm mt-1.5">සජීවී තොග තත්ත්වය සහ වටිනාකම — ඉන්ධන හලේ නවතම තොග දත්ත</p>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total Stock Value</div>
+            <div className="text-3xl font-black text-slate-900 tabular-nums">Rs. {totalValue.toLocaleString()}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5">
+              {lastUpdate ? `අන්තිමට යාවත්කාලීන කළේ: ${new Date(lastUpdate).toLocaleString()}` : "තාම යාවත්කාලීන කර නෑ"}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-3">
+          {(["petrol92", "super_diesel", "kerosene"] as const).map((type, i) => (
+            <StockCard key={type} type={type} amount={latest[type] ?? 0} price={prices[type] ?? 0} idx={i} />
+          ))}
+        </div>
+
+        {stale && (
+          <div className="mt-8 rounded-3xl border-2 border-rose-300 bg-rose-50 p-6 flex flex-wrap items-center justify-between gap-4 fuel-pulse">
+            <div>
+              <div className="flex items-center gap-2 text-rose-700 font-extrabold text-[15px]">
+                ⚠ අද දිනට යාවත්කාලීන කර නැත
+              </div>
+              <div className="text-rose-600/90 text-[12.5px] mt-1">
+                Live stock එක පැය 24කින් වැඩි කාලයක් යාවත්කාලීන කර නැත
+                {lastUpdate ? ` — අන්තිමට යාවත්කාලීන කළේ: ${new Date(lastUpdate).toLocaleString()}` : ""}.
+                වැඩිදුර විස්තර සඳහා අමතන්න.
+              </div>
+            </div>
+            <a
+              href={`tel:${(phone || "").replace(/[^\d+]/g, "")}`}
+              className="inline-flex items-center gap-2 rounded-full bg-rose-600 text-white px-6 py-3 text-[13px] font-extrabold hover:bg-rose-700 transition"
+            >
+              📞 අමතන්න
+            </a>
+          </div>
+        )}
       </div>
     </section>
   );

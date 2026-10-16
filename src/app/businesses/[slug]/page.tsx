@@ -10,6 +10,7 @@ import {
   BusinessHero,
   BusinessServices,
   FuelPriceSection,
+  FuelLiveStockSection,
   RegionalBranches,
   RuralBankNetwork,
 } from "@/components/business-detail";
@@ -33,6 +34,7 @@ export default async function BusinessDetailPage({ params }: { params: Promise<{
 
       {/* Fuel Station — daily prices */}
       {b.special === "fuel-station" && <FuelPriceSection prices={prices} />}
+      {b.special === "fuel-station" && <FuelLiveStockSection />}
 
       <BusinessServices b={b} />
 
