@@ -20,6 +20,7 @@ export function SiteHeader() {
   const [f28, setF28] = useState(false);
   const [me, setMe] = useState<{ name: string } | null>(null);
   const [meOpen, setMeOpen] = useState(false);
+  const [bizOpen, setBizOpen] = useState(false);
 
   // F28: authenticate කරපු members ලට පමණයි header එකේ පේන්නේ
   useEffect(() => {
@@ -188,8 +189,8 @@ export function SiteHeader() {
                   <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-900 flex items-center justify-center text-[11px] font-black">
                     {me.name.trim().charAt(0).toUpperCase()}
                   </span>
-                  <span className="max-w-[110px] truncate">{me.name}</span>
-                  <ChevDown size={13} />
+                  <span className="hidden sm:inline max-w-[110px] truncate">{me.name}</span>
+                  <ChevDown size={13} className="hidden sm:inline" />
                 </button>
                 {meOpen && (
                   <div className="absolute right-0 mt-2 w-48 card p-1.5 shadow-xl z-50">
@@ -214,7 +215,7 @@ export function SiteHeader() {
                 <Link href={L("/register")} className="hidden sm:inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white/10 text-white font-bold border border-white/25 hover:bg-white/20 transition">
                   <UserRound size={14} /> {t.nav.register}
                 </Link>
-                <Link href={L("/signin")} className="inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white text-slate-900 font-bold hover:bg-slate-100 transition">
+                <Link href={L("/signin")} className="hidden sm:inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white text-slate-900 font-bold hover:bg-slate-100 transition">
                   <UserRound size={14} /> {t.nav.signin}
                 </Link>
               </>
@@ -226,40 +227,96 @@ export function SiteHeader() {
         </div>
       </div>
 
-      {/* mobile nav */}
+      {/* mobile nav — image background + සියලු මෙනු options */}
       {mobile && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-3 flex flex-col gap-1 text-sm font-semibold">
-          {[
-            ["/", t.nav.home],
-            ["/businesses", t.nav.businesses],
-            ["/membership/members", t.nav.memberDetails],
-            ["/membership/voters", t.nav.voters],
-            ["/membership/apply", t.nav.apply],
-            ["/board", t.nav.board],
-            ["/gallery", t.nav.gallery],
-            ["/news", t.nav.news],
-            ...(f28 ? ([["/dashboard/f28", "F28"]] as [string, string][]) : []),
-            ["/contact", t.nav.contact],
-            ...(me ? ([["/dashboard", "Profile"], ["/logout", "Log Out"]] as [string, string][]) : ([["/signin", t.nav.signin], ["/register", t.nav.register]] as [string, string][])),
-          ].map(([href, label]) => (
-            <Link
-              key={href}
-              href={href === "/logout" ? "#" : href}
-              className="px-3 py-2.5 rounded-lg hover:bg-slate-50"
-              onClick={async (e) => {
-                if (href === "/logout") {
-                  e.preventDefault();
-                  const sb = await authedClient();
-                  await sb.auth.signOut();
-                  window.location.href = L("/");
-                  return;
-                }
-                setMobile(false);
-              }}
-            >
-              {label}
+        <div
+          className="lg:hidden relative border-t border-white/10"
+          style={{
+            backgroundImage: `linear-gradient(rgba(11,16,41,0.93), rgba(11,16,41,0.96)), url(/images/hero/hero-1.jpg)`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        >
+          <div className="px-4 py-4 flex flex-col gap-1 text-sm font-semibold text-white max-h-[75vh] overflow-y-auto">
+            <Link href={L("/")} className="px-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+              <Home size={15} /> {t.nav.home}
             </Link>
-          ))}
+
+            {/* businesses — all */}
+            <button className="px-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center justify-between" onClick={() => setBizOpen(!bizOpen)}>
+              <span className="flex items-center gap-2.5"><Building2 size={15} /> {t.nav.businesses}</span>
+              <ChevronDown size={14} className={bizOpen ? "rotate-180 transition-transform" : "transition-transform"} />
+            </button>
+            {bizOpen && (
+              <div className="pl-4 flex flex-col gap-0.5">
+                {publicBusinesses.map((b) => (
+                  <Link key={b.slug} href={L(`/businesses/${b.slug}`)} className="px-3 py-2 rounded-lg hover:bg-white/10 text-[12.5px] flex items-center gap-2" onClick={() => setMobile(false)}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80" />
+                    {lang === "si" ? b.name_si : b.name_en}
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {/* membership — all */}
+            <div className="px-3 pt-2.5 pb-1 text-[9.5px] font-bold uppercase tracking-[0.18em] text-white/45">{t.nav.membership}</div>
+            <Link href={L("/membership/members")} className="pl-6 pr-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+              <UsersRound size={15} /> {t.nav.memberDetails}
+            </Link>
+            <Link href={L("/membership/voters")} className="pl-6 pr-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+              <UsersRound size={15} /> {t.nav.voters}
+            </Link>
+            <Link href={L("/membership/apply")} className="pl-6 pr-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+              <UserRound size={15} /> {t.nav.apply}
+            </Link>
+
+            {/* other */}
+            <div className="px-3 pt-2.5 pb-1 text-[9.5px] font-bold uppercase tracking-[0.18em] text-white/45">More</div>
+            <Link href={L("/gallery")} className="px-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+              <Images size={15} /> {t.nav.gallery}
+            </Link>
+            <Link href={L("/news")} className="px-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+              <Newspaper size={15} /> {t.nav.news}
+            </Link>
+            <Link href={L("/contact")} className="px-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+              <Phone size={15} /> {t.nav.contact}
+            </Link>
+            {f28 && (
+              <Link href={L("/dashboard/f28")} className="px-3 py-2.5 rounded-lg bg-amber-400/20 text-amber-300 hover:bg-amber-400/30 flex items-center gap-2.5 font-bold" onClick={() => setMobile(false)}>
+                <Lock size={15} /> F28
+              </Link>
+            )}
+
+            {/* account */}
+            <div className="border-t border-white/10 mt-2.5 pt-2.5">
+              {me ? (
+                <>
+                  <Link href={L("/dashboard")} className="px-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+                    <UserRound size={15} /> {me.name} — Profile
+                  </Link>
+                  <button
+                    className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-rose-500/20 text-rose-300 flex items-center gap-2.5"
+                    onClick={async () => {
+                      const sb = await authedClient();
+                      await sb.auth.signOut();
+                      window.location.href = L("/");
+                    }}
+                  >
+                    <LogOut size={15} /> Log Out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link href={L("/signin")} className="px-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+                    <UserRound size={15} /> {t.nav.signin}
+                  </Link>
+                  <Link href={L("/register")} className="px-3 py-2.5 rounded-lg hover:bg-white/10 flex items-center gap-2.5" onClick={() => setMobile(false)}>
+                    <UserRound size={15} /> {t.nav.register}
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </header>
