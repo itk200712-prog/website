@@ -34,22 +34,66 @@ type ParsedRow = {
   gender: string;
 };
 
-function normalizeRow(r: Record<string, unknown>): ParsedRow {
-  const grab = (keys: string[]) => {
-    for (const k of Object.keys(r)) {
-      const kl = k.toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (keys.includes(kl)) return String(r[k] ?? "").trim();
-    }
-    return "";
-  };
-  return {
-    member_no: grab(["membernumber", "memberno", "memberno", "no", "number", "serial", "serialno"]),
-    nic: grab(["nic", "nicno", "nicnumber", "nationalidentitycard", "identitycard"]),
-    full_name: grab(["fullname", "name", "membername"]),
-    address: grab(["address", "homeaddress"]),
-    postal_address: grab(["postaladdress", "postal", "mailingaddress"]),
-    gender: grab(["gender", "sex"]),
-  };
+const HINTS: Record<keyof ParsedRow, string[]> = {
+  member_no: ["membernumber", "memberno", "no", "number", "serial", "serialno", "සාමාජිකඅංකය", "අංකය", "අංක"],
+  nic: ["nic", "nicno", "nicnumber", "nationalidentitycard", "identitycard", "හැඳුනුම්පත", "ජාතිකහැඳුනුම්පත", "ජාහැ"],
+  full_name: ["fullname", "name", "membername", "සම්පූර්ණනම", "නම"],
+  address: ["address", "homeaddress", "ලිපිනය", "ගම", "නිවාසලිපිනය"],
+  postal_address: ["postaladdress", "postal", "mailingaddress", "තැපැල්ලිපිනය"],
+  gender: ["gender", "sex", "ස්ත්‍රීපුරුෂ", "ස්ත්‍රිපුරුෂ", "භේදය"],
+};
+const NIC_LIKE = /^(\d{9}[vVxX]|\d{12}|\d{10}|0+)$/;
+
+function parseRows(grid: unknown[][]): ParsedRow[] {
+  const rowsIn = grid.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
+  if (!rowsIn.length) return [];
+  const norm = (x: unknown) => String(x ?? "").toLowerCase().replace(/[^a-z0-9\u0d80-\u0dff]/g, "");
+  const row0 = rowsIn[0].map(norm);
+  const hit = (c: string, keys: string[]) => keys.some((k) => c === k || (c.length > 2 && (c.includes(k) || k.includes(c)) && c.length > 3));
+  const matches = row0.filter((c) => Object.values(HINTS).flat().some((k) => hit(c, [k]))).length;
+  const hasHeader = matches >= 2;
+
+  if (hasHeader) {
+    const idxOf = (keys: string[]) => row0.findIndex((c) => hit(c, keys));
+    const map = {
+      member_no: idxOf(HINTS.member_no),
+      nic: idxOf(HINTS.nic),
+      full_name: idxOf(HINTS.full_name),
+      address: idxOf(HINTS.address),
+      postal_address: idxOf(HINTS.postal_address),
+      gender: idxOf(HINTS.gender),
+    };
+    return rowsIn
+      .slice(1)
+      .map((r) => {
+        const g = (i: number) => (i >= 0 ? String(r[i] ?? "").trim() : "");
+        return {
+          member_no: g(map.member_no),
+          nic: g(map.nic),
+          full_name: g(map.full_name),
+          address: g(map.address),
+          postal_address: g(map.postal_address),
+          gender: g(map.gender),
+        };
+      })
+      .filter((r) => r.full_name || r.nic || r.member_no);
+  }
+
+  // ✅ header නැති ඔයාගේ excel format එක — කොලම අනුව: අංකය, NIC, නම, ලිපිනය, තැපැල්, ස්ත්‍රී/පුරුෂ
+  const probe = rowsIn.slice(0, 5);
+  const col1Nic = probe.filter((r) => NIC_LIKE.test(String(r[1] ?? "").trim())).length;
+  const col2Nic = probe.filter((r) => NIC_LIKE.test(String(r[2] ?? "").trim())).length;
+  return rowsIn
+    .map((r) => {
+      const c = r.map((x) => String(x ?? "").trim());
+      if (col2Nic > col1Nic) {
+        // [අංකය, නම, NIC, ලිපිනය, තැපැල්, ස්ත්‍රී/පුරුෂ]
+        return { member_no: c[0] ?? "", full_name: c[1] ?? "", nic: c[2] ?? "", address: c[3] ?? "", postal_address: c[4] ?? "", gender: c[5] ?? "" };
+      }
+      // [අංකය, NIC, නම, ලිපිනය, තැපැල්, ස්ත්‍රී/පුරුෂ] ← ඔයාගේ format එක
+      return { member_no: c[0] ?? "", nic: c[1] ?? "", full_name: c[2] ?? "", address: c[3] ?? "", postal_address: c[4] ?? "", gender: c[5] ?? "" };
+    })
+    .filter((r) => r.full_name || r.nic || r.member_no);
 }
 
 async function parseSpreadsheet(file: File): Promise<ParsedRow[]> {
@@ -57,8 +101,8 @@ async function parseSpreadsheet(file: File): Promise<ParsedRow[]> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
-  return json.map(normalizeRow).filter((r) => r.full_name || r.nic || r.member_no);
+  const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", raw: false });
+  return parseRows(grid as unknown[][]);
 }
 
 /* ------------------------------------------------------------------ PDF -- */
@@ -168,7 +212,7 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
     const sb = await authedClient();
     const { data } = await sb.from("data_files").select("file_name, rows").eq("kind", kind).order("rows", { ascending: false });
     const real = ((data as { file_name: string; rows: number }[]) ?? []).map((f) => ({ file_name: f.file_name, rows: Number(f.rows) }));
-    setFiles(real.length ? real : kind === "member" ? [...MEMBER_FILES] : [...VOTER_FILES]);
+    setFiles(real); // demo files නෑ — real uploads පමණයි
     if (!selected && real.length) setSelected(stripExt(real[0].file_name));
   }
 
@@ -250,10 +294,9 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
       const { data } = await sb.from(table).select("*").eq("file_name", label).limit(20000);
       rows = (data as ParsedRow[]) ?? [];
       if (!rows.length) {
-        // fallback: generated demo rows (pre-upload state)
-        const { getMemberRows, getVoterRows } = await import("@/lib/directory-rows");
-        const gen = (kind === "member" ? getMemberRows() : getVoterRows()) as unknown as (ParsedRow & { file_name: string })[];
-        rows = gen.filter((r) => stripExt(r.file_name || "") === label).map((r) => ({ ...r }));
+        show("⚠ මේ file එකට data නෑ — මුලින් Excel upload කරන්න");
+        setAnim(null);
+        return;
       }
       await buildPdf(label, kind, rows, (pct) => setAnim({ pct, done: false, label }));
       setAnim({ pct: 100, done: true, label });
@@ -378,9 +421,8 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
               const { data } = await sb.from(table).select("*").eq("file_name", label).limit(20000);
               let rows = (data as ParsedRow[]) ?? [];
               if (!rows.length) {
-                const { getMemberRows, getVoterRows } = await import("@/lib/directory-rows");
-                rows = ((kind === "member" ? getMemberRows() : getVoterRows()) as unknown as (ParsedRow & { file_name: string })[])
-                  .filter((r) => stripExt(r.file_name || "") === label);
+                show("⚠ මේ file එකට data නෑ — මුලින් Excel upload කරන්න");
+                return;
               }
               downloadCsv(label, rows);
             }}

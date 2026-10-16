@@ -3,7 +3,6 @@
 // ============================================================================
 
 import { createAnonClient } from "@/lib/supabase/anon";
-import { getMemberRows as genMemberRows, getVoterRows as genVoterRows } from "@/lib/directory-rows";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
   BOARD,
@@ -155,11 +154,12 @@ export async function getMemberRows(): Promise<{ rows: MemberRow[]; files: DataF
     const sb = createAnonClient();
     const rows = await sb.from("member_rows").select("*").limit(500);
     const files = await sb.from("data_files").select("*").eq("kind", "member");
+    // ✅ demo rows නෑ — real uploaded data පමණයි
     return {
-      rows: (rows.data as unknown as MemberRow[])?.length ? (rows.data as unknown as MemberRow[]) : genMemberRows(),
-      files: (files.data as unknown as DataFile[])?.length ? (files.data as unknown as DataFile[]) : MEMBER_FILES,
+      rows: (rows.data as unknown as MemberRow[]) ?? [],
+      files: (files.data as unknown as DataFile[]) ?? [],
     };
-  }, { rows: genMemberRows(), files: MEMBER_FILES });
+  }, { rows: [], files: [] });
 }
 
 export async function getVoterRows(): Promise<{ rows: VoterRow[]; files: DataFile[] }> {
@@ -167,11 +167,12 @@ export async function getVoterRows(): Promise<{ rows: VoterRow[]; files: DataFil
     const sb = createAnonClient();
     const rows = await sb.from("voter_rows").select("*").limit(500);
     const files = await sb.from("data_files").select("*").eq("kind", "voter");
+    // ✅ demo rows නෑ — real uploaded data පමණයි
     return {
-      rows: (rows.data as unknown as VoterRow[])?.length ? (rows.data as unknown as VoterRow[]) : genVoterRows(),
-      files: (files.data as unknown as DataFile[])?.length ? (files.data as unknown as DataFile[]) : VOTER_FILES,
+      rows: (rows.data as unknown as VoterRow[]) ?? [],
+      files: (files.data as unknown as DataFile[]) ?? [],
     };
-  }, { rows: genVoterRows(), files: VOTER_FILES });
+  }, { rows: [], files: [] });
 }
 
 export { REGISTERED_USERS };
