@@ -63,12 +63,20 @@ export async function loginWithNic(
   const email = nicToEmail(nic);
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) {
+    if (/email not confirmed/i.test(error.message || "")) {
+      return { error: "Email confirm වී නැත — Supabase හි \"Confirm email\" OFF කරලා admin ට කියන්න" };
+    }
     // Superadmin seed uses superadmin@mpcs.lk — try fallback email forms
     const alt = await sb.auth.signInWithPassword({
       email: nic.trim().toLowerCase() === "superadmin" ? "superadmin@mpcs.lk" : email,
       password,
     });
-    if (alt.error) return { error: "Invalid email or password" };
+    if (alt.error) {
+      if (/email not confirmed/i.test(alt.message || "")) {
+        return { error: "Email confirm වී නැත — Supabase හි \"Confirm email\" OFF කරලා admin ට කියන්න" };
+      }
+      return { error: "Invalid NIC or password" };
+    }
     storeTokens(alt.data.session); // ✅ localStorage එකට token
     return { error: null, role: "superadmin" };
   }

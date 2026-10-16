@@ -32,8 +32,13 @@ export function BusinessHero({ b }: { b: BusinessUnit }) {
         </div>
 
         <div className="mt-5 flex flex-col sm:flex-row sm:items-center gap-6">
-          <div className="w-24 h-24 rounded-2xl bg-white/95 text-slate-800 flex items-center justify-center text-2xl font-black shrink-0 shadow-xl">
-            {b.name_en.slice(0, 2).toUpperCase()}
+          <div className="w-24 h-24 rounded-2xl bg-white/95 text-slate-800 flex items-center justify-center text-2xl font-black shrink-0 shadow-xl overflow-hidden">
+            {b.logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={b.logo} alt="" className="w-full h-full object-cover" />
+            ) : (
+              b.name_en.slice(0, 2).toUpperCase()
+            )}
           </div>
           <div>
             <h1 className="text-3xl sm:text-5xl font-black leading-tight">{lang === "si" ? b.name_si || b.name_en : b.name_en}</h1>

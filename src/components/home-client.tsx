@@ -14,8 +14,13 @@ export function BusinessCard({ b }: { b: BusinessUnit }) {
   return (
     <Link href={`/businesses/${b.slug}`} className="card card-hover p-6 flex flex-col">
       <div className="flex items-start justify-between gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-[11px] font-black text-slate-500">
-          {b.name_en.slice(0, 2).toUpperCase()}
+        <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-[11px] font-black text-slate-500 overflow-hidden">
+          {b.logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={b.logo} alt="" className="w-full h-full object-cover" />
+          ) : (
+            b.name_en.slice(0, 2).toUpperCase()
+          )}
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <span className="badge-blue rounded-full px-2.5 py-0.5 text-[10px] font-bold">

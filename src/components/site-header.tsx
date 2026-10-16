@@ -58,8 +58,13 @@ export function SiteHeader() {
                         href={L(`/businesses/${b.slug}`)}
                         className="flex items-start gap-2.5 p-2.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200"
                       >
-                        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500 shrink-0">
-                          {b.name_en.slice(0, 2).toUpperCase()}
+                        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500 shrink-0 overflow-hidden">
+                          {b.logo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={b.logo} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            b.name_en.slice(0, 2).toUpperCase()
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">

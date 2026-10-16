@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbUpdate, useNotice, SECTION_KEYS } from "@/components/admin";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { nicToEmail } from "@/lib/auth";
 import { encodePw } from "@/lib/auth";
 import { REGISTERED_USERS } from "@/lib/seed";
 
@@ -90,8 +91,9 @@ export default function AdminAdministratorsPage() {
       return;
     }
     // අලුත් admin කෙනෙක් — login එක්ක create කරන්න
-    const email = String(fd.get("email"));
     const password = String(fd.get("password"));
+    // ✅ LOGIN FIX: account එක හැදිය යුත්තේ nic@members.mpcs.lk එකෙන් (loginWithNic එකට ගැලපෙන්න)
+    const email = nicToEmail(String(fd.get("nic")));
     const sb = createClient();
     const { data, error } = await sb.auth.signUp({ email, password });
     if (error && !/already registered/i.test(error.message || "")) {
@@ -110,7 +112,7 @@ export default function AdminAdministratorsPage() {
         full_name: String(fd.get("full_name")),
         nic: String(fd.get("nic")),
         phone: String(fd.get("phone")),
-        auth_email: email,
+        auth_email: email, // nic@members.mpcs.lk (login එක මේකෙන් වැඩ කරනවා)
         role: String(fd.get("role")),
         sections: csv,
         password_display: encodePw(password),
