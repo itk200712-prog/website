@@ -131,9 +131,20 @@ export default function AdminAdministratorsPage() {
   async function remove(r: AdminRow) {
     if (r.role === "superadmin") return;
     setRows((xs) => xs.filter((x) => x.id !== r.id));
+    const sb = await authedClient();
+    // ✅ පළවෙන් RPC — profile + login account දෙකම මකනවා (SQL function එක තියෙනවා නම්)
+    const { error: rpcErr } = await sb.rpc("delete_admin", { uid: r.id });
+    if (!rpcErr) {
+      await load();
+      show("✅ Removed — login account එකත් ඉවත් කළා");
+      return;
+    }
+    // fallback: profiles row එක විතරක් (SQL function එක නැත්නම්)
     const err = await dbDelete("profiles", { id: r.id });
     await load();
-    show(err ? `⚠ ${err}` : "✅ Removed");
+    show(err
+      ? `⚠ ${err} — Supabase SQL Editor එකේ delete_admin function එක run කරලා නැත්නම් ඒක දාන්න`
+      : "✅ Removed (profile එක විතරයි — login account එක ඉවත් කරන්න SQL function එක දාන්න)");
   }
 
   return (
