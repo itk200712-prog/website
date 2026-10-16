@@ -17,6 +17,7 @@ const ASPECT: Record<GalleryItem["aspect"], string> = {
 
 export function GalleryGrid({ items }: { items: GalleryItem[] }) {
   const [open, setOpen] = useState<GalleryItem | null>(null);
+  const idx = open ? items.findIndex((x) => x.id === open.id) : -1;
   const [liked, setLiked] = useState<Record<string, boolean>>({});
 
   return (
@@ -87,11 +88,29 @@ export function GalleryGrid({ items }: { items: GalleryItem[] }) {
                 </div>
               )}
               <button
-                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center"
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center transition"
                 onClick={() => setOpen(null)}
               >
                 <X size={18} />
               </button>
+              {items.length > 1 && (
+                <>
+                  <button
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
+                    onClick={(e) => { e.stopPropagation(); setOpen(items[(idx - 1 + items.length) % items.length]); }}
+                    aria-label="Previous"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    className="absolute right-16 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
+                    onClick={(e) => { e.stopPropagation(); setOpen(items[(idx + 1) % items.length]); }}
+                    aria-label="Next"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
             </div>
             <div className="p-6">
               <h3 className="text-xl font-extrabold text-slate-900">{open.title}</h3>

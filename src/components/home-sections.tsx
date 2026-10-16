@@ -160,9 +160,12 @@ export function HomeSections({
 
   const pinned = news.filter((n) => n.pinned);
   const rest = news.filter((n) => !n.pinned).slice(0, 3);
-  const newsList = [...pinned, ...rest].slice(0, 3);
+  const newsList = [...pinned, ...rest].slice(0, 4);
 
   const [person, setPerson] = useState<BoardMember | null>(null);
+  const [gal, setGal] = useState<GalleryItem | null>(null);
+  const galList = gallery;
+  const galIdx = gal ? galList.findIndex((x) => x.id === gal.id) : -1;
   const live = useLiveStats({
     members: settings.members_total,
     voters: settings.voters_total,
@@ -178,10 +181,10 @@ export function HomeSections({
       <section className="hero-dark relative overflow-hidden text-white">
         <HeroSlideshow images={settings.hero_images} />
         <div className="hero-overlay" />
-        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-20 min-h-[80vh] flex flex-col justify-center">
-          <h1 className="text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl">{t.brandFull}</h1>
+        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-20 min-h-[80vh] flex flex-col justify-center items-center text-center">
+          <h1 className="text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl text-center">{t.brandFull}</h1>
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link href={L("/membership/apply")} className="btn btn-amber">
               {c.cta1} <ArrowRight size={17} />
             </Link>
@@ -193,7 +196,7 @@ export function HomeSections({
             </Link>
           </div>
 
-          <div className="mt-10 flex flex-wrap gap-3 text-[12px]">
+          <div className="mt-10 flex flex-wrap justify-center gap-3 text-[12px]">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2">
               <ShieldCheck size={14} className="text-emerald-300" /> {c.reg}: {SITE.reg_no}
             </span>
@@ -252,23 +255,76 @@ export function HomeSections({
 
       {person && <PersonModal person={person} onClose={() => setPerson(null)} />}
 
+      {/* gallery lightbox — photo එක හෝ photo set එක විශාලව + tagline එක්ක */}
+      {gal && (
+        <div
+          className="fixed inset-0 z-[120] bg-slate-900/85 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setGal(null)}
+        >
+          <div
+            className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl bg-white/90 backdrop-blur-xl border border-white/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative bg-slate-900">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={gal.image} alt={gal.title} className="w-full max-h-[62vh] object-contain" />
+              <button
+                onClick={() => setGal(null)}
+                className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center transition"
+              >
+                ✕
+              </button>
+              {galList.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setGal(galList[(galIdx - 1 + galList.length) % galList.length])}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    onClick={() => setGal(galList[(galIdx + 1) % galList.length])}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+            </div>
+            <div className="p-6">
+              <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.18em] uppercase text-indigo-600">
+                <Images size={13} /> {lang === "si" ? "ඡායාරූප ගැලරිය" : "Photo Gallery"} · {galIdx + 1}/{galList.length}
+              </div>
+              <h3 className="mt-1.5 text-xl font-extrabold text-slate-900">{gal.title}</h3>
+              {gal.description && <p className="mt-2 text-slate-600 text-[13.5px] leading-relaxed">{gal.description}</p>}
+              <button onClick={() => setGal(null)} className="btn btn-primary mt-5 w-full">
+                {lang === "si" ? "වසන්න" : "Close"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= ABOUT — glass quality + live stats ================= */}
       <section className="relative overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-100">
         <div className="absolute top-10 -right-24 w-[380px] h-[380px] rounded-full bg-sky-200/30 blur-3xl" />
         <div className="absolute bottom-0 -left-24 w-[380px] h-[380px] rounded-full bg-indigo-200/30 blur-3xl" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14 sm:py-16">
           <div className="grid gap-8 lg:grid-cols-2 items-start">
-            {/* about glass card */}
-            <div className="rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_20px_50px_-18px_rgba(15,23,42,0.22)] p-8 sm:p-10">
+            {/* about glass card — unique gradient glass border */}
+            <div className="rounded-3xl p-[2px] bg-gradient-to-br from-indigo-500/70 via-fuchsia-400/70 to-amber-400/70 shadow-[0_24px_60px_-18px_rgba(79,70,229,0.35)]">
+            <div className="rounded-[22px] bg-white/70 backdrop-blur-xl p-8 sm:p-10 relative overflow-hidden">
+              <div className="absolute -top-16 -right-16 w-52 h-52 rounded-full bg-indigo-200/30 blur-3xl" />
               <div className="flex items-center gap-2 text-[11px] font-bold tracking-[0.22em] uppercase text-indigo-700">
                 <Landmark size={15} /> {c.aboutBadge}
               </div>
               <h2 className="mt-3 text-2xl sm:text-4xl font-black text-slate-900 leading-snug">{c.aboutTitle}</h2>
               <p className="mt-5 text-slate-600 leading-relaxed text-[15px]">{c.aboutP1}</p>
               <p className="mt-4 text-slate-600 leading-relaxed text-[15px]">{c.aboutP2}</p>
-              <div className="mt-6 rounded-2xl bg-gradient-to-r from-indigo-50 to-fuchsia-50 border border-indigo-100 px-4 py-3">
+              <div className="mt-6 rounded-2xl bg-gradient-to-r from-indigo-50 to-fuchsia-50 border border-indigo-100 px-4 py-3 relative">
                 <div className="text-[12.5px] font-bold text-indigo-700 tracking-wide">{c.principles}</div>
               </div>
+            </div>
             </div>
 
             {/* stats (live refresh) — vision/mission එකට උඩින් */}
@@ -348,7 +404,12 @@ export function HomeSections({
           />
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
             {gallery.slice(0, 4).map((g) => (
-              <Link key={g.id} href={L("/gallery")} className="group relative rounded-2xl overflow-hidden card card-hover">
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => setGal(g)}
+                className="group relative rounded-2xl overflow-hidden card card-hover text-left w-full"
+              >
                 <div className="aspect-[4/3] bg-gradient-to-br from-slate-200 to-slate-100 relative">
                   {g.image && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -363,8 +424,13 @@ export function HomeSections({
                       <Images size={12} /> {g.title || "Photo"}
                     </div>
                   </div>
+                  <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors flex items-center justify-center">
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-white/90 text-slate-900 px-4 py-2 text-[11.5px] font-bold">
+                      {lang === "si" ? "🔍 විශාලව බලන්න" : "🔍 View Enlarged"}
+                    </span>
+                  </div>
                 </div>
-              </Link>
+              </button>
             ))}
           </div>
         </div>
@@ -382,7 +448,7 @@ export function HomeSections({
             </Link>
           }
         />
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {newsList.map((n) => (
             <Link key={n.id} href={L("/news")} className="card card-hover overflow-hidden">
               <div className="h-44 bg-gradient-to-br from-indigo-900 to-slate-800 relative overflow-hidden">
@@ -421,23 +487,38 @@ export function HomeSections({
 
       {/* ================= MEMBERSHIP CTA ================= */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 pb-16">
-        <div className="hero-dark rounded-3xl p-10 sm:p-14 text-white relative overflow-hidden">
+        <div className="hero-dark rounded-[28px] p-10 sm:p-16 text-white relative overflow-hidden shadow-[0_32px_80px_-24px_rgba(15,23,42,0.55)]">
+          {/* decorative glows */}
+          <div className="absolute -top-24 -right-16 w-96 h-96 rounded-full bg-amber-400/20 blur-3xl" />
+          <div className="absolute bottom-[-6rem] left-1/3 w-96 h-96 rounded-full bg-fuchsia-500/15 blur-3xl" />
+          <div className="absolute top-6 right-8 hidden lg:flex items-center gap-3 opacity-40">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="w-24 h-24 rounded-3xl border border-white/15 rotate-12" />
+            ))}
+          </div>
           <div className="relative z-10 max-w-2xl">
-            <div className="flex items-center gap-2 text-[11px] font-bold tracking-[0.2em] uppercase text-amber-300">
-              <BadgeCheck size={16} /> {c.membershipBadge}
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-4 py-2 text-[11px] font-bold tracking-[0.2em] uppercase text-amber-300">
+              <BadgeCheck size={15} /> {c.membershipBadge}
             </div>
-            <h2 className="mt-3 text-2xl sm:text-4xl font-black leading-snug">{c.membershipTitle}</h2>
-            <p className="mt-3 text-slate-300">{c.membershipText}</p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link href={L("/membership/apply")} className="btn btn-amber">
+            <h2 className="mt-5 text-2xl sm:text-[42px] font-black leading-[1.12]">
+              {c.membershipTitle}
+            </h2>
+            <p className="mt-4 text-slate-300 text-[15px] leading-relaxed max-w-xl">{c.membershipText}</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link href={L("/membership/apply")} className="btn btn-amber shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-shadow">
                 <Send size={16} /> {c.apply}
               </Link>
               <Link
                 href={L("/membership/members")}
-                className="btn btn-outline !bg-white/10 !text-white !border-white/25 hover:!bg-white/20"
+                className="btn btn-outline !bg-white/10 !text-white !border-white/25 hover:!bg-white/20 backdrop-blur"
               >
                 {c.memberList}
               </Link>
+            </div>
+            <div className="mt-8 flex flex-wrap items-center gap-5 text-[11px] text-white/55">
+              <span className="flex items-center gap-1.5">✓ {lang === "si" ? "නොමිලේ ලියාපදිංචිය" : "Free registration"}</span>
+              <span className="flex items-center gap-1.5">✓ {lang === "si" ? "සාමාජික දීමනා" : "Member benefits"}</span>
+              <span className="flex items-center gap-1.5">✓ {lang === "si" ? "F28 ප්‍රවේශය" : "F28 access"}</span>
             </div>
           </div>
         </div>
@@ -457,41 +538,83 @@ export function HomeSections({
             }
           />
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="card p-6">
-              <div className="flex items-center gap-2 text-indigo-700">
-                <Phone size={17} /> <div className="font-extrabold text-slate-900 text-[14px]">{c.callUs}</div>
+            {/* phone — glass */}
+            <div className="group rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_18px_45px_-16px_rgba(15,23,42,0.2)] p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_26px_60px_-16px_rgba(15,23,42,0.3)]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200">
+                  <Phone size={18} />
+                </div>
+                <div className="font-extrabold text-slate-900 text-[14px]">{c.callUs}</div>
               </div>
-              <div className="mt-3 space-y-1 text-[13.5px] text-slate-600">
+              <div className="mt-4 space-y-2">
                 {SITE.phones.map((p) => (
-                  <a key={p} href={`tel:${p.replace(/\s/g, "")}`} className="block hover:text-indigo-700">
+                  <a
+                    key={p}
+                    href={`tel:${p.replace(/\s/g, "")}`}
+                    className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-2.5 text-[13.5px] font-semibold text-slate-700 hover:bg-indigo-100 hover:border-indigo-300 transition-colors"
+                  >
                     {p}
+                    <span className="text-[10px] font-bold text-indigo-600 opacity-70 group-hover:opacity-100">
+                      {lang === "si" ? "අමතන්න →" : "Call →"}
+                    </span>
                   </a>
                 ))}
               </div>
             </div>
-            <div className="card p-6">
-              <div className="flex items-center gap-2 text-indigo-700">
-                <MapPin size={17} /> <div className="font-extrabold text-slate-900 text-[14px]">{c.visitUs}</div>
+
+            {/* address — glass */}
+            <div className="group rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_18px_45px_-16px_rgba(15,23,42,0.2)] p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_26px_60px_-16px_rgba(15,23,42,0.3)]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-500 text-white flex items-center justify-center shadow-lg shadow-rose-200">
+                  <MapPin size={18} />
+                </div>
+                <div className="font-extrabold text-slate-900 text-[14px]">{c.visitUs}</div>
               </div>
-              <div className="mt-3 text-[13.5px] text-slate-600">
+              <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50/60 px-4 py-3 text-[13px] text-slate-700 leading-relaxed">
                 {lang === "si" ? SITE.address_si : SITE.address_en}
               </div>
-            </div>
-            <div className="card p-6">
-              <div className="flex items-center gap-2 text-indigo-700">
-                <Mail size={17} /> <div className="font-extrabold text-slate-900 text-[14px]">{c.emailUs}</div>
-              </div>
-              <a href={`mailto:${SITE.email}`} className="mt-3 block text-[13.5px] text-slate-600 hover:text-indigo-700">
-                {SITE.email}
+              <a
+                href="https://maps.google.com/?q=Panduwasnuwara+MPCS"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-bold text-rose-600 hover:underline"
+              >
+                📍 {lang === "si" ? "සිතියමේ බලන්න" : "View on Map"} →
               </a>
             </div>
-            <div className="card p-6">
-              <div className="flex items-center gap-2 text-indigo-700">
-                <Clock size={17} /> <div className="font-extrabold text-slate-900 text-[14px]">{c.hoursTitle}</div>
+
+            {/* email — glass */}
+            <div className="group rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_18px_45px_-16px_rgba(15,23,42,0.2)] p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_26px_60px_-16px_rgba(15,23,42,0.3)]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white flex items-center justify-center shadow-lg shadow-sky-200">
+                  <Mail size={18} />
+                </div>
+                <div className="font-extrabold text-slate-900 text-[14px]">{c.emailUs}</div>
               </div>
-              <div className="mt-3 space-y-1 text-[12.5px] text-slate-600">
+              <a
+                href={`mailto:${SITE.email}`}
+                className="mt-4 flex items-center justify-between rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-[12.5px] font-semibold text-slate-700 break-all hover:bg-sky-100 hover:border-sky-300 transition-colors"
+              >
+                {SITE.email}
+                <span className="text-[10px] font-bold text-sky-600 opacity-70 group-hover:opacity-100 shrink-0 ml-2">
+                  {lang === "si" ? "ලියන්න →" : "Write →"}
+                </span>
+              </a>
+            </div>
+
+            {/* hours — glass */}
+            <div className="group rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_18px_45px_-16px_rgba(15,23,42,0.2)] p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_26px_60px_-16px_rgba(15,23,42,0.3)]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-200">
+                  <Clock size={18} />
+                </div>
+                <div className="font-extrabold text-slate-900 text-[14px]">{c.hoursTitle}</div>
+              </div>
+              <div className="mt-4 space-y-1.5">
                 {(lang === "si" ? SITE.hours_si : SITE.hours_en).map((h) => (
-                  <div key={h}>{h}</div>
+                  <div key={h} className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-2 text-[11.5px] text-slate-700 leading-relaxed">
+                    {h}
+                  </div>
                 ))}
               </div>
             </div>

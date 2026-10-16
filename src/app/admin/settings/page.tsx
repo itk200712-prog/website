@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { Check, Image as ImageIcon, Mail, MessageCircle, Plus, RefreshCw, Save, Settings, Trash2, Upload } from "lucide-react";
+import { Check, Image as ImageIcon, Mail, MessageCircle, Plus, RefreshCw, Save, Settings, Trash2, Upload, Globe } from "lucide-react";
 import { AdminTopbar, dbUpsert, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { deleteSiteImage, uploadSiteImage } from "@/lib/supabase/storage";
@@ -22,6 +22,8 @@ export default function AdminSettingsPage() {
   const [membersTotal, setMembersTotal] = useState(String(SETTINGS.members_total));
   const [votersTotal, setVotersTotal] = useState(String(SETTINGS.voters_total));
   const [loaded, setLoaded] = useState(false);
+  const [socialWa, setSocialWa] = useState("");
+  const [socialFb, setSocialFb] = useState("");
 
   // DB එකෙන් saved values load කරන්න (seed නෙමෙයි!)
   useEffect(() => {
@@ -39,6 +41,8 @@ export default function AdminSettingsPage() {
         if (g("contact_email_2") != null) setEmail2(g("contact_email_2")!);
         if (g("members_total") != null) setMembersTotal(g("members_total")!);
         if (g("voters_total") != null) setVotersTotal(g("voters_total")!);
+        if (g("social_whatsapp") != null) setSocialWa(g("social_whatsapp")!);
+        if (g("social_facebook") != null) setSocialFb(g("social_facebook")!);
         const hero = g("hero_images");
         if (hero) {
           try { const arr = JSON.parse(hero); if (Array.isArray(arr)) setHeroImages(arr); } catch { /* ignore */ }
@@ -291,6 +295,37 @@ Message: Customer inquiry text...`}
           </div>
         </section>
 
+        {/* ============ Social Media Links ============ */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 mt-6">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-purple-600 text-white flex items-center justify-center">
+              <Globe size={18} />
+            </div>
+            <div>
+              <h2 className="font-extrabold text-slate-900 text-[15px]">සමාජ මාධ්‍ය සබැඳි / Social Media Links</h2>
+              <p className="text-slate-400 text-[11px]">
+                Footer එකේ සමාජ මාධ්‍ය icons දෙකේ link මෙතනින් වෙනස් කරන්න (designer popup එකේත් මේවා පෙන්වයි)
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 mt-4">
+            <div>
+              <label className="field-label">WhatsApp Link (https://wa.me/947...)</label>
+              <input value={socialWa} onChange={(e) => setSocialWa(e.target.value)} className="field" placeholder="https://wa.me/94742352670" />
+            </div>
+            <div>
+              <label className="field-label">Facebook Page Link</label>
+              <input value={socialFb} onChange={(e) => setSocialFb(e.target.value)} className="field" placeholder="https://facebook.com/your-page" />
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-2.5 rounded-2xl bg-slate-900 px-4 py-3">
+            <span className="text-[11px] text-slate-300 font-bold mr-1">Preview:</span>
+            <span className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center">💬</span>
+            <span className="w-9 h-9 rounded-full bg-sky-600 text-white flex items-center justify-center">f</span>
+            <span className="text-[10.5px] text-slate-400">Icons මේ විදිහට footer එකේ + designer popup එකේ පෙන්වයි</span>
+          </div>
+        </section>
+
         <div className="border-t border-slate-100 pt-6">
           <button
             className="btn btn-primary"
@@ -303,6 +338,8 @@ Message: Customer inquiry text...`}
                 { key: "members_total", value: membersTotal },
                 { key: "voters_total", value: votersTotal },
                 { key: "hero_images", value: JSON.stringify(heroImages) },
+                { key: "social_whatsapp", value: socialWa },
+                { key: "social_facebook", value: socialFb },
               ];
               let err: string | null = null;
               for (const row of rows) {

@@ -69,7 +69,7 @@ export function SiteHeader() {
               coop
             </div>
             <div className="leading-tight">
-              <div className="font-extrabold text-white text-[13.5px] leading-tight max-w-[230px] truncate" title={t.brand}>{t.brand}</div>
+              <div className="font-extrabold text-white text-[11px] sm:text-[11.5px] leading-tight max-w-[300px] whitespace-nowrap" title={t.brand}>{t.brand}</div>
               <div className="text-[9.5px] text-slate-400 tracking-wide uppercase">Panduwasnuwara New MPCS</div>
             </div>
           </Link>
@@ -106,7 +106,7 @@ export function SiteHeader() {
                       <Link
                         key={b.slug}
                         href={L(`/businesses/${b.slug}`)}
-                        className="flex items-start gap-2.5 p-2.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200"
+                        className="flex items-start gap-2.5 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200"
                       >
                         <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500 shrink-0 overflow-hidden">
                           {b.logo ? (
@@ -146,21 +146,21 @@ export function SiteHeader() {
                 <div className="mega" style={{ width: "min(92vw, 420px)" }}>
                   <div className="section-badge mb-2">Membership Portal — MPCS</div>
                   <div className="flex flex-col gap-1">
-                    <Link href={L("/membership/members")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                    <Link href={L("/membership/members")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                       <UsersRound size={18} className="text-indigo-700" />
                       <div>
                         <div className="text-[13px] font-bold text-slate-800">{t.nav.memberDetails}</div>
                         <div className="text-[11px] text-slate-500">Search full registered member registry</div>
                       </div>
                     </Link>
-                    <Link href={L("/membership/voters")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                    <Link href={L("/membership/voters")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                       <ShieldCheck size={18} className="text-indigo-700" />
                       <div>
                         <div className="text-[13px] font-bold text-slate-800">{t.nav.voters}</div>
                         <div className="text-[11px] text-slate-500">Cooperative electoral register</div>
                       </div>
                     </Link>
-                    <Link href={L("/membership/apply")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                    <Link href={L("/membership/apply")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                       <Newspaper size={18} className="text-indigo-700" />
                       <div>
                         <div className="flex items-center gap-2">
@@ -172,7 +172,7 @@ export function SiteHeader() {
                     </Link>
                     <div className="border-t border-slate-100 my-1" />
                     {me ? (
-                      <Link href={L("/dashboard")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                      <Link href={L("/dashboard")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                         <UserRound size={18} className="text-indigo-700" />
                         <div>
                           <div className="text-[13px] font-bold text-slate-800">{me.name} — Profile</div>
@@ -181,14 +181,14 @@ export function SiteHeader() {
                       </Link>
                     ) : (
                       <>
-                        <Link href={L("/register")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                        <Link href={L("/register")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                           <UserRound size={18} className="text-slate-500" />
                           <div>
                             <div className="text-[13px] font-bold text-slate-800">{t.nav.register}</div>
                             <div className="text-[11px] text-slate-500">Create a new cooperative account</div>
                           </div>
                         </Link>
-                        <Link href={L("/signin")} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50">
+                        <Link href={L("/signin")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                           <UserRound size={18} className="text-indigo-700" />
                           <div>
                             <div className="text-[13px] font-bold text-slate-800">{t.nav.signin}</div>

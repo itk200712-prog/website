@@ -4,13 +4,28 @@
 // Site footer — quick links + contact info + credit
 // ============================================================================
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { MapPin, Phone, Mail, Clock, Facebook, MessageCircle, ExternalLink, ShieldCheck } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { SITE } from "@/lib/seed";
 
 export function SiteFooter() {
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const { data } = await createClient().from("system_settings").select("key,value");
+        if (!alive || !data) return;
+        const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
+        setSocialLinks({ wa: map.get("social_whatsapp") || "", fb: map.get("social_facebook") || "" });
+      } catch { /* ignore */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const [socialLinks, setSocialLinks] = useState<{ wa: string; fb: string } | null>(null);
   const [showDesigner, setShowDesigner] = useState(false);
   const { t, lang } = useLang();
   const L = (p: string) => `/${lang}${p === "/" ? "" : p}`;
@@ -156,22 +171,22 @@ export function SiteFooter() {
               {showDesigner && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 flex items-center gap-2.5 rounded-full border border-slate-700 bg-slate-900 px-4 py-2.5 shadow-2xl whitespace-nowrap pop-in">
                   <a
-                    href={SITE.designer.whatsapp}
+                    href={socialLinks?.wa || SITE.designer.whatsapp}
                     target="_blank"
                     rel="noreferrer"
                     title="WhatsApp"
-                    className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-400 hover:scale-110 transition"
+                    className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center hover:scale-110 hover:shadow-lg hover:shadow-emerald-500/40 transition-all border border-white/20"
                   >
-                    <MessageCircle size={18} />
+                    <MessageCircle size={19} />
                   </a>
                   <a
-                    href={SITE.designer.facebook}
+                    href={socialLinks?.fb || SITE.designer.facebook}
                     target="_blank"
                     rel="noreferrer"
                     title="Facebook"
-                    className="w-10 h-10 rounded-full bg-sky-600 text-white flex items-center justify-center hover:bg-sky-500 hover:scale-110 transition"
+                    className="w-11 h-11 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 text-white flex items-center justify-center hover:scale-110 hover:shadow-lg hover:shadow-blue-500/40 transition-all border border-white/20"
                   >
-                    <Facebook size={18} />
+                    <Facebook size={19} />
                   </a>
                 </div>
               )}
