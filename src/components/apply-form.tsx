@@ -14,12 +14,26 @@ export function ApplyForm() {
   const { t, lang } = useLang();
   const [sent, setSent] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [fileObj, setFileObj] = useState<File | null>(null);
+  const [hideBanner, setHideBanner] = useState(false);
+  const [upMsg, setUpMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     const fd = new FormData(e.currentTarget);
+    // ✅ photo එක storage එකට upload කරලා URL එක ගන්නවා (admin ලට බලන්න පුළුවන්)
+    let photoUrl = "";
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      if (fileObj) {
+        const sb = createClient();
+        const path = `applications/${Date.now()}-${fileObj.name.replace(/[^\w.\-]/g, "_")}`;
+        const { error: upErr } = await sb.storage.from("site-images").upload(path, fileObj, { contentType: fileObj.type });
+        if (!upErr) photoUrl = sb.storage.from("site-images").getPublicUrl(path).data.publicUrl;
+      }
+    } catch { /* upload fail — photo නැතුව continue */ }
     try {
       await fetch(`https://formsubmit.co/ajax/${fd.get("_to") || "itk200712@gmail.com"}`, {
         method: "POST",
@@ -33,13 +47,13 @@ export function ApplyForm() {
           NIC: fd.get("nic"),
           Phone: fd.get("phone"),
           Email: fd.get("email") || "—",
-          "Certified Form": fileName || "—",
+          "Certified Form": photoUrl || fileName || "—",
         }),
       });
     } catch {
       /* demo mode */
     }
-    // ✅ save to DB so Admin → Membership Applications පැනලයේ පේනවා (mail එකට යනවා වගේම)
+    // ✅ save to DB so Admin → Membership Applications පැනලයේ පේනවා
     try {
       const { createClient } = await import("@/lib/supabase/client");
       await createClient().from("membership_applications").insert({
@@ -50,7 +64,7 @@ export function ApplyForm() {
         nic: String(fd.get("nic") || ""),
         phone: String(fd.get("phone") || ""),
         email: String(fd.get("email") || null),
-        certified_form_url: fileName || null,
+        certified_form_url: photoUrl || null,
         status: "pending",
       });
     } catch {
@@ -87,7 +101,8 @@ export function ApplyForm() {
         </div>
       </div>
 
-      {/* auto-fill */}
+      {/* auto-fill — "Later / Apply Now" ක්ලික් කළාම මේක අයින් වේ */}
+      {!hideBanner && (
       <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/70 p-6">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-white border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
@@ -100,13 +115,14 @@ export function ApplyForm() {
               <a href="/signin" className="btn btn-primary !py-2 !px-4 !text-[12.5px]">
                 <LogIn size={14} /> {t.applyPage.signinRegister} <ArrowRight size={14} />
               </a>
-              <a href="#apply-form" className="btn btn-outline !py-2 !px-4 !text-[12.5px]">
+              <a href="#apply-form" className="btn btn-outline !py-2 !px-4 !text-[12.5px]" onClick={() => setHideBanner(true)}>
                 {t.applyPage.later}
               </a>
             </div>
           </div>
         </div>
       </div>
+      )}
 
       {/* instructions */}
       <div className="card p-6 sm:p-7">
@@ -186,7 +202,12 @@ export function ApplyForm() {
               type="file"
               accept=".jpg,.jpeg,.png,.webp,.pdf"
               className="hidden"
-              onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
+              onChange={(e) => {
+                const f = e.target.files?.[0] ?? null;
+                setFileObj(f);
+                setFileName(f?.name ?? "");
+                setUpMsg(f ? "✅ තෝරාගත්තා — submit කරාම upload වේ" : "");
+              }}
             />
             <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center mx-auto">
               <UploadCloud size={22} />
@@ -194,7 +215,7 @@ export function ApplyForm() {
             <div className="mt-3 font-bold text-slate-800 text-[13.5px]">
               {fileName || t.applyPage.upload}
             </div>
-            <div className="text-slate-400 text-[11.5px] mt-1">{t.applyPage.uploadHint}</div>
+            <div className="text-slate-400 text-[11.5px] mt-1">{upMsg || t.applyPage.uploadHint}</div>
           </label>
         </div>
 

@@ -16,7 +16,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const h = await headers();
   const cookieStore = await cookies();
   const raw = h.get("x-locale") ?? cookieStore.get("lang")?.value;
-  const lang: Lang = raw === "en" ? "en" : "si";
+  const lang: Lang = raw === "si" ? "si" : "en"; // default = English
   return (
     <html lang={lang}>
       <head>

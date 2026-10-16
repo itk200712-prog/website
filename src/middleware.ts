@@ -22,9 +22,9 @@ export async function middleware(request: NextRequest) {
   const stripped = m ? m[2] || "/" : pathname;
   const locale: "si" | "en" = isPrefixed
     ? (m![1] as "si" | "en")
-    : request.cookies.get("lang")?.value === "en"
-      ? "en"
-      : "si";
+    : request.cookies.get("lang")?.value === "si"
+      ? "si"
+      : "en"; // default = English ✅
   const isBareKept = BARE_PREFIXES.some((p) => stripped === p || stripped.startsWith(`${p}/`));
 
   // ---- Supabase session (admin protection) — /admin එකට පමණයි ------------

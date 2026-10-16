@@ -700,3 +700,10 @@ drop policy if exists activity_insert on public.admin_activity_logs;
 create policy activity_insert on public.admin_activity_logs for insert with check (public.is_admin());
 drop policy if exists activity_admin_write on public.admin_activity_logs;
 create policy activity_admin_write on public.admin_activity_logs for all using (public.is_admin()) with check (public.is_admin());
+
+-- ===========================================================================
+-- 16. Application photo upload (public apply form) — anon storage insert
+-- ===========================================================================
+drop policy if exists "site_images_anon_upload" on storage.objects;
+create policy "site_images_anon_upload" on storage.objects for insert
+  with check (bucket_id = 'site-images');

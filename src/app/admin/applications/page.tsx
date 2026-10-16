@@ -16,6 +16,7 @@ type App = {
   address: string;
   status: "pending" | "approved" | "rejected";
   date: string;
+  photo: string;
 };
 
 const STATUS_TABS = ["all", "pending", "approved", "rejected"] as const;
@@ -25,6 +26,7 @@ export default function AdminApplicationsPage() {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>("all");
   const [apps, setApps] = useState<App[]>([]);
+  const [viewPhoto, setViewPhoto] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -41,6 +43,7 @@ export default function AdminApplicationsPage() {
             address: String(r.address ?? ""),
             status: (String(r.status ?? "pending") as App["status"]),
             date: new Date(String(r.created_at ?? Date.now())).toLocaleDateString(),
+            photo: String(r.certified_form_url ?? ""),
           }))
         );
     })();
@@ -72,6 +75,20 @@ export default function AdminApplicationsPage() {
     <div>
       <AdminTopbar title="Membership Applications Management" sub="Review, approve, edit, and manage member registration submissions and certified forms" />
       {node}
+
+      {viewPhoto && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setViewPhoto(null)}>
+          <div className="bg-white rounded-3xl p-5 max-w-lg w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-extrabold text-slate-900 text-[15px]">අයදුම්පතේ සහතික කළ ඡායාරූපය</div>
+              <button className="btn btn-outline !py-1 !px-3 !text-[11px]" onClick={() => setViewPhoto(null)}>✕ Close</button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={viewPhoto} alt="certified application" className="w-full rounded-2xl border border-slate-200" />
+            <a href={viewPhoto} target="_blank" rel="noreferrer" className="btn btn-primary w-full mt-3 !py-2 !text-[12px]">Full Size එකේ බලන්න →</a>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <AdminStatCard tag="Total Applications" value={String(counts.all)} label="All incoming applications" icon={<FileText size={18} />} />
@@ -117,7 +134,7 @@ export default function AdminApplicationsPage() {
             <table className="table-x">
               <thead>
                 <tr>
-                  <th>#APP ID</th><th>FULL NAME</th><th>NIC</th><th>PHONE</th><th>ADDRESS</th><th>STATUS</th><th>ACTIONS</th>
+                  <th>#APP ID</th><th>FULL NAME</th><th>NIC</th><th>PHONE</th><th>ADDRESS</th><th>PHOTO</th><th>STATUS</th><th>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,6 +145,17 @@ export default function AdminApplicationsPage() {
                     <td className="tabular-nums">{a.nic}</td>
                     <td className="tabular-nums">{a.phone}</td>
                     <td className="text-slate-500">{a.address}</td>
+                    <td>
+                      {a.photo ? (
+                        <button className="flex items-center gap-1.5" onClick={() => setViewPhoto(a.photo)} title="අයදුම්පතේ ඡායාරූපය බලන්න">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={a.photo} alt="application" className="w-10 h-10 rounded-lg object-cover border border-slate-200" />
+                          <span className="text-[10.5px] font-bold text-indigo-700 underline">View</span>
+                        </button>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">—</span>
+                      )}
+                    </td>
                     <td>
                       <span
                         className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-bold ${
