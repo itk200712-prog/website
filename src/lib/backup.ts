@@ -24,13 +24,23 @@ export const BACKUP_TABLES: BackupTable[] = [
   { name: "gallery_items", pk: "id" },
   { name: "gallery_comments", pk: "id" },
   { name: "fuel_prices", pk: "type" },
+  { name: "fuel_stock", pk: "id" },
   { name: "system_settings", pk: "key" },
   { name: "messages", pk: "id" },
   { name: "f28_members", pk: "id" },
   { name: "f28_items", pk: "id" },
+  { name: "admin_activity_logs", pk: "id" },
   { name: "backup_secrets", pk: "key" },
   { name: "site_images_backup", pk: "path" },
 ];
+
+function decodeDisplayPw(enc: string): string {
+  try {
+    return decodeURIComponent(escape(atob(enc)));
+  } catch {
+    return "";
+  }
+}
 
 /* ------------------------------------------------------------- SQL esc --- */
 function sqlVal(v: unknown): string {
@@ -211,6 +221,36 @@ export async function generateBackupSql(onProgress: (msg: string, pct: number) =
         `INSERT INTO public.${t.name} (${cols.map(colName).join(", ")}) VALUES (${cols.map((c) => sqlVal(r[c])).join(", ")})` +
           (sets ? ` ON CONFLICT (${colName(pk)}) DO UPDATE SET ${sets};` : ` ON CONFLICT (${colName(pk)}) DO NOTHING;`)
       );
+    }
+    lines.push(``);
+  }
+
+  // ---- login accounts (auth.users + identities) — password එක්ක ----------
+  const profiles = gathered.find((g) => g.name === "profiles")?.rows ?? [];
+  if (profiles.length) {
+    onProgress("Preparing login accounts…", 96);
+    lines.push(`-- -------------------------- LOGIN ACCOUNTS ----------------------------`);
+    lines.push(`-- fresh Supabase restore එකේ login වීමට — password එක්ක (pgcrypto)`);
+    for (const p of profiles) {
+      const id = String(p.id ?? "");
+      const email = String(p.auth_email ?? "").trim();
+      const plain = decodeDisplayPw(String(p.password_display ?? ""));
+      if (!id || !email || !plain) {
+        lines.push(`-- ⚠ login account skipped: ${email || id || "?"} (email/password නෑ)`);
+        continue;
+      }
+      lines.push(`DO $$ BEGIN
+  INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  VALUES ('00000000-0000-0000-0000-000000000000', ${sqlVal(id)}, 'authenticated', 'authenticated', ${sqlVal(email)}, crypt(${sqlVal(plain)}, gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now())
+  ON CONFLICT (id) DO UPDATE SET encrypted_password = EXCLUDED.encrypted_password, email = EXCLUDED.email, email_confirmed_at = COALESCE(auth.users.email_confirmed_at, now());
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'login account skipped: %', SQLERRM;
+END $$;`);
+      lines.push(`DO $$ BEGIN
+  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+  VALUES (gen_random_uuid(), ${sqlVal(id)}, ${sqlVal(id)}, json_build_object('sub', ${sqlVal(id)}, 'email', ${sqlVal(email)}, 'email_verified', true)::jsonb, 'email', now(), now(), now())
+  ON CONFLICT DO NOTHING;
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'login identity skipped: %', SQLERRM;
+END $$;`);
     }
     lines.push(``);
   }
