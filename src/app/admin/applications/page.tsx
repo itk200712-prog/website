@@ -2,22 +2,29 @@
 
 // Membership Applications Management — approve / reject / edit
 
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FileText, RefreshCw, Search, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, FileText, Lock, Pencil, RefreshCw, Search, XCircle } from "lucide-react";
 import { AdminTopbar, AdminStatCard, dbUpdate, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
+import { logActivity } from "@/lib/activity";
 
 type App = {
   id: string;
   app_no: string;
   name: string;
+  name_si: string;
+  name_en: string;
   nic: string;
   phone: string;
+  email: string;
   address: string;
+  postal: string;
   status: "pending" | "approved" | "rejected";
   date: string;
   photo: string;
 };
+
+type EditForm = { name_si: string; name_en: string; nic: string; phone: string; email: string; address: string; postal: string };
 
 const STATUS_TABS = ["all", "pending", "approved", "rejected"] as const;
 
@@ -27,27 +34,36 @@ export default function AdminApplicationsPage() {
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>("all");
   const [apps, setApps] = useState<App[]>([]);
   const [viewPhoto, setViewPhoto] = useState<string | null>(null);
+  const [editApp, setEditApp] = useState<App | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ name_si: "", name_en: "", nic: "", phone: "", email: "", address: "", postal: "" });
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    const sb = await authedClient();
+    const { data } = await sb.from("membership_applications").select("*").order("created_at", { ascending: false });
+    if (data)
+      setApps(
+        data.map((r: Record<string, unknown>) => ({
+          id: String(r.id),
+          app_no: String(r.app_no ?? ""),
+          name: String(r.name_en || r.name_si || "—"),
+          name_si: String(r.name_si ?? ""),
+          name_en: String(r.name_en ?? ""),
+          nic: String(r.nic ?? ""),
+          phone: String(r.phone ?? ""),
+          email: String(r.email ?? ""),
+          address: String(r.address ?? ""),
+          postal: String(r.postal_address ?? ""),
+          status: (String(r.status ?? "pending") as App["status"]),
+          date: new Date(String(r.created_at ?? Date.now())).toLocaleDateString(),
+          photo: String(r.certified_form_url ?? ""),
+        }))
+      );
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      const sb = await authedClient();
-      const { data } = await sb.from("membership_applications").select("*").order("created_at", { ascending: false });
-      if (data)
-        setApps(
-          data.map((r: Record<string, unknown>) => ({
-            id: String(r.id),
-            app_no: String(r.app_no ?? ""),
-            name: String(r.name_en || r.name_si || "—"),
-            nic: String(r.nic ?? ""),
-            phone: String(r.phone ?? ""),
-            address: String(r.address ?? ""),
-            status: (String(r.status ?? "pending") as App["status"]),
-            date: new Date(String(r.created_at ?? Date.now())).toLocaleDateString(),
-            photo: String(r.certified_form_url ?? ""),
-          }))
-        );
-    })();
-  }, []);
+    load();
+  }, [load]);
 
   const counts = {
     all: apps.length,
@@ -66,9 +82,48 @@ export default function AdminApplicationsPage() {
   }, [q, tab, apps]);
 
   async function decide(id: string, status: "approved" | "rejected") {
+    // ✅ approved කරපු එකක් reject කරන්න බෑ (hard block)
+    const current = apps.find((x) => x.id === id);
+    if (current?.status === "approved" && status === "rejected") {
+      show("⚠ Approved applications cannot be rejected");
+      return;
+    }
     setApps((xs) => xs.map((x) => (x.id === id ? { ...x, status } : x)));
     const err = await dbUpdate("membership_applications", { id }, { status });
+    if (!err) {
+      await logActivity(
+        status === "approved" ? "APPLICATION_APPROVED" : "APPLICATION_REJECTED",
+        `application ${current?.app_no ?? id} ${status}`
+      );
+    }
     show(err ? `⚠ ${err}` : `✅ Application ${status}`);
+  }
+
+  function openEdit(a: App) {
+    setEditApp(a);
+    setEditForm({ name_si: a.name_si, name_en: a.name_en, nic: a.nic, phone: a.phone, email: a.email, address: a.address, postal: a.postal });
+  }
+
+  async function saveEdit() {
+    if (!editApp) return;
+    setSaving(true);
+    const payload = {
+      name_si: editForm.name_si,
+      name_en: editForm.name_en,
+      nic: editForm.nic,
+      phone: editForm.phone,
+      email: editForm.email || null,
+      address: editForm.address,
+      postal_address: editForm.postal,
+    };
+    const err = await dbUpdate("membership_applications", { id: editApp.id }, payload);
+    if (!err) {
+      await logActivity("APPLICATION_UPDATED", `application ${editApp.app_no} details updated`);
+      await load();
+    }
+    setSaving(false);
+    setEditApp(null);
+    show(err ? `⚠ ${err}` : "✅ Application details saved");
   }
 
   return (
@@ -86,6 +141,56 @@ export default function AdminApplicationsPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={viewPhoto} alt="certified application" className="w-full rounded-2xl border border-slate-200" />
             <a href={viewPhoto} target="_blank" rel="noreferrer" className="btn btn-primary w-full mt-3 !py-2 !text-[12px]">Full Size එකේ බලන්න →</a>
+          </div>
+        </div>
+      )}
+
+      {editApp && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditApp(null)}>
+          <div className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="font-extrabold text-slate-900 text-[16px]">Application Details Edit කරන්න</div>
+                <div className="text-slate-400 text-[11.5px] mt-0.5">{editApp.app_no} — saved changes admin activities වල සටහන් වේ</div>
+              </div>
+              <button className="btn btn-outline !py-1 !px-3 !text-[11px]" onClick={() => setEditApp(null)}>✕ Close</button>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="block">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">Name (English)</div>
+                <input className="field" value={editForm.name_en} onChange={(e) => setEditForm({ ...editForm, name_en: e.target.value })} />
+              </label>
+              <label className="block">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">Name (Sinhala)</div>
+                <input className="field" value={editForm.name_si} onChange={(e) => setEditForm({ ...editForm, name_si: e.target.value })} />
+              </label>
+              <label className="block">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">NIC</div>
+                <input className="field" value={editForm.nic} onChange={(e) => setEditForm({ ...editForm, nic: e.target.value })} />
+              </label>
+              <label className="block">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">Phone</div>
+                <input className="field" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+              </label>
+              <label className="block sm:col-span-2">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">Email</div>
+                <input className="field" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+              </label>
+              <label className="block sm:col-span-2">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">Address</div>
+                <input className="field" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+              </label>
+              <label className="block sm:col-span-2">
+                <div className="text-[11px] font-bold text-slate-500 mb-1">Postal Address</div>
+                <input className="field" value={editForm.postal} onChange={(e) => setEditForm({ ...editForm, postal: e.target.value })} />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button className="btn btn-outline !py-2 !px-4 !text-[12px]" onClick={() => setEditApp(null)}>Cancel</button>
+              <button className="btn btn-primary !py-2 !px-5 !text-[12px]" disabled={saving} onClick={saveEdit}>
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -115,7 +220,7 @@ export default function AdminApplicationsPage() {
                 {s[0].toUpperCase() + s.slice(1)} ({counts[s]})
               </button>
             ))}
-            <button className="w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center" onClick={() => show("Refreshed")}>
+            <button className="w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center" onClick={async () => { await load(); show("Refreshed"); }}>
               <RefreshCw size={14} />
             </button>
           </div>
@@ -167,8 +272,32 @@ export default function AdminApplicationsPage() {
                     </td>
                     <td>
                       <div className="flex gap-1.5">
-                        <button className="btn btn-green !py-1 !px-2.5 !text-[11px]" onClick={() => decide(a.id, "approved")}>Approve</button>
-                        <button className="btn btn-outline !py-1 !px-2.5 !text-[11px] !text-red-600" onClick={() => decide(a.id, "rejected")}>Reject</button>
+                        <button
+                          className={`btn !py-1 !px-2.5 !text-[11px] ${a.status === "approved" ? "btn-green opacity-70 cursor-default" : "btn-green"}`}
+                          disabled={a.status === "approved"}
+                          onClick={() => decide(a.id, "approved")}
+                        >
+                          {a.status === "approved" ? "✓ Approved" : "Approve"}
+                        </button>
+                        {a.status === "approved" ? (
+                          <span
+                            className="btn btn-outline !py-1 !px-2.5 !text-[11px] !text-slate-400 opacity-60 cursor-not-allowed inline-flex items-center gap-1"
+                            title="Approved applications cannot be rejected"
+                          >
+                            <Lock size={11} /> Reject
+                          </span>
+                        ) : (
+                          <button
+                            className={`btn !py-1 !px-2.5 !text-[11px] ${a.status === "rejected" ? "bg-red-600 text-white border-red-600 opacity-70 cursor-default" : "btn-outline !text-red-600"}`}
+                            disabled={a.status === "rejected"}
+                            onClick={() => decide(a.id, "rejected")}
+                          >
+                            {a.status === "rejected" ? "✓ Rejected" : "Reject"}
+                          </button>
+                        )}
+                        <button className="btn btn-outline !py-1 !px-2.5 !text-[11px]" onClick={() => openEdit(a)} title="Edit application details">
+                          <Pencil size={11} /> Edit
+                        </button>
                       </div>
                     </td>
                   </tr>
