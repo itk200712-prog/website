@@ -5,7 +5,7 @@
 //  (hero backgrounds සහ site images; admin පරිපාලකයින්ට පමණයි — SQL policies)
 // ============================================================================
 
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { authedClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 export const SITE_BUCKET = "site-images";
 
@@ -26,7 +26,7 @@ export async function uploadSiteImage(
     return { error: "උපරිම ප්‍රමාණය 10MB" };
   }
   try {
-    const sb = createClient();
+    const sb = await authedClient();
     const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || "image.jpg";
     const path = `${folder}/${Date.now()}-${safe}`;
     const { error } = await sb.storage.from(SITE_BUCKET).upload(path, file, {
@@ -45,7 +45,7 @@ export async function uploadSiteImage(
 export async function deleteSiteImage(url: string): Promise<void> {
   if (!isSupabaseConfigured() || !url) return;
   try {
-    const sb = createClient();
+    const sb = await authedClient();
     const marker = `/object/public/${SITE_BUCKET}/`;
     const i = url.indexOf(marker);
     if (i === -1) return; // අපේ bucket එකේ image එකක් නොවේ

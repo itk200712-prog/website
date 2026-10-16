@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbUpdate, useNotice, SECTION_KEYS } from "@/components/admin";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { encodePw } from "@/lib/auth";
 import { REGISTERED_USERS } from "@/lib/seed";
 
@@ -52,7 +52,7 @@ export default function AdminAdministratorsPage() {
       return;
     }
     try {
-      const { data } = await createClient().from("profiles").select("*").neq("role", "member");
+      const { data } = await authedClient().then((c) => c.from("profiles").select("*").neq("role", "member"));
       if (data) setRows(data as unknown as AdminRow[]);
     } catch { /* ignore */ }
     setLoaded(true);
@@ -100,7 +100,9 @@ export default function AdminAdministratorsPage() {
     }
     const uid = data.user?.id;
     if (uid) {
-      const err = await dbUpdate("profiles", { id: uid }, {
+      // ✅ direct upsert — profile row නැත්නම් හැදෙනවා, තියෙනවා නම් update වෙනවා
+      const { error: upErr } = await sb.from("profiles").upsert({
+        id: uid,
         full_name: String(fd.get("full_name")),
         nic: String(fd.get("nic")),
         phone: String(fd.get("phone")),
@@ -108,21 +110,8 @@ export default function AdminAdministratorsPage() {
         role: String(fd.get("role")),
         sections: csv,
         password_display: encodePw(password),
-      }) ?? await (async () => {
-        const { createClient: _ } = { createClient };
-        const { error: insErr } = await sb.from("profiles").upsert({
-          id: uid,
-          full_name: String(fd.get("full_name")),
-          nic: String(fd.get("nic")),
-          phone: String(fd.get("phone")),
-          auth_email: email,
-          role: String(fd.get("role")),
-          sections: csv,
-          password_display: encodePw(password),
-        });
-        return insErr ? insErr.message : null;
-      })();
-      show(err ? `⚠ ${err}` : "✅ Administrator created — දැන් ඒ ලොගින් වෙලා තෝරපු sections විතරක් edit කරන්න පුළුවන්");
+      }, { onConflict: "id" });
+      show(upErr ? `⚠ ${upErr.message}` : "✅ Administrator created — දැන් ඒ login වෙලා තෝරපු sections විතරක් edit කරන්න පුළුවන්");
     }
     setModal(false);
     await load();

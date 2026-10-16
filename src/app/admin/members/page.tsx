@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff, Pencil, Search, Trash2, UsersRound } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbUpdate, useNotice } from "@/components/admin";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { authedClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { decodePw } from "@/lib/auth";
 import { REGISTERED_USERS } from "@/lib/seed";
 
@@ -24,7 +24,7 @@ export default function AdminMembersPage() {
   async function load() {
     if (!isSupabaseConfigured()) { setLoaded(true); return; }
     try {
-      const { data } = await createClient().from("profiles").select("*");
+      const { data } = await authedClient().then((c) => c.from("profiles").select("*"));
       if (data && data.length > 0) {
         setRows(
           (data as unknown as Record<string, string>[]).map((r) => ({

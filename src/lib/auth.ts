@@ -5,7 +5,7 @@
 
 "use client";
 
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { clearTokens, createClient, isSupabaseConfigured, storeTokens } from "@/lib/supabase/client";
 
 export function nicToEmail(nic: string): string {
   return `${nic.trim().toLowerCase()}@members.mpcs.lk`;
@@ -69,8 +69,10 @@ export async function loginWithNic(
       password,
     });
     if (alt.error) return { error: "Invalid email or password" };
+    storeTokens(alt.data.session); // ✅ localStorage එකට token
     return { error: null, role: "superadmin" };
   }
+  storeTokens(data.session); // ✅ localStorage එකට token
   const uid = data.user?.id;
   let role = "member";
   if (uid) {
@@ -87,4 +89,5 @@ export async function logout(): Promise<void> {
   } catch {
     /* ignore */
   }
+  clearTokens();
 }

@@ -11,7 +11,7 @@ import {
   BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, LogOut,
   Mail, Megaphone, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X,
 } from "lucide-react";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 /* --------------------------------------------------------------- sidebar -- */
 const NAV = [
@@ -177,7 +177,7 @@ export function AdminModal({
 export async function dbInsert(table: string, row: Record<string, unknown>): Promise<string | null> {
   if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
   try {
-    const { data, error } = await createClient().from(table).insert(row).select("*");
+    const { data, error } = await (await authedClient()).from(table).insert(row).select("*");
     if (error) return error.message;
     if (!data || data.length === 0) return "row save වුණේ නෑ — login/permission පරීක්ෂා කරන්න";
     return null;
@@ -193,7 +193,7 @@ export async function dbUpdate(
 ): Promise<string | null> {
   if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
   try {
-    let q = createClient().from(table).update(patch);
+    let q = (await authedClient()).from(table).update(patch);
     for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
     const { data, error } = await q.select("*");
     if (error) return error.message;
@@ -212,7 +212,7 @@ export async function dbUpsert(
 ): Promise<string | null> {
   if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
   try {
-    const { error } = await createClient().from(table).upsert(row, { onConflict });
+    const { error } = await (await authedClient()).from(table).upsert(row, { onConflict });
     return error ? error.message : null;
   } catch (e) {
     return String(e);
@@ -222,7 +222,7 @@ export async function dbUpsert(
 export async function dbDelete(table: string, match: Record<string, unknown>): Promise<string | null> {
   if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
   try {
-    let q = createClient().from(table).delete();
+    let q = (await authedClient()).from(table).delete();
     for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
     const { data, error } = await q.select("*");
     if (error) return error.message;
