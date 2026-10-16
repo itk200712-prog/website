@@ -250,6 +250,18 @@ body {
 .mega {
   position: absolute;
   top: calc(100% + 10px);
+}
+.mega::before {
+  /* hover bridge — button එකටත් panel එකටත් අතර gap එකේදී hover නැති නොවේ */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -16px;
+  height: 18px;
+}
+.mega {
+  /* keep original rules below */
   left: 50%;
   transform: translateX(-50%);
   width: min(92vw, 760px);

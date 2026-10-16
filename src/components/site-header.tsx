@@ -5,7 +5,7 @@
 // ============================================================================
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck, Lock, LogOut, ChevronDown as ChevDown } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { LangSwitcher } from "@/components/lang-switcher";
@@ -21,6 +21,15 @@ export function SiteHeader() {
   const [me, setMe] = useState<{ name: string } | null>(null);
   const [meOpen, setMeOpen] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openMenu = (k: string) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    setOpen(k);
+  };
+  const closeMenuSoon = () => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setOpen(null), 250);
+  };
 
   // F28: authenticate කරපු members ලට පමණයි header එකේ පේන්නේ
   useEffect(() => {
@@ -63,7 +72,7 @@ export function SiteHeader() {
             </Link>
 
             {/* Businesses dropdown */}
-            <div className="relative" onMouseEnter={() => setOpen("biz")} onMouseLeave={() => setOpen(null)}>
+            <div className="relative" onMouseEnter={() => openMenu("biz")} onMouseLeave={closeMenuSoon}>
               <button className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1">
                 <Building2 size={15} /> {t.nav.businesses} <ChevronDown size={14} />
               </button>
@@ -110,7 +119,7 @@ export function SiteHeader() {
             </div>
 
             {/* Membership dropdown */}
-            <div className="relative" onMouseEnter={() => setOpen("mem")} onMouseLeave={() => setOpen(null)}>
+            <div className="relative" onMouseEnter={() => openMenu("mem")} onMouseLeave={closeMenuSoon}>
               <button className="px-3 py-2 rounded-lg hover:bg-white/10 flex items-center gap-1">
                 <UsersRound size={15} /> {t.nav.membership} <ChevronDown size={14} />
               </button>
