@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { logActivity } from "@/lib/activity";
 import { AdminModal, AdminTopbar, dbDelete, dbUpdate, useNotice, SECTION_KEYS } from "@/components/admin";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { nicToEmail } from "@/lib/auth";
@@ -118,6 +119,7 @@ export default function AdminAdministratorsPage() {
         sections: csv,
         password_display: encodePw(password),
       }, { onConflict: "id" });
+      if (!upErr) void logActivity("INSERT", `administrator created — ${String(fd.get("full_name"))} (${String(fd.get("role"))}) sections=${csv || "all"}`);
       if (upErr) show(`⚠ ${upErr.message}`);
       else if (data.user && !data.user.email_confirmed_at) {
         show("⚠ Admin එක හැදුණා — නමුත් Supabase \"Confirm email\" ON නිසා login නැවතෙනවා! Dashboard: Authentication → Providers → Email → Confirm email OFF කරන්න");
@@ -135,6 +137,7 @@ export default function AdminAdministratorsPage() {
     const sb = await authedClient();
     // ✅ පළවෙන් RPC — profile + login account දෙකම මකනවා (SQL function එක තියෙනවා නම්)
     const { error: rpcErr } = await sb.rpc("delete_admin", { uid: r.id });
+    void logActivity("DELETE", `administrator removed — ${r.full_name} (${r.role}) + login account`);
     if (!rpcErr) {
       await load();
       show("✅ Removed — login account එකත් ඉවත් කළා");

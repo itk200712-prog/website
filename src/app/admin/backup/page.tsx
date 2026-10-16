@@ -15,6 +15,7 @@ import { authedClient } from "@/lib/supabase/client";
 import {
   generateBackupSql, getBackupSecrets, parseBackupSql, restoreBackup, setBackupSecret,
 } from "@/lib/backup";
+import { logActivity } from "@/lib/activity";
 
 export default function AdminBackupPage() {
   const { show, node } = useNotice();
@@ -57,6 +58,7 @@ export default function AdminBackupPage() {
       a.download = `mpcs-backup-${new Date().toISOString().slice(0, 10)}.sql`;
       a.click();
       URL.revokeObjectURL(a.href);
+      void logActivity("BACKUP_DOWNLOAD", `Full-site .sql backup generated & downloaded (${a.download})`);
       setAnim({ pct: 100, msg: "Backup downloaded ✅", done: true });
       setTimeout(() => setAnim(null), 1800);
     } catch (e) {
@@ -79,6 +81,7 @@ export default function AdminBackupPage() {
       if (!inserts.length) throw new Error("backup file එකේ INSERT rows නෑ");
       const { restored, errors } = await restoreBackup(inserts, (msg, pct) => setAnim({ pct, msg, done: false }));
       const total = Object.values(restored).reduce((a, b) => a + b, 0);
+      void logActivity("BACKUP_IMPORT", `${file.name} — restored ${Object.keys(restored).length} tables / ${total} rows`);
       setAnim({ pct: 100, msg: `Restored ${total} rows ✅`, done: true });
       setTimeout(() => setAnim(null), 2200);
       show(errors.length ? `⚠ Restored with ${errors.length} issue(s): ${errors[0]}` : `✅ සියල්ල restore කළා — ${Object.keys(restored).length} tables, ${total} rows`);
@@ -184,6 +187,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
                   if (!newDl.trim()) return show("⚠ අලුත් password එකක් දෙන්න");
                   const err = await setBackupSecret("backup_download_password", newDl.trim());
                   if (err) return show(`⚠ ${err}`);
+                  void logActivity("PASSWORD_CHANGE", "Backup DOWNLOAD password changed");
                   setSecrets((s) => (s ? { ...s, download: newDl.trim() } : s));
                   setNewDl("");
                   show("✅ Download password එක වෙනස් කළා");
@@ -206,6 +210,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
                   if (!newIm.trim()) return show("⚠ අලුත් password එකක් දෙන්න");
                   const err = await setBackupSecret("backup_import_password", newIm.trim());
                   if (err) return show(`⚠ ${err}`);
+                  void logActivity("PASSWORD_CHANGE", "Backup IMPORT password changed");
                   setSecrets((s) => (s ? { ...s, importPw: newIm.trim() } : s));
                   setNewIm("");
                   show("✅ Import password එක වෙනස් කළා");

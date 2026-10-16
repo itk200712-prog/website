@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, Eye, EyeOff, Lock, LogIn, MessageCircle, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
+import { logActivity } from "@/lib/activity";
 import { loginWithNic } from "@/lib/auth";
 
 export default function SignInPage() {
@@ -28,6 +29,7 @@ export default function SignInPage() {
       setError(err);
       return;
     }
+    if (role === "superadmin" || role === "admin") await logActivity("LOGIN", `logged in as ${role} (NIC: ${String(fd.get("nic"))})`);
     window.location.href = role === "superadmin" || role === "admin" ? "/admin" : "/dashboard";
   }
 

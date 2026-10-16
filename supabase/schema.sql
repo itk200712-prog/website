@@ -681,3 +681,22 @@ create policy fuel_stock_select on public.fuel_stock for select
 drop policy if exists fuel_stock_write on public.fuel_stock;
 create policy fuel_stock_write on public.fuel_stock for all using (public.is_admin()) with check (public.is_admin());
 insert into public.system_settings (key, value) values ('fuel_contact_phone', '') on conflict (key) do nothing;
+
+-- ===========================================================================
+-- 15. Admin Activities — See Log (සියලුම admin ක්‍රියා සටහන්)
+-- ===========================================================================
+create table if not exists public.admin_activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  actor text default '',
+  actor_role text default '',
+  action text not null,
+  detail text default '',
+  created_at timestamptz default now()
+);
+alter table public.admin_activity_logs enable row level security;
+drop policy if exists activity_admin_read on public.admin_activity_logs;
+create policy activity_admin_read on public.admin_activity_logs for select using (public.is_admin());
+drop policy if exists activity_insert on public.admin_activity_logs;
+create policy activity_insert on public.admin_activity_logs for insert with check (public.is_admin());
+drop policy if exists activity_admin_write on public.admin_activity_logs;
+create policy activity_admin_write on public.admin_activity_logs for all using (public.is_admin()) with check (public.is_admin());

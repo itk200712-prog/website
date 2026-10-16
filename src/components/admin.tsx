@@ -9,8 +9,20 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut,
-  Mail, Megaphone, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X, Save } from "lucide-react";
+  Mail, Megaphone, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X, Save, Activity } from "lucide-react";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { logActivity } from "@/lib/activity";
+
+function brief(v: Record<string, unknown>): string {
+  try {
+    return Object.entries(v)
+      .map(([k, x]) => `${k}=${String(x ?? "").slice(0, 40)}`)
+      .join(", ")
+      .slice(0, 300);
+  } catch {
+    return "";
+  }
+}
 
 /* --------------------------------------------------------------- sidebar -- */
 const NAV = [
@@ -29,10 +41,11 @@ const NAV = [
   { href: "/admin/f28", label: "F28", icon: Lock, badge: "", key: "f28" },
   { href: "/admin/settings", label: "System Settings", icon: Settings, badge: "", key: "settings" },
   { href: "/admin/backup", label: "Backup & Restore", icon: Save, badge: "SUPER", key: "backup" },
+  { href: "/admin/activities", label: "Activities", icon: Activity, badge: "", key: "activities" },
 ];
 
 /** section keys ලෙස භාවිතා වේ (administrators page එකෙන් grant කරයි) */
-export const SECTION_KEYS = NAV.map((n) => n.key).filter((k) => k !== "dashboard" && k !== "profile" && k !== "backup");
+export const SECTION_KEYS = NAV.map((n) => n.key).filter((k) => k !== "dashboard" && k !== "profile" && k !== "backup" && k !== "activities");
 
 export function AdminSidebar() {
   const path = usePathname();
@@ -60,6 +73,7 @@ export function AdminSidebar() {
 
   const items = NAV.filter((n) => {
     if (n.key === "backup") return isSuper; // superadmin only — never grantable
+    if (n.key === "activities") return true; // සියලුම admins ලට පෙනේ (superadmin + section admins)
     return !allowed || allowed.length === 0 || n.key === "dashboard" || n.key === "profile" || allowed.includes(n.key);
   });
 
@@ -186,6 +200,7 @@ export async function dbInsert(table: string, row: Record<string, unknown>): Pro
     const { data, error } = await (await authedClient()).from(table).insert(row).select("*");
     if (error) return error.message;
     if (!data || data.length === 0) return "row save වුණේ නෑ — login/permission පරීක්ෂා කරන්න";
+    void logActivity("INSERT", `${table} — ${brief(row)}`);
     return null;
   } catch (e) {
     return String(e);
@@ -204,6 +219,7 @@ export async function dbUpdate(
     const { data, error } = await q.select("*");
     if (error) return error.message;
     if (!data || data.length === 0) return "rows 0ක් update වුණා — login/permission පරීක්ෂා කරන්න";
+    void logActivity("UPDATE", `${table} — set ${brief(patch)} where ${brief(match)}`);
     return null;
   } catch (e) {
     return String(e);
@@ -219,6 +235,7 @@ export async function dbUpsert(
   if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
   try {
     const { error } = await (await authedClient()).from(table).upsert(row, { onConflict });
+    if (!error) void logActivity("UPSERT", `${table} — ${brief(row)}`);
     return error ? error.message : null;
   } catch (e) {
     return String(e);
@@ -233,6 +250,7 @@ export async function dbDelete(table: string, match: Record<string, unknown>): P
     const { data, error } = await q.select("*");
     if (error) return error.message;
     if (!data || data.length === 0) return "delete වුණේ නෑ — row එක හමු නොවුණා/permission නෑ";
+    void logActivity("DELETE", `${table} — where ${brief(match)}`);
     return null;
   } catch (e) {
     return String(e);
