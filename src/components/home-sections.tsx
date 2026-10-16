@@ -42,6 +42,7 @@ const HOME_COPY = {
     boardBadge: "පාලනය සහ නායකත්වය",
     boardTitle: "අධ්‍යක්ෂ මණ්ඩලය",
     boardSub: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතියේ උපායමාර්ගික පාලනය සහ පරිපාලන නායකත්වය.",
+    officersTitle: "නිල සාමාජිකයින් · පරිපාලන නිලධාරීන්",
     all: "සියල්ල බලන්න →",
     statMembers: "සාමාජිකයින්",
     statVoters: "ඡන්ද දායකයින්",
@@ -94,6 +95,7 @@ const HOME_COPY = {
     boardTitle: "Board of Directors",
     boardSub:
       "Strategic governance and administrative leadership of the Panduwasnuwara New Multi Purpose Co-Operative Society.",
+    officersTitle: "Official Members · Administrative Officers",
     all: "View All →",
     statMembers: "Members",
     statVoters: "Eligible Voters",
@@ -165,7 +167,7 @@ export function HomeSections({
       <section className="hero-dark relative overflow-hidden text-white">
         <HeroSlideshow images={settings.hero_images} />
         <div className="hero-overlay" />
-        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-40 sm:pb-56 min-h-[82vh] flex flex-col justify-center">
           <h1 className="text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl">{t.brandFull}</h1>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -194,22 +196,47 @@ export function HomeSections({
         </div>
       </section>
 
-      {/* ================= BOARD ================= */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
-        <SectionHead
-          badge={c.boardBadge}
-          title={c.boardTitle}
-          sub={c.boardSub}
-          right={
-            <Link href={L("/board")} className="btn btn-outline">
-              {c.all}
-            </Link>
-          }
-        />
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {board.slice(0, 3).map((p) => (
-            <PersonCard key={`${p.order}-${p.name_en}`} person={p} />
-          ))}
+      {/* ================= BOARD — hero photo එකේ යට කොටස උඩින් floating ================= */}
+      <section className="relative z-40 -mt-24 sm:-mt-32 max-w-7xl mx-auto px-4 sm:px-6 pb-16">
+        <div className="rounded-3xl bg-white shadow-2xl border border-slate-200 p-6 sm:p-10">
+          <SectionHead
+            badge={c.boardBadge}
+            title={c.boardTitle}
+            sub={c.boardSub}
+            right={
+              <Link href={L("/board")} className="btn btn-outline">
+                {c.all}
+              </Link>
+            }
+          />
+          {/* සියලුම අධ්‍යක්ෂවරුන් — යටට යන්න ලැයිස්තුවක්, details එක්ක */}
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {board
+              .filter((p) => p.category !== "officer")
+              .map((p) => (
+                <PersonCard key={`${p.order}-${p.name_en}`} person={p} />
+              ))}
+          </div>
+
+          {/* Official Members — Administrative Officers (නිලධාරීන්) */}
+          {board.some((p) => p.category === "officer") && (
+            <div className="mt-10">
+              <div className="flex items-center gap-4">
+                <div className="h-px flex-1 bg-slate-200" />
+                <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-indigo-700 text-center">
+                  {c.officersTitle}
+                </div>
+                <div className="h-px flex-1 bg-slate-200" />
+              </div>
+              <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {board
+                  .filter((p) => p.category === "officer")
+                  .map((p) => (
+                    <PersonCard key={`${p.order}-${p.name_en}`} person={p} />
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
