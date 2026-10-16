@@ -134,9 +134,19 @@ export default function AdminMembersPage() {
                           className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-600"
                           onClick={async () => {
                             setRows((rs) => rs.filter((x) => x.id !== r.id));
-                            const err = await dbDelete("profiles", r.id ? { id: r.id } : { nic: r.nic });
+                            // ✅ delete_admin RPC — profile + login account දෙකම මකනවා
+                            let err: string | null = null;
+                            if (r.id) {
+                              const sb = await authedClient();
+                              const { error: rpcErr } = await sb.rpc("delete_admin", { uid: r.id });
+                              if (rpcErr) err = await dbDelete("profiles", { id: r.id });
+                            } else {
+                              err = await dbDelete("profiles", { nic: r.nic });
+                            }
                             await load();
-                            show(err ? `⚠ ${err}` : "✅ Deleted");
+                            show(err
+                              ? `⚠ ${err} — Supabase SQL Editor එකේ delete_admin function එක run කරලා නැත්නම් ඒක දාන්න`
+                              : "✅ Deleted — login account එකත් ඉවත් කළා");
                           }}
                         >
                           <Trash2 size={14} />
