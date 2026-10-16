@@ -394,19 +394,3 @@ body {
 }
 .btn-amber:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
-
-/* ---- animated dots decoration (board cards) ---- */
-.dots-a {
-  animation: dotsPulseA 2.2s ease-in-out infinite;
-}
-.dots-b {
-  animation: dotsPulseB 2.2s ease-in-out infinite;
-}
-@keyframes dotsPulseA {
-  0%, 100% { opacity: 0.18; transform: translateY(0); }
-  50% { opacity: 0.55; transform: translateY(-1px); }
-}
-@keyframes dotsPulseB {
-  0%, 100% { opacity: 0.95; transform: translateY(0); }
-  50% { opacity: 0.35; transform: translateY(1px); }
-}

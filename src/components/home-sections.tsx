@@ -785,26 +785,6 @@ function BoardGlassCard({ person, onOpen }: { person: BoardMember; onOpen: (p: B
       onClick={() => onOpen(person)}
       className={`group text-left ${GLASS} p-5 relative overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:bg-white/75 hover:shadow-[0_28px_60px_-18px_rgba(15,23,42,0.35)] cursor-pointer`}
     >
-      {/* animated dots decoration */}
-      <svg
-        className="absolute -top-1 -right-1 w-12 h-12 pointer-events-none"
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        aria-hidden
-      >
-        <g fill="currentColor" opacity="0.4" className="dots-a text-indigo-500">
-          <path d="m12,3C7.04,3,3,7.04,3,12s4.04,9,9,9,9-4.04,9-9S16.96,3,12,3Zm-5.25,12.25c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Zm.5-3.5c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Zm2.5,6.5c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Zm.5-3.5c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Zm3,3c-.55,0-1-.45-1-1s.45-1,1-1,1,.45,1,1-.45,1-1,1Z" />
-        </g>
-        <g fill="currentColor" opacity="1" className="dots-b text-indigo-600">
-          <path d="M7.25 9.75A1 1 0 1 0 7.25 11.75 1 1 0 1 0 7.25 9.75z" />
-          <path d="M9.75 16.25A1 1 0 1 0 9.75 18.25 1 1 0 1 0 9.75 16.25z" />
-          <path d="M10.25 12.75A1 1 0 1 0 10.25 14.75 1 1 0 1 0 10.25 12.75z" />
-          <path d="M6.75 13.25A1 1 0 1 0 6.75 15.25 1 1 0 1 0 6.75 13.25z" />
-          <path d="M13.25 15.75A1 1 0 1 0 13.25 17.75 1 1 0 1 0 13.25 15.75z" />
-        </g>
-      </svg>
       <div className="relative mx-auto w-24 h-24 rounded-2xl overflow-hidden ring-2 ring-white/80 shadow-lg bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center">
         {person.photo ? (
           // eslint-disable-next-line @next/next/no-img-element
