@@ -8,7 +8,7 @@ import { SectionHead } from "@/components/site-sections";
 import { BusinessCard } from "@/components/home-client";
 import { getBusinesses } from "@/lib/data";
 
-export const metadata = { title: "Businesses | Panduwasnuwara New MPCS" };
+export const metadata = { title: "Businesses | Panduwasnuwara MPCS" };
 
 export default async function BusinessesPage() {
   const businesses = await getBusinesses();

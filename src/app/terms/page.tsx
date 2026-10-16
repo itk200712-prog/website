@@ -5,7 +5,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { headers } from "next/headers";
 import Link from "next/link";
 
-export const metadata = { title: "Terms of Service | Panduwasnuwara New MPCS" };
+export const metadata = { title: "Terms of Service | Panduwasnuwara MPCS" };
 
 const CONTENT = {
   en: {

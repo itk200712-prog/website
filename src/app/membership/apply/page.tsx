@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { ApplyForm } from "@/components/apply-form";
 
-export const metadata = { title: "Apply for Membership | Panduwasnuwara New MPCS" };
+export const metadata = { title: "Apply for Membership | Panduwasnuwara MPCS" };
 
 export default function ApplyPage() {
   return (

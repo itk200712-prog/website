@@ -5,7 +5,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { headers } from "next/headers";
 import Link from "next/link";
 
-export const metadata = { title: "Privacy Policy | Panduwasnuwara New MPCS" };
+export const metadata = { title: "Privacy Policy | Panduwasnuwara MPCS" };
 
 const CONTENT = {
   en: {

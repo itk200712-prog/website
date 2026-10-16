@@ -6,7 +6,7 @@ import { ContactInfoCard } from "@/components/contact-info";
 import { InquiryForm } from "@/components/site-sections";
 import { Suspense } from "react";
 
-export const metadata = { title: "Contact Us | Panduwasnuwara New MPCS" };
+export const metadata = { title: "Contact Us | Panduwasnuwara MPCS" };
 
 export default async function ContactPage({ searchParams }: { searchParams: Promise<{ dept?: string }> }) {
   const { dept } = await searchParams;

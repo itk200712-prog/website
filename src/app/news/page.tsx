@@ -5,7 +5,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { NewsList } from "@/components/news-client";
 import { getNews } from "@/lib/data";
 
-export const metadata = { title: "News & Notices | Panduwasnuwara New MPCS" };
+export const metadata = { title: "News & Notices | Panduwasnuwara MPCS" };
 
 export default async function NewsPage() {
   const news = await getNews();

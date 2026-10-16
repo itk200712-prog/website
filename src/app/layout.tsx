@@ -15,8 +15,7 @@ const sinhala = Noto_Sans_Sinhala({
 });
 
 export const metadata: Metadata = {
-  title:
-    "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය | Panduwasnuwara New Multi Purpose Co-Operative Society LTD",
+  title: "Panduwasnuwara MPCS",
   description:
     "Panduwasnuwara New Multi Purpose Co-Operative Society LTD — rural banking, consumer goods, product agencies and fuel supply under one roof. සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය.",
 };

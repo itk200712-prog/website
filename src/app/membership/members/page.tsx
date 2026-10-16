@@ -3,7 +3,7 @@ import { DirectoryTable } from "@/components/directory";
 import { getSettings } from "@/lib/data";
 
 export const metadata: Metadata = {
-  title: "Member Details — Panduwasnuwara New MPCS",
+  title: "Member Details — Panduwasnuwara MPCS",
 };
 
 // සාමාජික ලේඛනය — rows client-side generate වේ (52,964 members / 52 files)

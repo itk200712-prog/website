@@ -8,7 +8,7 @@ import { SectionHead, PersonCard } from "@/components/site-sections";
 import { BoardGroups } from "@/components/board-groups";
 import { getBoard } from "@/lib/data";
 
-export const metadata = { title: "Board of Directors | Panduwasnuwara New MPCS" };
+export const metadata = { title: "Board of Directors | Panduwasnuwara MPCS" };
 
 export default async function BoardPage() {
   const board = await getBoard();

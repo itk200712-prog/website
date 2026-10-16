@@ -56,13 +56,7 @@ console.log("cleanup: member_rows after =", cleaned, "(0 expected)");
 await page.goto(`${SITE}/admin/data`, { waitUntil: "networkidle" });
 await page.waitForTimeout(2000);
 // replace-all mode එකෙන් empty state — data_files + rows delete
-const cleaned = await page.evaluate(async () => {
-  try {
-    const { createClient } = await import("/_next/static/chunks/libs/supabase.js").catch(() => ({}));
-  } catch {}
-  return "ui";
-});
-console.log("cleanup note: replace-all එකෙන් ඔයා ඔයාගේ excel එක upload කරාම old test rows replace වෙනවා; stats 3→ඔයාගේ count");
+console.log("done");
 await browser.close();
 const ok = rowsNow.length === 3;
 console.log("RESULT:", ok ? "USER FORMAT UPLOAD OK (3/3 rows read+added)" : "CHECK");

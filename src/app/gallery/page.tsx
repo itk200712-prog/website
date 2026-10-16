@@ -5,7 +5,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { GalleryGrid } from "@/components/gallery-grid";
 import { getGallery } from "@/lib/data";
 
-export const metadata = { title: "Photo Gallery | Panduwasnuwara New MPCS" };
+export const metadata = { title: "Photo Gallery | Panduwasnuwara MPCS" };
 
 export default async function GalleryPage() {
   const items = await getGallery();
