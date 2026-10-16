@@ -64,13 +64,13 @@ export function SiteHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-[72px] gap-3">
           {/* logo */}
-          <Link href={L("/")} className="flex items-center gap-3 shrink-0">
-            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[10px] font-black tracking-wide shadow">
+          <Link href={L("/")} className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[10px] font-black tracking-wide shadow shrink-0">
               coop
             </div>
-            <div className="leading-tight">
-              <div className="font-extrabold text-white text-[11px] sm:text-[11.5px] leading-tight max-w-[300px] whitespace-nowrap" title={t.brand}>{t.brand}</div>
-              <div className="text-[9.5px] text-slate-400 tracking-wide uppercase">Panduwasnuwara New MPCS</div>
+            <div className="leading-tight min-w-0">
+              <div className="font-extrabold text-white text-[10px] sm:text-[11.5px] leading-[1.3] sm:leading-tight max-w-[190px] sm:max-w-[300px] sm:whitespace-nowrap" title={t.brand}>{t.brand}</div>
+              <div className="text-[9px] sm:text-[9.5px] text-slate-400 tracking-wide uppercase truncate">Panduwasnuwara New MPCS</div>
             </div>
           </Link>
 

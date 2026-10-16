@@ -1,9 +1,18 @@
 import type { Metadata } from "next";
+import { Inter, Noto_Sans_Sinhala } from "next/font/google";
 import { FloatingLang } from "@/components/floating-lang";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
 import type { Lang } from "@/lib/types";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const sinhala = Noto_Sans_Sinhala({
+  subsets: ["sinhala"],
+  variable: "--font-sinhala",
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800", "900"],
+});
 
 export const metadata: Metadata = {
   title:
@@ -19,16 +28,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const lang: Lang = raw === "si" ? "si" : "en"; // default = English
   return (
     <html lang={lang}>
-      <head>
-        {/* භාෂාව අනුව fonts: English = Inter · සිංහල = Noto Sans Sinhala */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Sinhala:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body>
+      <body className={`${inter.variable} ${sinhala.variable}`}>
         <LanguageProvider initialLang={lang}>
           {children}
           <FloatingLang />

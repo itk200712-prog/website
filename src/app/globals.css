@@ -19,6 +19,7 @@
 }
 
 html {
+  overflow-x: clip;
   scroll-behavior: smooth;
 }
 
@@ -26,7 +27,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   /* භාෂාව අනුව fonts: English = Inter · සිංහල = Noto Sans Sinhala */
-  font-family: "Inter", "Iskoola Pota", "Noto Sans Sinhala", sans-serif;
+  font-family: var(--font-inter), "Iskoola Pota", var(--font-sinhala), "Noto Sans Sinhala", sans-serif;
 }
 
 /* Section badge: │ LABEL */
