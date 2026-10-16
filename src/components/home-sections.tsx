@@ -208,7 +208,7 @@ export function HomeSections({
         />
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {board.slice(0, 3).map((p) => (
-            <PersonCard key={p.order} person={p} />
+            <PersonCard key={`${p.order}-${p.name_en}`} person={p} />
           ))}
         </div>
       </section>

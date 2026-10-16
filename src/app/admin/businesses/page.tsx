@@ -31,11 +31,9 @@ export default function AdminBusinessesPage() {
   const [mgrRows, setMgrRows] = useState<Array<{ role_en: string; role_si: string; name: string; location: string; phone: string }>>([]);
   const [coverPreview, setCoverPreview] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
-  const [uploadTarget, setUploadTarget] = useState<"logo" | "cover" | null>(null);
   const [addLogo, setAddLogo] = useState("");
   const logoRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // ✅ DB එකෙන් load — add/edit/delete refresh වලදී නැති වෙන්නෑ
   useEffect(() => {
@@ -78,23 +76,15 @@ export default function AdminBusinessesPage() {
     "Main Logo": "/images/sections/gold-loan.png",
   };
 
-  const pickUpload = (target: "logo" | "cover") => {
-    setUploadTarget(target);
-    fileRef.current?.click();
-  };
-
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f || !uploadTarget) return;
+  // ✅ board එකේ වගේම proven pattern — button එකේම file input එක (hidden ref නෑ)
+  const doUpload = async (target: "logo" | "cover", f: File) => {
     show("⏳ Image එක upload වෙමින්...");
-    const res = await uploadSiteImage(f, uploadTarget === "logo" ? "businesses" : "covers");
+    const res = await uploadSiteImage(f, target === "logo" ? "businesses" : "covers");
     if (res && res.url) {
-      if (uploadTarget === "logo" && logoRef.current) {
-        logoRef.current.value = res.url;
+      if (target === "logo") {
+        if (logoRef.current) logoRef.current.value = res.url;
         setLogoPreview(res.url);
-      }
-      if (uploadTarget === "cover") {
+      } else {
         if (coverRef.current) coverRef.current.value = res.url;
         setCoverPreview(res.url);
       }
@@ -321,7 +311,6 @@ export default function AdminBusinessesPage() {
         </div>
       )}
 
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
 
       {/* ============================================================ MODALS */}
       {editFor && (
@@ -445,7 +434,9 @@ export default function AdminBusinessesPage() {
                   </div>
                 )}
                 <input ref={logoRef} name="logo" className="field flex-1" defaultValue={editFor.logo} placeholder="/images/sections/... or https://..." onChange={(e) => setLogoPreview(e.target.value)} />
-                <button type="button" className="btn btn-outline" onClick={() => pickUpload("logo")}>⬆ Upload from Device</button>
+                <label className="btn btn-outline cursor-pointer">⬆ Upload from Device
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void doUpload("logo", f); }} />
+                </label>
               </div>
               <div className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mt-3">Or quick pick existing preset:</div>
               <div className="flex flex-wrap gap-1.5 mt-2">
@@ -467,7 +458,9 @@ export default function AdminBusinessesPage() {
               </div>
               <div className="flex gap-2.5 mt-3">
                 <input ref={coverRef} name="cover" className="field flex-1" placeholder="/images/gallery/... or https://..." defaultValue={editFor.cover ?? ""} onChange={(e) => setCoverPreview(e.target.value)} />
-                <button type="button" className="btn btn-outline" onClick={() => pickUpload("cover")}>⬆ Upload Cover Photo</button>
+                <label className="btn btn-outline cursor-pointer">⬆ Upload Cover Photo
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void doUpload("cover", f); }} />
+                </label>
               </div>
             </div>
 

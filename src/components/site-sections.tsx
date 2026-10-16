@@ -129,8 +129,13 @@ export function PersonCard({ person }: { person: BoardMember }) {
   return (
     <div className="card card-hover p-6 flex flex-col">
       <div className="flex items-start gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-700 flex items-center justify-center text-xl font-black shrink-0">
-          {person.name_en.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-700 flex items-center justify-center text-xl font-black shrink-0 overflow-hidden">
+          {person.photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={person.photo} alt={person.name_en} className="w-full h-full object-cover" />
+          ) : (
+            person.name_en.split(" ").map((w) => w[0]).slice(0, 2).join("")
+          )}
         </div>
         <div className="min-w-0">
           <span className={`${pill[person.category].cls} inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold`}>
