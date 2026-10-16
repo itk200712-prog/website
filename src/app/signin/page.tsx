@@ -30,7 +30,7 @@ export default function SignInPage() {
       return;
     }
     if (role === "superadmin" || role === "admin") await logActivity("LOGIN", `logged in as ${role} (NIC: ${String(fd.get("nic"))})`);
-    window.location.href = role === "superadmin" || role === "admin" ? "/admin" : "/dashboard";
+    window.location.href = role === "superadmin" || role === "admin" ? "/admin" : "/";
   }
 
   return (

@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck, Lock } from "lucide-react";
+import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck, Lock, LogOut, ChevronDown as ChevDown } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { BUSINESSES } from "@/lib/seed";
@@ -18,6 +18,8 @@ export function SiteHeader() {
   const [open, setOpen] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
   const [f28, setF28] = useState(false);
+  const [me, setMe] = useState<{ name: string } | null>(null);
+  const [meOpen, setMeOpen] = useState(false);
 
   // F28: authenticate කරපු members ලට පමණයි header එකේ පේන්නේ
   useEffect(() => {
@@ -27,6 +29,8 @@ export function SiteHeader() {
         const sb = await authedClient();
         const { data: u } = await sb.auth.getUser();
         if (!u?.user) return;
+        const { data: prof } = await sb.from("profiles").select("full_name").eq("id", u.user.id).maybeSingle();
+        if (alive) setMe({ name: prof?.full_name || u.user.email || "Profile" });
         const { data } = await sb.from("f28_members").select("status").eq("user_id", u.user.id).maybeSingle();
         if (alive && data && data.status === "active") setF28(true);
       } catch { /* not logged in */ }
@@ -175,12 +179,46 @@ export function SiteHeader() {
 
           <div className="flex items-center gap-2">
             {/* language switcher (professional) */}
-            <Link href={L("/register")} className="hidden sm:inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white/10 text-white font-bold border border-white/25 hover:bg-white/20 transition">
-              <UserRound size={14} /> {t.nav.register}
-            </Link>
-            <Link href={L("/signin")} className="inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white text-slate-900 font-bold hover:bg-slate-100 transition">
-              <UserRound size={14} /> {t.nav.signin}
-            </Link>
+            {me ? (
+              <div className="relative">
+                <button
+                  className="inline-flex items-center gap-2 !py-2 !px-3.5 !text-[12.5px] rounded-full bg-white/10 text-white font-bold border border-white/25 hover:bg-white/20 transition"
+                  onClick={() => setMeOpen(!meOpen)}
+                >
+                  <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-900 flex items-center justify-center text-[11px] font-black">
+                    {me.name.trim().charAt(0).toUpperCase()}
+                  </span>
+                  <span className="max-w-[110px] truncate">{me.name}</span>
+                  <ChevDown size={13} />
+                </button>
+                {meOpen && (
+                  <div className="absolute right-0 mt-2 w-48 card p-1.5 shadow-xl z-50">
+                    <Link href={L("/dashboard")} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 text-[12.5px] font-bold text-slate-800" onClick={() => setMeOpen(false)}>
+                      <UserRound size={14} /> Profile
+                    </Link>
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-rose-50 text-[12.5px] font-bold text-rose-600"
+                      onClick={async () => {
+                        const sb = await authedClient();
+                        await sb.auth.signOut();
+                        window.location.href = L("/");
+                      }}
+                    >
+                      <LogOut size={14} /> Log Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <Link href={L("/register")} className="hidden sm:inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white/10 text-white font-bold border border-white/25 hover:bg-white/20 transition">
+                  <UserRound size={14} /> {t.nav.register}
+                </Link>
+                <Link href={L("/signin")} className="inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white text-slate-900 font-bold hover:bg-slate-100 transition">
+                  <UserRound size={14} /> {t.nav.signin}
+                </Link>
+              </>
+            )}
             <button className="lg:hidden p-2 rounded-lg border border-slate-200" onClick={() => setMobile(!mobile)}>
               {mobile ? <X size={20} /> : <Menu size={20} />}
             </button>
@@ -202,10 +240,23 @@ export function SiteHeader() {
             ["/news", t.nav.news],
             ...(f28 ? ([["/dashboard/f28", "F28"]] as [string, string][]) : []),
             ["/contact", t.nav.contact],
-            ["/signin", t.nav.signin],
-            ["/register", t.nav.register],
+            ...(me ? ([["/dashboard", "Profile"], ["/logout", "Log Out"]] as [string, string][]) : ([["/signin", t.nav.signin], ["/register", t.nav.register]] as [string, string][])),
           ].map(([href, label]) => (
-            <Link key={href} href={href} className="px-3 py-2.5 rounded-lg hover:bg-slate-50" onClick={() => setMobile(false)}>
+            <Link
+              key={href}
+              href={href === "/logout" ? "#" : href}
+              className="px-3 py-2.5 rounded-lg hover:bg-slate-50"
+              onClick={async (e) => {
+                if (href === "/logout") {
+                  e.preventDefault();
+                  const sb = await authedClient();
+                  await sb.auth.signOut();
+                  window.location.href = L("/");
+                  return;
+                }
+                setMobile(false);
+              }}
+            >
               {label}
             </Link>
           ))}
