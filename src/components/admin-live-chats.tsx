@@ -57,7 +57,10 @@ export function AdminLiveChats() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
   const activeKey = active?.session_key ?? "";
+  // sessions list එකෙන් live status ගන්නවා (join වුණාම header එක update වේ)
+  const current = sessions.find((x) => x.session_key === activeKey) ?? active;
 
   // admin ගේ නම
   useEffect(() => {
@@ -117,8 +120,9 @@ export function AdminLiveChats() {
 
   // scroll to bottom
   useEffect(() => {
+    if (!autoScroll) return;
     boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight, behavior: "smooth" });
-  }, [msgs]);
+  }, [msgs, autoScroll]);
 
   async function openSession(s: Session) {
     setActive(s);
@@ -279,16 +283,16 @@ export function AdminLiveChats() {
                 <UserRound size={15} />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[12px] font-extrabold text-slate-900 truncate">{active.visitor_name || "Guest visitor"}</div>
+                <div className="text-[12px] font-extrabold text-slate-900 truncate">{current?.visitor_name || "Guest visitor"}</div>
                 <div className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                  <Circle size={6} className={active.status === "joined" ? "fill-emerald-500 text-emerald-500" : "fill-amber-500 text-amber-500"} />
-                  {active.status === "joined" ? `Connected · ${active.agent_name || me.name}` : active.status === "closed" ? "Closed" : "Waiting"}
+                  <Circle size={6} className={current?.status === "joined" ? "fill-emerald-500 text-emerald-500" : "fill-amber-500 text-amber-500"} />
+                  {current?.status === "joined" ? `Connected · ${current.agent_name || me.name}` : current?.status === "closed" ? "Closed" : "Waiting"}
                   {" · "}
-                  {new Date(active.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  {new Date(current?.created_at ?? Date.now()).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </div>
               </div>
-              {active.visitor_phone && (
-                <a href={`tel:${active.visitor_phone.replace(/\s/g, "")}`} className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center hover:bg-emerald-100" title="Call">
+              {current?.visitor_phone && (
+                <a href={`tel:${current.visitor_phone.replace(/\s/g, "")}`} className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center hover:bg-emerald-100" title="Call">
                   <Phone size={12} />
                 </a>
               )}
@@ -298,7 +302,15 @@ export function AdminLiveChats() {
             </div>
 
             {/* messages */}
-            <div ref={boxRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-slate-50 min-h-0">
+            <div
+              ref={boxRef}
+              onScroll={() => {
+                const el = boxRef.current;
+                if (!el) return;
+                setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 90);
+              }}
+              className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-slate-50 min-h-0"
+            >
               {msgs.length === 0 && <div className="text-center text-[11px] text-slate-400 py-6">messages නෑ</div>}
               {msgs.map((m) =>
                 m.sender === "system" ? (
