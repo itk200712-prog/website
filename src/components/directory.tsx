@@ -88,21 +88,34 @@ export function DirectoryTable({
   const [loading, setLoading] = useState(true);
 
   // ✅ REAL uploaded data පමණයි — demo rows නෑ. member_no අනුව ස්වාභාවික අනුපිළිවෙල (1/01 සිට).
+  //    ලොකු data (50,000+ පේළි) සඳහා progressive load — පළමු batch එකෙන් පස්සේ ම පෙන්වනවා.
   useEffect(() => {
     let alive = true;
     (async () => {
       const table = kind === "member" ? "member_rows" : "voter_rows";
-      const rows = await fetchAllRows(table);
-      rows.sort(
-        (a, b) =>
-          cmpNat((a.member_no ?? a.voter_no ?? "") as string, (b.member_no ?? b.voter_no ?? "") as string) ||
-          String(a.file_name || "").localeCompare(String(b.file_name || ""))
-      );
       const sb = createAnonClient();
+      // 1) file list මුලින් — ගණන ක්ෂණිකව පෙන්වන්න
       const { data: fl } = await sb.from("data_files").select("file_name, rows").eq("kind", kind);
       if (!alive) return;
-      setAllRows(rows);
       setFiles(((fl as unknown as DataFile[]) ?? []).map((f) => ({ ...f, rows: Number(f.rows) })));
+
+      // 2) rows batches වශයෙන් — එන තැන පෙන්වනවා
+      const acc: AnyRow[] = [];
+      const BATCH = 1000;
+      const cmp = (a: AnyRow, b: AnyRow) =>
+        cmpNat((a.member_no ?? a.voter_no ?? "") as string, (b.member_no ?? b.voter_no ?? "") as string) ||
+        String(a.file_name || "").localeCompare(String(b.file_name || ""));
+      for (let from = 0; from < 60000; from += BATCH) {
+        const { data, error } = await sb.from(table).select("*").range(from, from + BATCH - 1);
+        if (error || !alive) break;
+        const got = (data ?? []) as unknown as AnyRow[];
+        acc.push(...got);
+        acc.sort(cmp);
+        setAllRows([...acc]);
+        if (acc.length) setLoading(false); // ✅ පළමු පේළි ආපු ගමන් ම පෙන්වනවා
+        if (got.length < BATCH) break;
+      }
+      if (!alive) return;
       setLoading(false);
     })();
     return () => {
@@ -144,6 +157,8 @@ export function DirectoryTable({
 
   const from = filtered.length === 0 ? 0 : (page - 1) * perPage + 1;
   const to = Math.min(page * perPage, filtered.length);
+  const filesTotal = files.reduce((a, b) => a + Number(b.rows || 0), 0);
+  const displayTotal = allRows.length || filesTotal || totalRows;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
@@ -161,7 +176,7 @@ export function DirectoryTable({
                 <h1 className="text-[22px] sm:text-2xl font-extrabold text-white flex flex-wrap items-center gap-3 leading-tight">
                   {title}
                   <span className="rounded-full px-3.5 py-1 text-[12px] font-bold tabular-nums bg-emerald-400/15 text-emerald-300 border border-emerald-300/25">
-                    {allRows.length.toLocaleString()} {isMember ? "Members" : "Voters"}
+                    {displayTotal.toLocaleString()} {isMember ? "Members" : "Voters"}
                   </span>
                 </h1>
                 <p className="text-indigo-100/80 text-[13px] mt-1.5">{sub}</p>
@@ -195,7 +210,7 @@ export function DirectoryTable({
                 className="flex items-center gap-2.5 rounded-2xl bg-white/10 border border-white/20 text-white min-w-[220px] px-4 py-3 text-[13px] font-semibold hover:bg-white/15 transition-colors"
               >
                 <FileSpreadsheet size={16} className="text-indigo-200/80" />
-                <span className="truncate">{file === "all" ? `${t.memberPage.allFiles} (${allRows.length.toLocaleString()})` : file}</span>
+                <span className="truncate">{file === "all" ? `${t.memberPage.allFiles} (${displayTotal.toLocaleString()})` : file}</span>
                 <span className="ml-auto text-indigo-200/70 text-[10px]">{fileOpen ? "▲" : "▼"}</span>
               </button>
               {fileOpen && (
@@ -228,7 +243,7 @@ export function DirectoryTable({
                           <Layers size={13} /> {t.memberPage.allFiles}
                         </span>
                         <span className="flex items-center gap-2 text-slate-500">
-                          <span className="tabular-nums">{allRows.length.toLocaleString()}</span>
+                          <span className="tabular-nums">{displayTotal.toLocaleString()}</span>
                           {file === "all" && <Check size={13} className="text-indigo-600" />}
                         </span>
                       </button>
@@ -279,6 +294,11 @@ export function DirectoryTable({
                 : (lang === "si"
                     ? `පෙන්වන්නේ ${from.toLocaleString()}–${to.toLocaleString()} / ${filtered.length.toLocaleString()} පේළි`
                     : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${filtered.length.toLocaleString()} entries`)}
+            </span>
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 border ${allRows.length < filesTotal && filesTotal > 0 ? "bg-amber-400/15 border-amber-300/30 text-amber-200" : "bg-white/8 border-white/12 text-indigo-100/70"}`}>
+              {allRows.length < filesTotal && filesTotal > 0
+                ? `⏳ ${allRows.length.toLocaleString()} / ${filesTotal.toLocaleString()}`
+                : `✓ ${displayTotal.toLocaleString()}`}
             </span>
             {file !== "all" && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/15 border border-emerald-300/25 text-emerald-200 px-3 py-1">
