@@ -257,10 +257,10 @@ export function SiteHeader() {
               </div>
             ) : (
               <>
-                <Link href={L("/register")} className="hidden sm:inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white/10 text-white font-bold border border-white/25 hover:bg-white/20 transition">
+                <Link href={L("/register")} className="hidden sm:inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white/10 text-white font-bold border border-white/25 hover:bg-white/20 transition whitespace-nowrap shrink-0">
                   <UserRound size={14} /> {t.nav.register}
                 </Link>
-                <Link href={L("/signin")} className="hidden sm:inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white text-slate-900 font-bold hover:bg-slate-100 transition">
+                <Link href={L("/signin")} className="hidden sm:inline-flex items-center gap-1.5 !py-2 !px-4 !text-[12.5px] rounded-full bg-white text-slate-900 font-bold hover:bg-slate-100 transition whitespace-nowrap shrink-0">
                   <UserRound size={14} /> {t.nav.signin}
                 </Link>
               </>
