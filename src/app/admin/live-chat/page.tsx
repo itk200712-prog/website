@@ -47,6 +47,7 @@ export default function AdminLiveChatPage() {
   const [requests, setRequests] = useState<Msg[]>([]);
   const [tablesMissing, setTablesMissing] = useState(false);
   const [view, setView] = useState<"overview" | "chats">("overview");
+  const [chatCount, setChatCount] = useState({ active: 0, unread: 0 });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +70,10 @@ export default function AdminLiveChatPage() {
         setTablesMissing(false);
         setEvents((ev ?? []) as Event[]);
       }
+
+      const { data: cs } = await sb.from("chat_sessions").select("unread_admin,status").neq("status", "closed").limit(200);
+      const chatRows = (cs ?? []) as { unread_admin: number; status: string }[];
+      setChatCount({ active: chatRows.length, unread: chatRows.reduce((a, r) => a + (r.unread_admin || 0), 0) });
 
       const { data: msgs } = await sb
         .from("messages")
@@ -166,9 +171,12 @@ export default function AdminLiveChatPage() {
       </button>
       <button
         onClick={() => setView("chats")}
-        className={`rounded-lg px-3.5 py-1.5 text-[11.5px] font-extrabold transition ${view === "chats" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}
+        className={`relative rounded-lg px-3.5 py-1.5 text-[11.5px] font-extrabold transition ${view === "chats" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}
       >
         💬 Live Chats
+        {chatCount.unread > 0 && (
+          <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">{chatCount.unread}</span>
+        )}
       </button>
     </div>
   );
@@ -189,6 +197,25 @@ export default function AdminLiveChatPage() {
       {node}
       <AdminTopbar title="Live Chat" sub="Chat settings · usage analytics · contact requests" />
       {tabs}
+
+      {/* ── Live chat entry — පැහැදිලිවම ── */}
+      <button
+        onClick={() => setView("chats")}
+        className="mb-5 flex w-full items-center gap-3 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-600 to-fuchsia-600 px-4 py-3.5 text-left text-white shadow-lg shadow-indigo-600/20 hover:opacity-95 transition"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
+          <MessageCircle size={20} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-extrabold">Live Chats — visitor ලා සමඟ කෙලින්ම කතා කරන්න</span>
+          <span className="block text-[11px] text-indigo-100">
+            {chatCount.active} active chat{chatCount.active === 1 ? "" : "s"}
+            {chatCount.unread > 0 ? ` · ${chatCount.unread} new message${chatCount.unread === 1 ? "" : "s"}` : " · අලුත් messages නෑ"}
+          </span>
+        </span>
+        {chatCount.unread > 0 && <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-rose-600">{chatCount.unread}</span>}
+        <span className="shrink-0 text-[11.5px] font-extrabold">අරින්න →</span>
+      </button>
 
       {tablesMissing && (
         <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">

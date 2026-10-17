@@ -55,8 +55,8 @@ const ACTIONS = [
   { key: "managers", en: "Business Managers", si: "ව්‍යාපාර කළමනාකරුවන්", icon: Building2 },
   { key: "office", en: "Office Phones", si: "කාර්යාල දුරකථන", icon: PhoneCall },
   { key: "mphone", en: "Managers Phones", si: "කළමනාකරු දුරකථන", icon: Phone },
-  { key: "contact", en: "Contact Live Chat", si: "සජීවී සම්බන්ධය", icon: MessageCircle },
-  { key: "live", en: "Live Agent", si: "සජීවී නිලධාරි", icon: UserRound },
+  { key: "contact", en: "Request a Call", si: "ඇමතුමක් ඉල්ලන්න", icon: MessageCircle },
+  { key: "live", en: "Live Chat", si: "සජීවී චැට්", icon: UserRound },
 ] as const;
 
 type ActionKey = (typeof ACTIONS)[number]["key"];
@@ -762,7 +762,13 @@ export function LiveChat() {
       return;
     }
 
-    // “live chat / contact agent / officer / talk to someone” → Yes/No confirm
+    // “live chat / සජීවී චැට්” → කෙලින්ම live chat tab එකට
+    if (/^(live ?chat|live agent|සජීවී ?චැට්|සජීවී|ලයිව් ?චැට්)$/.test(n)) {
+      void runAction("live");
+      return;
+    }
+
+    // “contact agent / officer / talk to someone” → Yes/No confirm
     if (
       /(live ?chat|contact (an )?(agent|officer|person|someone)|agent|officer|human|representative|call ?back|customer (care|service)|support team|talk to (someone|somebody|a person)|සජීවී|නිලධාරි|නිලධාරී|කතා කරන්න|කතාකරන්න|සම්බන්ධ කර|සම්බන්ධකර)/.test(n)
     ) {
@@ -950,7 +956,7 @@ export function LiveChat() {
               <button onClick={() => setTab("live")} className={`relative rounded-lg py-1.5 text-[10.5px] font-bold transition ${tab === "live" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
                 <span className="inline-flex items-center gap-0.5">
                   <span className={`w-1.5 h-1.5 rounded-full ${liveStatus === "joined" ? "bg-emerald-400" : "bg-amber-300"}`} />
-                  {si ? "සජීවී" : "Live Agent"}
+                  {si ? "සජීවී චැට්" : "Live Chat"}
                 </span>
               </button>
               <button onClick={() => setTab("form")} className={`rounded-lg py-1.5 text-[10.5px] font-bold transition ${tab === "form" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
@@ -961,6 +967,21 @@ export function LiveChat() {
 
           {tab === "chat" ? (
             <>
+              {/* ── live chat entry (පැහැදිලිවම පේනවා) ── */}
+              <button
+                onClick={() => {
+                  unlockAudio();
+                  void runAction("live");
+                }}
+                className="shrink-0 w-full border-b border-emerald-100 bg-emerald-50 py-1.5 text-[10.5px] font-extrabold text-emerald-700 hover:bg-emerald-100 transition flex items-center justify-center gap-1.5"
+              >
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                </span>
+                {si ? "නිලධාරියෙක් සමඟ සජීවීව කතා කරන්න →" : "Chat live with an officer →"}
+              </button>
+
               {/* ── action bar ── */}
               <div className="shrink-0 border-b border-slate-200 bg-white px-2 py-2">
                 <div className="flex flex-wrap gap-1.5">

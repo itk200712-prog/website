@@ -233,7 +233,9 @@ export function AdminLiveChats() {
             <div className="p-6 text-center">
               <MessageCircle size={22} className="mx-auto text-slate-300" />
               <div className="mt-2 text-[11.5px] font-semibold text-slate-500">තවම live chats නෑ</div>
-              <div className="mt-1 text-[10.5px] text-slate-400">Visitor කෙනෙක් chat එකේ “Live Agent” තෝරාගෙන ලියන විට මෙතන පේනවා.</div>
+              <div className="mt-1 text-[10.5px] text-slate-400">
+                Visitor කෙනෙක් site එකේ chat එකේ <b>Live Chat</b> tab එකෙන් ලියන විට මෙතන පේනවා.
+              </div>
             </div>
           )}
           {sessions.map((s) => {
