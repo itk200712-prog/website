@@ -170,12 +170,19 @@ export async function generateBackupSql(onProgress: (msg: string, pct: number) =
     const t = BACKUP_TABLES[i];
     onProgress(`Exporting ${t.name}…`, 8 + Math.round((i / BACKUP_TABLES.length) * 40));
     try {
-      const { data, error } = await sb.from(t.name).select("*").limit(100000);
-      if (error) {
-        lines.push(`-- ⚠ ${t.name}: ${error.message}`);
-        continue;
+      // ⚠ Supabase PostgREST max-rows = 1000 — ඒ නිසා පිටු ගණනකින් කියවයි (52k+ rows සම්පූර්ණ වේ)
+      const rows: Record<string, unknown>[] = [];
+      for (let from = 0; from < 2_000_000; from += 1000) {
+        const { data, error } = await sb.from(t.name).select("*").range(from, from + 999);
+        if (error) {
+          lines.push(`-- ⚠ ${t.name}: ${error.message}`);
+          break;
+        }
+        const got = (data as Record<string, unknown>[]) ?? [];
+        rows.push(...got);
+        if (got.length < 1000) break;
       }
-      gathered.push({ name: t.name, rows: (data as Record<string, unknown>[]) ?? [] });
+      gathered.push({ name: t.name, rows });
     } catch (e) {
       lines.push(`-- ⚠ ${t.name}: ${(e as Error).message}`);
     }
