@@ -393,11 +393,6 @@ export function LiveChat() {
           push({ from: "bot", text });
           await sleep(260);
         }
-        push({
-          from: "bot",
-          text: si ? "තව විස්තර: /businesses" : "More details: /businesses",
-          chips: si ? ["කාර්යාල දුරකථන", "සජීවී සම්බන්ධය"] : ["Office Phones", "Contact Live Chat"],
-        });
       } catch {
         setTyping(false);
         push({ from: "bot", text: si ? "⚠ දත්ත ලබාගත නොහැකි විය." : "⚠ Could not load data." });
