@@ -412,6 +412,12 @@ insert into public.business_units (slug, "order", name_en, name_si, category_en,
 on conflict (slug) do nothing;
 
 -- business contacts
+-- ✅ idempotent seed: demo rows දෙපාරක් insert නොවන ලෙස unique indexes
+create unique index if not exists business_contacts_uniq on public.business_contacts (business_slug, role_en, name);
+create unique index if not exists business_services_uniq on public.business_services (business_slug, "order");
+create unique index if not exists business_branches_uniq on public.business_branches (business_slug, name);
+create unique index if not exists board_members_email_uniq on public.board_members (lower(email)) where email <> '';
+
 insert into public.business_contacts (business_slug, role_en, role_si, name, location, phone, note_en, note_si) values
 ('ristbury-tiara', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ඇම්. රණසිංහ (Manager)', 'ජයන්තිපුර මාවත, බණ්ඩාරගම පාර, හෙට්ටිපොල', '037 229 1018', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('coop-city', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ද සිල්වා (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1017', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
@@ -427,11 +433,13 @@ insert into public.business_contacts (business_slug, role_en, role_si, name, loc
 ('hemas', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ජී. කුමාර (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1017', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('fuel-station', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ජී. කුමාර (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1019', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
 ('funeral', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. සිසිර කුමාර (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1020', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('gold-loan-service', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'කළමනාකරු (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු');
+('gold-loan-service', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'කළමනාකරු (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු')
+on conflict (business_slug, role_en, name) do nothing;
 
 -- consumer regional branch
 insert into public.business_branches (business_slug, name, manager, location, phone) values
-('consumer', 'Mandapola', 'Wasantha Kumara', 'Mandapola', '037 229 2045');
+('consumer', 'Mandapola', 'Wasantha Kumara', 'Mandapola', '037 229 2045')
+on conflict (business_slug, name) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- business services (50) — key units full detail, others default template
@@ -490,7 +498,8 @@ insert into public.business_services (business_slug, "order", title_en, title_si
 ('gold-loan-service', 1, 'Gold Valuation', 'රත්‍රන් ඇගයීම', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
 ('gold-loan-service', 2, 'Instant Loan Approval', 'ක්ෂණික ණය අනුමැතිය', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
 ('gold-loan-service', 3, 'Flexible Repayment Plans', 'නම්‍යශීලී ගෙවීම් සැලසුම්', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('gold-loan-service', 4, 'Secure Jewellery Storage', 'ආරක්ෂිත ආභරණ ගබඩා කිරීම', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true);
+('gold-loan-service', 4, 'Secure Jewellery Storage', 'ආරක්ෂිත ආභරණ ගබඩා කිරීම', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true)
+on conflict (business_slug, "order") do nothing;
 
 -- ---------------------------------------------------------------------------
 -- board members (9)
@@ -504,15 +513,16 @@ insert into public.board_members ("order", category, name_en, name_si, position_
 (6, 'director', 'S. Ranjith Dharmasiri', 'එස්. රංජිත් ධර්මසිරි', 'Director', 'අධ්‍යක්ෂ', 'Higher Dip. in Accountancy (AAT)', '076 229 1016', 'member6@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
 (7, 'director', 'R.M. Chaminda Sandaruwan Rathnayake', 'ආර්.එම්. චමින්ද සන්දරුවන් රත්නායක', 'Director', 'අධ්‍යක්ෂ', 'B.Sc. Agriculture — Wayamba University', '077 229 1017', 'member7@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
 (8, 'officer', 'M.P.N.I. Gunathilake', 'එම්.පී.එන්.අයි. ගුණතිලක', 'Regional Co-op Officer', 'කලාපීය සමූපකාර නිලධාරී', 'Dip. in Public Administration', '078 229 1018', 'member8@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(9, 'officer', 'D.K.P.P.D. Dikwella', 'ඩී.කේ.පී.පී.ඩී. දික්වැල්ල', 'General Manager', 'සාමාන්‍ය කළමනාකරු', 'M.Sc. Management — University of Colombo', '079 229 1019', 'member9@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null);
+(9, 'officer', 'D.K.P.P.D. Dikwella', 'ඩී.කේ.පී.පී.ඩී. දික්වැල්ල', 'General Manager', 'සාමාන්‍ය කළමනාකරු', 'M.Sc. Management — University of Colombo', '079 229 1019', 'member9@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null)
+on conflict (lower(email)) where email <> '' do nothing;
 
 -- ---------------------------------------------------------------------------
 -- news (3)
 -- ---------------------------------------------------------------------------
 insert into public.news (id, category, badge_text, title_en, title_si, desc_en, desc_si, date, image, pinned, published) values
-('news-driver-vacancies', 'vacancy', 'Job Vacancy', 'Call for Applications: Heavy Vehicle & Logistics Driver Vacancies', 'බර වාහන හා ලොජිස්ටික් රියදුරන් බඳවා ගැනීම පිළිබඳ අයදුම්පත් කැඳවීම', 'Panduwasnuwara Multi-Purpose Co-operative Society (MPCS) invites applications from energetic, experienced, and qualified Sri Lankan citizens for the post of Heavy Vehicle & Distribution Drivers. Key Requirements: • Valid Sri Lankan Heavy Vehicle Driving License • Minimum 2 years experience • Clean driving record.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතිය (MPCS) විසින් බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි.', '2026-09-15', '/images/news/driver-vacancy.jpg', true, true),
-('news-paddy-procurement', 'notice', 'Special Notice', 'Procurement of 2026 Yala Season Paddy & Agricultural Crops at Guaranteed Prices', '2026 යල කන්නයේ වී සහ කෘෂි බෝග සහතික මිලට මිලදී ගැනීම', 'Panduwasnuwara MPCS has officially commenced direct procurement of Yala season paddy harvest and agricultural produce through designated cooperative storage centres to protect farming families against middlemen exploitation.', 'පඬුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් ආරක්ෂා කිරීම සඳහා යල කන්නයේ වී අස්වැන්න සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත.', '2026-09-15', '/images/news/paddy-procurement.jpg', false, true),
-('news-agm-48', 'notice', 'Special Notice', 'Notice of 48th Annual General Meeting & Member Dividend Distribution', '48 වන වාර්ෂික මහා සභා රැස්වීම සහ සාමාජික ලාභාංශ බෙදාහැරීම පිළිබඳ නිවේදනය', 'The 48th Annual General Meeting of the Panduwasnuwara Multi-Purpose Co-operative Society will be held at the MPCS Main Auditorium, Hettipola. Key Agenda: • Presentation of Audited Annual Financial Accounts • Member dividend distribution • Election of office bearers.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ.', '2026-09-15', '/images/news/agm-48.jpg', false, true)
+('news-driver-vacancies', 'vacancy', 'Job Vacancy', 'Call for Applications: Heavy Vehicle & Logistics Driver Vacancies', 'බර වාහන හා ලොජිස්ටික් රියදුරන් බඳවා ගැනීම පිළිබඳ අයදුම්පත් කැඳවීම', 'Panduwasnuwara Multi-Purpose Co-operative Society (MPCS) invites applications from energetic, experienced, and qualified Sri Lankan citizens for the post of Heavy Vehicle & Distribution Drivers. Key Requirements: • Valid Sri Lankan Heavy Vehicle Driving License • Minimum 2 years experience • Clean driving record.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතිය (MPCS) විසින් බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි.', '2026-09-15', '/images/news/notice.jpg', true, true),
+('news-paddy-procurement', 'notice', 'Special Notice', 'Procurement of 2026 Yala Season Paddy & Agricultural Crops at Guaranteed Prices', '2026 යල කන්නයේ වී සහ කෘෂි බෝග සහතික මිලට මිලදී ගැනීම', 'Panduwasnuwara MPCS has officially commenced direct procurement of Yala season paddy harvest and agricultural produce through designated cooperative storage centres to protect farming families against middlemen exploitation.', 'පඬුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් ආරක්ෂා කිරීම සඳහා යල කන්නයේ වී අස්වැන්න සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත.', '2026-09-15', '/images/gallery/new.jpg', false, true),
+('news-agm-48', 'notice', 'Special Notice', 'Notice of 48th Annual General Meeting & Member Dividend Distribution', '48 වන වාර්ෂික මහා සභා රැස්වීම සහ සාමාජික ලාභාංශ බෙදාහැරීම පිළිබඳ නිවේදනය', 'The 48th Annual General Meeting of the Panduwasnuwara Multi-Purpose Co-operative Society will be held at the MPCS Main Auditorium, Hettipola. Key Agenda: • Presentation of Audited Annual Financial Accounts • Member dividend distribution • Election of office bearers.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ.', '2026-09-15', '/images/gallery/agm.jpg', false, true)
 on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------

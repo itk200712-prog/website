@@ -272,7 +272,7 @@ export function HomeSections({
           {/* සියලුම සාමාජිකයින් order පිළිවෙලට — පේලියකට 4ක් */}
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {sortedBoard.map((p) => (
-              <BoardGlassCard key={`${p.order}-${p.name_en}`} person={p} onOpen={setPerson} />
+              <BoardGlassCard key={p.id ?? `${p.order}-${p.name_en}`} person={p} onOpen={setPerson} />
             ))}
           </div>
 
@@ -290,7 +290,7 @@ export function HomeSections({
               )}
               <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {officerList.map((p) => (
-                  <BoardGlassCard key={`${p.order}-${p.name_en}`} person={p} onOpen={setPerson} />
+                  <BoardGlassCard key={p.id ?? `${p.order}-${p.name_en}`} person={p} onOpen={setPerson} />
                 ))}
               </div>
             </div>

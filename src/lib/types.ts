@@ -54,6 +54,8 @@ export interface BusinessUnit {
 }
 
 export interface BoardMember {
+  /** DB primary key — duplicate order values තිබුණත් React key එක unique කරයි */
+  id?: string;
   order: number;
   category: "chairman" | "vice-chairman" | "director" | "officer";
   name_en: string;

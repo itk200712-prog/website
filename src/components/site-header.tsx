@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { SiteLogoBadge } from "@/components/site-logo";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck, Lock, LogOut, ChevronDown as ChevDown } from "lucide-react";
@@ -15,6 +16,9 @@ import { authedClient } from "@/lib/supabase/client";
 
 export function SiteHeader() {
   const { t, lang, setLang } = useLang();
+  const pathname = usePathname() ?? "/";
+  // home පිටුව: "/", "/en", "/si" (හෝ slash එකක් අගට)
+  const isHome = /^\/(en|si)?\/?$/.test(pathname);
   const L = (p: string) => `/${lang}${p === "/" ? "" : p}`;
   const [open, setOpen] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
@@ -76,8 +80,17 @@ export function SiteHeader() {
           <Link href={L("/")} className="flex items-center gap-2.5 sm:gap-3 min-w-0 shrink-0">
             <SiteLogoBadge size={44} />
             <div className="leading-tight min-w-0">
-              <div className="font-extrabold text-white text-[10px] sm:text-[11.5px] leading-[1.3] sm:leading-tight max-w-[150px] lg:max-w-[190px] xl:max-w-[260px] truncate" title={t.brand}>{t.brand}</div>
-              <div className="text-[9px] sm:text-[9.5px] text-slate-400 tracking-wide uppercase truncate">Panduwasnuwara New MPCS</div>
+              {/* ✅ home නොවන පිටුවල සම්පූර්ණ නම (කැපෙන්නේ නෑ) · පහළ පේළිය ඉවත් */}
+              <div
+                className={`font-extrabold text-white leading-tight ${
+                  isHome
+                    ? "text-[10px] sm:text-[11.5px] max-w-[150px] lg:max-w-[190px] xl:max-w-[260px] truncate"
+                    : "text-[10.5px] sm:text-[12px] max-w-[190px] sm:max-w-[260px] lg:max-w-[320px] xl:max-w-[420px]"
+                }`}
+                title={isHome ? t.brand : t.brandFull}
+              >
+                {isHome ? t.brand : t.brandFull}
+              </div>
             </div>
           </Link>
 

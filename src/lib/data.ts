@@ -66,7 +66,15 @@ export async function getBoard(): Promise<BoardMember[]> {
     const sb = createAnonClient();
     const { data, error } = await sb.from("board_members").select("*").order("order");
     if (error || !data) return BOARD;
-    return data as unknown as BoardMember[];
+    // ✅ seed දෙපාරක් run වුණත් duplicate persons site එකේ නොපෙන්වන්න (email/name අනුව unique)
+    const seen = new Set<string>();
+    const rows = (data as unknown as BoardMember[]).filter((p) => {
+      const k = (p.email || p.name_en || "").toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    return rows;
   }, BOARD);
 }
 

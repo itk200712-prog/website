@@ -175,7 +175,8 @@ export function DirectoryTable({
   const from = filtered.length === 0 ? 0 : (page - 1) * perPage + 1;
   const to = Math.min(page * perPage, filtered.length);
   const filesTotal = files.reduce((a, b) => a + Number(b.rows || 0), 0);
-  const displayTotal = allRows.length || filesTotal || totalRows;
+  // ✅ මුළු ගණන = DB/settings එකේ සැබෑ ගණන (load වෙන ගමන් වැඩි වන ගණන නෙමෙයි)
+  const displayTotal = totalRows || filesTotal || allRows.length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
@@ -294,7 +295,7 @@ export function DirectoryTable({
                         {t.memberPage.totalFiles}: <strong className="text-slate-700">{files.length || totalFiles}</strong>
                       </span>
                       <span>
-                        {t.memberPage.totalRows}: <strong className="text-slate-700">{allRows.length.toLocaleString()}</strong>
+                        {t.memberPage.totalRows}: <strong className="text-slate-700">{displayTotal.toLocaleString()}</strong>
                       </span>
                     </div>
                   </div>
@@ -309,8 +310,8 @@ export function DirectoryTable({
               {loading
                 ? (lang === "si" ? "දත්ත ලැබෙමින්…" : "Loading data…")
                 : (lang === "si"
-                    ? `පෙන්වන්නේ ${from.toLocaleString()}–${to.toLocaleString()} / ${filtered.length.toLocaleString()} පේළි`
-                    : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${filtered.length.toLocaleString()} entries`)}
+                    ? `පෙන්වන්නේ ${from.toLocaleString()}–${to.toLocaleString()} / ${(q.trim() ? filtered.length : displayTotal).toLocaleString()} පේළි`
+                    : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${(q.trim() ? filtered.length : displayTotal).toLocaleString()} entries`)}
             </span>
             <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 border ${allRows.length < filesTotal && filesTotal > 0 ? "bg-amber-400/15 border-amber-300/30 text-amber-200" : "bg-white/8 border-white/12 text-indigo-100/70"}`}>
               {allRows.length < filesTotal && filesTotal > 0
@@ -416,8 +417,8 @@ export function DirectoryTable({
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-slate-50/70 border-t border-slate-100">
           <div className="text-[12px] text-slate-500 font-medium">
             {lang === "si"
-              ? `පිටුව ${page.toLocaleString()} / ${totalPages.toLocaleString()} · පෙන්වන්නේ ${from.toLocaleString()}–${to.toLocaleString()} / ${filtered.length.toLocaleString()}`
-              : `Page ${page.toLocaleString()} / ${totalPages.toLocaleString()} · Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${filtered.length.toLocaleString()}`}
+              ? `පිටුව ${page.toLocaleString()} / ${totalPages.toLocaleString()} · පෙන්වන්නේ ${from.toLocaleString()}–${to.toLocaleString()} / ${(q.trim() ? filtered.length : displayTotal).toLocaleString()}`
+              : `Page ${page.toLocaleString()} / ${totalPages.toLocaleString()} · Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${(q.trim() ? filtered.length : displayTotal).toLocaleString()}`}
           </div>
           <div className="flex items-center gap-1.5">
             <button

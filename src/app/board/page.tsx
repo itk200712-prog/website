@@ -32,7 +32,8 @@ export default async function BoardPage() {
         <BoardGroups board={board} />
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mt-8">
           {board.map((p) => (
-            <PersonCard key={p.order} person={p} />
+            // ✅ id (DB primary key) — order/name duplicate වුණත් key එක unique
+            <PersonCard key={p.id ?? `${p.order}-${p.name_en}`} person={p} />
           ))}
         </div>
       </section>
