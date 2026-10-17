@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import {
-  ChevronRight, Clock, Fuel, Home, MapPin, Phone, Search, ShieldCheck, Star, TrendingUp, UserRound, Wallet,
+  ChevronRight, Clock, Fuel, Home, MapPin, Phone, Search, ShieldCheck, Star, TrendingUp, UserRound, 
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/i18n";
@@ -286,16 +286,6 @@ export function BusinessContacts({ b }: { b: BusinessUnit }) {
               <Star size={14} className="text-amber-500" />
               <span className="text-slate-600">Member privileges &amp; special offers available</span>
             </div>
-          </div>
-          <div className="card p-5">
-            <div className="flex items-center gap-2 text-slate-700 font-bold text-[13px]">
-              <Wallet size={15} /> Payment &amp; Valuation
-            </div>
-            <p className="text-slate-500 text-[12.5px] mt-2 leading-relaxed">
-              {lang === "si"
-                ? "මිල ගණන් සහ ගෙවීම් ක්‍රම පිළිබඳ විස්තර සඳහා අදාළ දෙපාර්තමේන්තු කළමනාකරු අමතන්න."
-                : "Contact the relevant department manager for details on prices and payment methods."}
-            </p>
           </div>
         </div>
       </div>

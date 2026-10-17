@@ -16,7 +16,7 @@ export function SectionHead({ badge, title, sub, right }: { badge: string; title
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 mb-7">
       <div>
-        <div className="section-badge mb-2">{badge}</div>
+        {badge && <div className="section-badge mb-2">{badge}</div>}
         <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">{title}</h2>
         {sub && <p className="text-slate-500 text-sm mt-1.5 max-w-2xl">{sub}</p>}
       </div>

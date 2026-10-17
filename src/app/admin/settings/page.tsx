@@ -24,6 +24,8 @@ export default function AdminSettingsPage() {
   const [loaded, setLoaded] = useState(false);
   const [socialWa, setSocialWa] = useState("");
   const [socialFb, setSocialFb] = useState("");
+  const [siteLogo, setSiteLogo] = useState("");
+  const [logoBusy, setLogoBusy] = useState(false);
 
   // DB එකෙන් saved values load කරන්න (seed නෙමෙයි!)
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function AdminSettingsPage() {
         if (g("voters_total") != null) setVotersTotal(g("voters_total")!);
         if (g("social_whatsapp") != null) setSocialWa(g("social_whatsapp")!);
         if (g("social_facebook") != null) setSocialFb(g("social_facebook")!);
+        if (g("site_logo") != null) setSiteLogo(g("site_logo")!);
         const hero = g("hero_images");
         if (hero) {
           try { const arr = JSON.parse(hero); if (Array.isArray(arr)) setHeroImages(arr); } catch { /* ignore */ }
@@ -122,6 +125,76 @@ export default function AdminSettingsPage() {
           </div>
         </section>
 
+        {/* ✅ SITE LOGO — header/footer/hero බෝලයේ පෙන්වන logo එක */}
+        <section className="border-t border-slate-100 pt-7">
+          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+            <ImageIcon size={20} className="text-fuchsia-600" /> Site Logo (Header / Footer බෝලය)
+          </h2>
+          <p className="text-slate-500 text-[12.5px] mt-1.5 leading-relaxed">
+            මෙතනින් logo image එකක් upload කළොත් header එකේ, footer එකේ සහ hero එකේ තියෙන රවුම් බෝලයේ
+            ඒ logo එක පෙන්වයි. Logo එකක් නැත්නම් කලින් වගේ <strong>coop</strong> බෝලය පෙන්වයි.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[11px] font-black shrink-0 ring-4 ring-white shadow">
+              {siteLogo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={siteLogo} alt="Site logo" className="w-full h-full object-cover" />
+              ) : (
+                "coop"
+              )}
+            </div>
+            <div className="flex-1 min-w-[240px]">
+              <label className="btn btn-outline cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={logoBusy}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    setLogoBusy(true);
+                    const { url, error } = await uploadSiteImage(file, "logo");
+                    if (error || !url) {
+                      setLogoBusy(false);
+                      show(`⚠ ${error}`);
+                      return;
+                    }
+                    setSiteLogo(url);
+                    const err = await dbUpsert("system_settings", { key: "site_logo", value: url });
+                    setLogoBusy(false);
+                    show(err ? `⚠ ${err}` : "✅ Logo එක upload වී site එකේ පෙන්වයි — Ctrl+Shift+R");
+                  }}
+                />
+                <Upload size={15} /> {logoBusy ? "Uploading…" : "Logo Upload කරන්න"}
+              </label>
+              {siteLogo && (
+                <button
+                  type="button"
+                  className="btn btn-outline ml-2 !text-rose-600 !border-rose-200 hover:!bg-rose-50"
+                  onClick={async () => {
+                    setSiteLogo("");
+                    const err = await dbUpsert("system_settings", { key: "site_logo", value: "" });
+                    show(err ? `⚠ ${err}` : "✅ Logo එක ඉවත් කළා");
+                  }}
+                >
+                  <Trash2 size={15} /> ඉවත් කරන්න
+                </button>
+              )}
+              <input
+                value={siteLogo}
+                onChange={(e) => setSiteLogo(e.target.value)}
+                className="field mt-2.5 !text-[12px]"
+                placeholder="හෝ image URL එකක් ලියන්න: https://... (Save Settings ඔබන්න)"
+              />
+            </div>
+          </div>
+          <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-[11.5px] text-amber-900 mt-3">
+            💡 Upload කළ ගමන්ම save වේ. හොඳම ප්‍රතිඵලයට <strong>500×500 ට අඩු රවුම් (square) PNG</strong> එකක් භාවිතා කරන්න.
+          </div>
+        </section>
+
         {/* hero background slideshow */}
         <section className="border-t border-slate-100 pt-7">
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
@@ -168,9 +241,12 @@ export default function AdminSettingsPage() {
                     className="w-8 h-8 rounded-lg border border-red-200 bg-white text-red-600 flex items-center justify-center"
                     onClick={async () => {
                       const src = heroImages[i];
-                      setHeroImages((xs) => xs.filter((_, j) => j !== i));
+                      const next = heroImages.filter((_, j) => j !== i);
+                      setHeroImages(next);
+                      // ✅ ඉවත් කළ ගමන් DB එකට save — site එකෙන් ක්ෂණිකව අයින් වේ
+                      const err = await dbUpsert("system_settings", { key: "hero_images", value: JSON.stringify(next) });
                       await deleteSiteImage(src); // upload කළ image එකක් නම් storage එකෙනුත් මකයි
-                      show("✅ Hero image එක ඉවත් කළා");
+                      show(err ? `⚠ ${err}` : "✅ Hero image එක ඉවත් කළා — site එකෙන් ද අයින් විය");
                     }}
                     aria-label="Delete"
                   >
@@ -200,8 +276,10 @@ export default function AdminSettingsPage() {
                     show(`⚠ ${error}`);
                     return;
                   }
-                  setHeroImages((xs) => [...xs, url!]);
-                  show("✅ Image එක upload කළා — Save Settings ඔබන්න");
+                  const next = [...heroImages, url!];
+                  setHeroImages(next);
+                  const svErr = await dbUpsert("system_settings", { key: "hero_images", value: JSON.stringify(next) });
+                  show(svErr ? `⚠ ${svErr}` : "✅ Image එක upload වී site එකේ පෙන්වයි");
                 }}
               />
               <Upload size={15} /> Upload Image
@@ -340,6 +418,7 @@ Message: Customer inquiry text...`}
                 { key: "hero_images", value: JSON.stringify(heroImages) },
                 { key: "social_whatsapp", value: socialWa },
                 { key: "social_facebook", value: socialFb },
+                { key: "site_logo", value: siteLogo },
               ];
               let err: string | null = null;
               for (const row of rows) {

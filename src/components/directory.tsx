@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Eye, FileSpreadsheet, Layers, Printer, Search, Users, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, FileSpreadsheet, Layers, Printer, Search, Users, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import type { DataFile, MemberRow, VoterRow } from "@/lib/types";
@@ -170,9 +170,7 @@ export function DirectoryTable({
   const title = isMember
     ? (lang === "si" ? "සාමාජික විස්තර (සියලු සාමාජිකයින්)" : "Member Details (All Members)")
     : (lang === "si" ? t.memberPage.votersTitle : "Eligible Voters");
-  const sub = isMember
-    ? (lang === "si" ? t.memberPage.sub : "Official registered member directory of Panduwasnuwara MPCS")
-    : (lang === "si" ? t.memberPage.votersSub : "Cooperative electoral register of eligible voters");
+  const sub = "";
   const searchPlaceholder = isMember
     ? (lang === "si" ? t.memberPage.search : "Search by Name, NIC, Member No, or File...")
     : (lang === "si" ? t.memberPage.search : "Search by Name, NIC, Voter No, or File...");
@@ -196,9 +194,6 @@ export function DirectoryTable({
         <div className="relative p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/12 border border-white/20 text-white flex items-center justify-center shadow-inner">
-                {isMember ? <Users size={26} /> : <Building2 size={26} />}
-              </div>
               <div>
                 <h1 className="text-[22px] sm:text-2xl font-extrabold text-white flex flex-wrap items-center gap-3 leading-tight">
                   {title}
@@ -206,7 +201,7 @@ export function DirectoryTable({
                     {displayTotal.toLocaleString()} {isMember ? "Members" : "Voters"}
                   </span>
                 </h1>
-                <p className="text-indigo-100/80 text-[13px] mt-1.5">{sub}</p>
+                {sub && <p className="text-indigo-100/80 text-[13px] mt-1.5">{sub}</p>}
               </div>
             </div>
             <button
@@ -473,10 +468,6 @@ export function DirectoryTable({
         </div>
       </div>
 
-      <div className="mt-4 text-[11.5px] text-slate-400 flex items-center gap-2">
-        <Download size={13} />
-        RFC-4180 CSV · Sinhala text supported (CSV UTF-8 / Excel .xlsx) · {lang === "si" ? "විස්තර බලන්න පේළියක් click කරන්න" : "Click any row to view full details"}
-      </div>
 
       {/* ═══════════════ PDF progress overlay ═══════════════ */}
       {pdfAnim && (

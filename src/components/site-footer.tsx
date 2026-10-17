@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { SiteLogoBadge } from "@/components/site-logo";
 import { MapPin, Phone, Mail, Clock, Facebook, MessageCircle, ExternalLink, ShieldCheck } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { SITE } from "@/lib/seed";
@@ -68,9 +69,7 @@ export function SiteFooter() {
           {/* identity */}
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[10px] font-black">
-                coop
-              </div>
+              <SiteLogoBadge size={44} />
               <div>
                 <div className="text-white font-bold leading-tight text-[15px]">
                   {lang === "si" ? SITE.name_si : SITE.name_en}

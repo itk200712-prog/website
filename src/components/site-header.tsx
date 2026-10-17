@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Link from "next/link";
+import { SiteLogoBadge } from "@/components/site-logo";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck, Lock, LogOut, ChevronDown as ChevDown } from "lucide-react";
 import { useLang } from "@/lib/i18n";
@@ -73,9 +74,7 @@ export function SiteHeader() {
         <div className="flex items-center justify-between h-[72px] gap-3">
           {/* logo */}
           <Link href={L("/")} className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[10px] font-black tracking-wide shadow shrink-0">
-              coop
-            </div>
+            <SiteLogoBadge size={44} />
             <div className="leading-tight min-w-0">
               <div className="font-extrabold text-white text-[10px] sm:text-[11.5px] leading-[1.3] sm:leading-tight max-w-[190px] sm:max-w-[300px] sm:whitespace-nowrap" title={t.brand}>{t.brand}</div>
               <div className="text-[9px] sm:text-[9.5px] text-slate-400 tracking-wide uppercase truncate">Panduwasnuwara New MPCS</div>

@@ -26,6 +26,7 @@ import { GallerySocial, useMe, updateItem, type Me } from "@/components/gallery-
 import type { GalleryComment } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { HeroSlideshow } from "@/components/hero-slideshow";
+import { SiteLogoBadge } from "@/components/site-logo";
 import { createClient } from "@/lib/supabase/client";
 import { SectionHead, StatCard, PersonCard } from "@/components/site-sections";
 import { HomeClientBits } from "@/components/home-client";
@@ -35,17 +36,17 @@ import type { BusinessUnit, NewsItem, BoardMember, SiteSettings, GalleryItem } f
 
 const HOME_COPY = {
   si: {
-    heroTag: "සමූපකාර ශක්තියෙන් ප්‍රජාව සවිබල ගන්වමින්",
+    heroTag: "",
     heroDesc:
-      "සාමාජික ජනතාවට විශ්වාසනීය ග්‍රාමීය බැංකු, පාරිභෝගික සහ අත්‍යවශ්‍ය සේවාවන් එකම වහලක් යටින් සපයයි.",
+      "",
     cta1: "සාමාජිකත්වයට අයදුම් කරන්න",
     cta2: "ව්‍යාපාර හා සේවා",
     estBadge: "ස්ථාපිත 1976 — විශ්වාසනීය සේවය",
     reg: "ලියාපදිංචි අංකය",
-    boardBadge: "පාලනය සහ නායකත්වය",
+    boardBadge: "",
     boardTitle: "අධ්‍යක්ෂ මණ්ඩලය",
-    boardSub: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතියේ උපායමාර්ගික පාලනය සහ පරිපාලන නායකත්වය.",
-    officersTitle: "නිල සාමාජිකයින් · පරිපාලන නිලධාරීන්",
+    boardSub: "",
+    officersTitle: "",
     all: "සියල්ල බලන්න →",
     statMembers: "සාමාජිකයින්",
     statVoters: "ඡන්ද දායකයින්",
@@ -63,18 +64,18 @@ const HOME_COPY = {
     mission: "අපගේ මෙහෙවර",
     missionText:
       "විශ්වාසදායක බැංකු සේවා, සාධාරණ වෙළෙඳාම සහ ප්‍රජා-කේන්ද්‍රීය සේවා මගින් සාමාජික ආර්ථික වර්ධනය කිරීමේ සමාජ මෙහෙවර ඉටු කරමින් ගුණාත්මක, ඵලදායී හා කාර්යක්ෂම ව්‍යාපාරයක් බවට සමූපකාරය නංවාලීම.",
-    bizBadge: "අපගේ ව්‍යාපාර අංශ",
+    bizBadge: "",
     bizTitle: "ව්‍යාපාර හා සේවා අංශ",
-    bizSub: "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය මගින් පවත්වාගෙන යනු ලබන ප්‍රධාන ව්‍යාපාරික හා ප්‍රජා සේවා අංශ.",
-    galleryBadge: "මතකයන් සහ ප්‍රජාව",
+    bizSub: "",
+    galleryBadge: "",
     galleryTitle: "ඡායාරූප ගැලරිය",
-    gallerySub: "අපගේ ශාඛා, ප්‍රජා සේවා සහ සාමාජික මෙහෙවරවල මතක මොහොත්.",
-    newsBadge: "නිල නිවේදන සහ යාවත්කාලීන",
+    gallerySub: "",
+    newsBadge: "",
     newsTitle: "පුවත් හා නිවේදන",
-    newsSub: "සමිතියේ නවතම රැකියා අවස්ථා, සාමාජික නිවේදන සහ නිල ප්‍රකාශන.",
-    contactBadge: "අප අමතන්න",
+    newsSub: "",
+    contactBadge: "",
     contactTitle: "නිල විමසුම් සහ ඇමතුම්",
-    contactSub: "අපගේ ප්‍රධාන කාර්යාල කළමනාකරණය අමතන්න හෝ ඔබේ විමසුම් සෘජුව යවන්න.",
+    contactSub: "",
     callUs: "දුරකථන",
     visitUs: "ලිපිනය",
     emailUs: "විද්‍යුත් තැපෑල",
@@ -94,7 +95,7 @@ const HOME_COPY = {
     cta2: "Explore Businesses",
     estBadge: "Est. 1976 — 50+ Years of Trust",
     reg: "Official Registration",
-    boardBadge: "Governance & Leadership",
+    boardBadge: "",
     boardTitle: "Board of Directors",
     boardSub:
       "Strategic governance and administrative leadership of the Panduwasnuwara New Multi Purpose Co-Operative Society.",
@@ -120,13 +121,13 @@ const HOME_COPY = {
     bizTitle: "Our Businesses",
     bizSub:
       "Key business and community service divisions operated by the Panduwasnuwara New Multi Purpose Co-Operative Society.",
-    galleryBadge: "Moments & Community",
+    galleryBadge: "",
     galleryTitle: "Photo Gallery",
     gallerySub: "Capturing our branches, community services, and cooperative member milestones.",
-    newsBadge: "Official Notices & Updates",
+    newsBadge: "",
     newsTitle: "News & Announcements",
     newsSub: "Stay informed with the latest cooperative recruitment calls, member notices, and official announcements.",
-    contactBadge: "Contact Us",
+    contactBadge: "",
     contactTitle: "Get in Touch & Official Inquiries",
     contactSub: "Reach out to our headquarters management or submit your inquiries, requests, and feedback directly.",
     callUs: "Hotline / Phone",
@@ -189,7 +190,7 @@ export function HomeSections({
         <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-32 sm:pb-36 min-h-[80vh] flex flex-col justify-center items-center text-center">
           {/* ✅ coop pill + Est badge */}
           <div className="inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 backdrop-blur-md px-4 py-2">
-            <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[7px] font-black flex items-center justify-center tracking-tight">coop</span>
+            <SiteLogoBadge size={20} className="!shadow-none ring-1 ring-white/30" />
             <span className="text-[11px] sm:text-[12px] font-bold text-white/90">
               {lang === "si" ? "ශ්‍රී ලංකා සමුපකාර චලනය" : "Sri Lanka Co-operative Movement"}
             </span>
@@ -199,8 +200,8 @@ export function HomeSections({
           <h1 className="mt-7 text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl text-center">
             {lang === "si" ? "පඬුවස්නුවර MPCS LTD" : "Panduwasnuwara MPCS LTD"}
           </h1>
-          <div className="mt-3 text-[15px] sm:text-[18px] font-bold text-amber-200">{c.heroTag}</div>
-          <p className="mt-3.5 max-w-2xl text-[12.5px] sm:text-[14.5px] text-white/80 leading-relaxed">{c.heroDesc}</p>
+          {c.heroTag && <div className="mt-3 text-[15px] sm:text-[18px] font-bold text-amber-200">{c.heroTag}</div>}
+          {c.heroDesc && <p className="mt-3.5 max-w-2xl text-[12.5px] sm:text-[14.5px] text-white/80 leading-relaxed">{c.heroDesc}</p>}
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -274,13 +275,15 @@ export function HomeSections({
           {/* Official Members — Administrative Officers (නිලධාරීන්) */}
           {officerList.length > 0 && (
             <div className="mt-12">
-              <div className="flex items-center gap-4">
-                <div className="h-px flex-1 bg-slate-300/70" />
-                <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-indigo-700 text-center">
-                  {c.officersTitle}
+              {c.officersTitle && (
+                <div className="flex items-center gap-4">
+                  <div className="h-px flex-1 bg-slate-300/70" />
+                  <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-indigo-700 text-center">
+                    {c.officersTitle}
+                  </div>
+                  <div className="h-px flex-1 bg-slate-300/70" />
                 </div>
-                <div className="h-px flex-1 bg-slate-300/70" />
-              </div>
+              )}
               <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                 {officerList.map((p) => (
                   <BoardGlassCard key={`${p.order}-${p.name_en}`} person={p} onOpen={setPerson} />
