@@ -1,17 +1,18 @@
 "use client";
 
 // ============================================================================
-// Member / Voter directory table — search, file filter, pagination, PDF print
-//  Rows: client-side generated registry (52,964 members / 2,359 voters)
-//  Members: # | MEMBER NO | FULL NAME | NIC | ADDRESS | GENDER
-//  Voters: VOTER NO | FULL NAME | NIC | ADDRESS | GENDER
+// Member / Voter directory table — REAL uploaded registry data
+//  Members: # | MEMBER NO | FULL NAME | NIC | ADDRESS | POSTAL ADDRESS | GENDER
+//  Voters:  # | VOTER NO  | FULL NAME | NIC | ADDRESS | POSTAL ADDRESS | GENDER
 // ============================================================================
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, Download, FileSpreadsheet, Layers, Printer, Search, Users } from "lucide-react";
+import { Building2, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Eye, FileSpreadsheet, Layers, Printer, Search, Users, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import type { DataFile, MemberRow, VoterRow } from "@/lib/types";
+
+type AnyRow = (MemberRow | VoterRow) & { member_no?: string; voter_no?: string; postal_address?: string; file_name?: string };
 
 /* ✅ member number ස්වාභාවික අනුපිළිවෙල (1/01, 1/02 … 33/02 … 41/01) */
 function natKey(s: string): (string | number)[] {
@@ -53,7 +54,12 @@ async function fetchAllRows(table: "member_rows" | "voter_rows"): Promise<AnyRow
   return out;
 }
 
-type AnyRow = (MemberRow | VoterRow) & { member_no?: string; voter_no?: string };
+function genderTone(g: string): string {
+  const s = String(g || "").toLowerCase();
+  if (/ස්ත්‍රි|ස්ත්‍රී|ගැහැණ|කාන්ත|^f/.test(s)) return "rose";
+  if (/පුරුෂ|පිරිමි|^m/.test(s)) return "indigo";
+  return "slate";
+}
 
 export function DirectoryTable({
   kind,
@@ -87,9 +93,10 @@ export function DirectoryTable({
     (async () => {
       const table = kind === "member" ? "member_rows" : "voter_rows";
       const rows = await fetchAllRows(table);
-      rows.sort((a, b) =>
-        cmpNat((a.member_no ?? a.voter_no ?? "") as string, (b.member_no ?? b.voter_no ?? "") as string) ||
-        String(a.file_name || "").localeCompare(String(b.file_name || ""))
+      rows.sort(
+        (a, b) =>
+          cmpNat((a.member_no ?? a.voter_no ?? "") as string, (b.member_no ?? b.voter_no ?? "") as string) ||
+          String(a.file_name || "").localeCompare(String(b.file_name || ""))
       );
       const sb = createAnonClient();
       const { data: fl } = await sb.from("data_files").select("file_name, rows").eq("kind", kind);
@@ -121,6 +128,7 @@ export function DirectoryTable({
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const view = filtered.slice((page - 1) * perPage, page * perPage);
   const isMember = kind === "member";
+  const noLabel = isMember ? "Member No" : "Voter No";
 
   const title = isMember
     ? (lang === "si" ? "සාමාජික විස්තර (සියලු සාමාජිකයින්)" : "Member Details (All Members)")
@@ -134,199 +142,285 @@ export function DirectoryTable({
   const genderLabel = (g: string) =>
     isMember ? (g === "පිරිමි" ? "පිරිමින්" : g === "කාන්තා" ? "කාන්තාවන්" : g) : g;
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-      {/* header card */}
-      <div className="card p-6 sm:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-              {isMember ? <Users size={26} /> : <Building2 size={26} />}
-            </div>
-            <div>
-              <h1 className="text-2xl font-extrabold text-slate-900 flex flex-wrap items-center gap-3">
-                {title}
-                <span className="badge-blue rounded-full px-3 py-1 text-[12px] font-bold tabular-nums">
-                  {allRows.length.toLocaleString()} {isMember ? "Members" : "Voters"}
-                </span>
-              </h1>
-              <p className="text-slate-500 text-[13px] mt-1">{sub}</p>
-            </div>
-          </div>
-          <button onClick={() => window.print()} className="btn btn-amber">
-            <Printer size={16} /> {t.memberPage.downloadPdf}
-          </button>
-        </div>
+  const from = filtered.length === 0 ? 0 : (page - 1) * perPage + 1;
+  const to = Math.min(page * perPage, filtered.length);
 
-        {/* search + file filter */}
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-              className="field !pl-10"
-              placeholder={searchPlaceholder}
-            />
-          </div>
-          <div className="relative">
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      {/* ═══════════════ premium header ═══════════════ */}
+      <div className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 shadow-[0_24px_60px_-24px_rgba(49,46,129,0.55)]">
+        <div className="absolute inset-0 opacity-[0.16]" style={{ backgroundImage: "radial-gradient(circle at 82% 18%, rgba(255,255,255,0.55) 0%, transparent 46%), radial-gradient(circle at 12% 88%, rgba(16,185,129,0.5) 0%, transparent 42%)" }} />
+        <div className="absolute top-0 right-0 w-80 h-80 -translate-y-40 translate-x-40 rounded-full bg-emerald-400/15 blur-3xl" />
+        <div className="relative p-6 sm:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-white/12 border border-white/20 text-white flex items-center justify-center shadow-inner">
+                {isMember ? <Users size={26} /> : <Building2 size={26} />}
+              </div>
+              <div>
+                <h1 className="text-[22px] sm:text-2xl font-extrabold text-white flex flex-wrap items-center gap-3 leading-tight">
+                  {title}
+                  <span className="rounded-full px-3.5 py-1 text-[12px] font-bold tabular-nums bg-emerald-400/15 text-emerald-300 border border-emerald-300/25">
+                    {allRows.length.toLocaleString()} {isMember ? "Members" : "Voters"}
+                  </span>
+                </h1>
+                <p className="text-indigo-100/80 text-[13px] mt-1.5">{sub}</p>
+              </div>
+            </div>
             <button
-              onClick={() => setFileOpen(!fileOpen)}
-              className="field !w-auto flex items-center gap-2 min-w-[210px] font-semibold"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded-2xl bg-amber-400 hover:bg-amber-300 active:scale-[0.97] text-slate-900 font-extrabold text-[13px] px-5 py-3 shadow-lg shadow-amber-500/25 transition-all"
             >
-              <FileSpreadsheet size={16} className="text-slate-400" />
-              {file === "all"
-                ? `${t.memberPage.allFiles} (${allRows.length.toLocaleString()})`
-                : file}
-              <span className="ml-auto text-slate-400 text-[10px]">{fileOpen ? "▲" : "▼"}</span>
+              <Printer size={16} /> {t.memberPage.downloadPdf}
             </button>
-            {fileOpen && (
-              <div className="absolute right-0 mt-2 w-80 card p-2 z-40 shadow-xl">
-                <div className="relative">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={fileQ}
-                    onChange={(e) => setFileQ(e.target.value)}
-                    className="field !pl-8 !py-2 !text-[12px]"
-                    placeholder={
-                      lang === "si"
-                        ? `ගොනු ${totalFiles} අතර සොයන්න...`
-                        : `Search across ${totalFiles} ${totalFiles === 1 ? "files" : "files"}...`
-                    }
-                  />
-                </div>
-                <div className="max-h-64 overflow-y-auto mt-1">
-                  <button
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[12.5px] font-semibold ${file === "all" ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50"}`}
-                    onClick={() => {
-                      setFile("all");
-                      setFileOpen(false);
-                      setPage(1);
-                    }}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Layers size={13} /> {t.memberPage.allFiles} ({allRows.length.toLocaleString()})
-                    </span>
-                    <span className="flex items-center gap-2 text-slate-500">
-                      <span className="tabular-nums">{allRows.length.toLocaleString()}</span>
-                      {file === "all" && <Check size={13} className="text-indigo-600" />}
-                    </span>
-                  </button>
-                  {files
-                    .filter((f) => !fileQ.trim() || f.file_name.toLowerCase().includes(fileQ.trim().toLowerCase()))
-                    .map((f) => (
+          </div>
+
+          {/* ═══════════════ toolbar ═══════════════ */}
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-indigo-200/80" />
+              <input
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full rounded-2xl bg-white/10 border border-white/20 text-white placeholder:text-indigo-200/70 pl-11 pr-4 py-3 text-[13.5px] font-medium outline-none focus:border-emerald-300/60 focus:bg-white/15 transition-colors"
+                placeholder={searchPlaceholder}
+              />
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setFileOpen(!fileOpen)}
+                className="flex items-center gap-2.5 rounded-2xl bg-white/10 border border-white/20 text-white min-w-[220px] px-4 py-3 text-[13px] font-semibold hover:bg-white/15 transition-colors"
+              >
+                <FileSpreadsheet size={16} className="text-indigo-200/80" />
+                <span className="truncate">{file === "all" ? `${t.memberPage.allFiles} (${allRows.length.toLocaleString()})` : file}</span>
+                <span className="ml-auto text-indigo-200/70 text-[10px]">{fileOpen ? "▲" : "▼"}</span>
+              </button>
+              {fileOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setFileOpen(false)} />
+                  <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-white border border-slate-200 p-2 z-40 shadow-2xl">
+                    <div className="relative">
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        value={fileQ}
+                        onChange={(e) => setFileQ(e.target.value)}
+                        className="field !pl-8 !py-2 !text-[12px]"
+                        placeholder={
+                          lang === "si"
+                            ? `ගොනු ${files.length} අතර සොයන්න...`
+                            : `Search across ${files.length} ${files.length === 1 ? "file" : "files"}...`
+                        }
+                      />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto mt-1">
                       <button
-                        key={f.file_name}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[12px] font-semibold ${file === f.file_name ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50"}`}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12.5px] font-semibold ${file === "all" ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50 text-slate-700"}`}
                         onClick={() => {
-                          setFile(f.file_name);
+                          setFile("all");
                           setFileOpen(false);
                           setPage(1);
                         }}
                       >
-                        <span className="flex items-center gap-2 truncate">
-                          <FileSpreadsheet size={12} className="text-slate-400 shrink-0" />
-                          <span className="truncate">{f.file_name}</span>
+                        <span className="flex items-center gap-2">
+                          <Layers size={13} /> {t.memberPage.allFiles}
                         </span>
-                        <span className="flex items-center gap-2 shrink-0">
-                          <span className="rounded-md bg-slate-100 text-slate-500 px-1.5 py-0.5 text-[10px] tabular-nums">
-                            {f.rows.toLocaleString()} rows
-                          </span>
-                          {file === f.file_name && <Check size={12} className="text-indigo-600" />}
+                        <span className="flex items-center gap-2 text-slate-500">
+                          <span className="tabular-nums">{allRows.length.toLocaleString()}</span>
+                          {file === "all" && <Check size={13} className="text-indigo-600" />}
                         </span>
                       </button>
-                    ))}
-                </div>
-                <div className="flex items-center justify-between px-3 pt-2 mt-1 border-t border-slate-100 text-[11px] text-slate-500">
-                  <span>
-                    {t.memberPage.totalFiles}: <strong className="text-slate-700">{files.length || totalFiles}</strong>
-                  </span>
-                  <span>
-                    {t.memberPage.totalRows}: <strong className="text-slate-700">{allRows.length.toLocaleString()}</strong>
-                  </span>
-                </div>
-              </div>
+                      {files
+                        .filter((f) => !fileQ.trim() || f.file_name.toLowerCase().includes(fileQ.trim().toLowerCase()))
+                        .map((f) => (
+                          <button
+                            key={f.file_name}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12px] font-semibold ${file === f.file_name ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50 text-slate-700"}`}
+                            onClick={() => {
+                              setFile(f.file_name);
+                              setFileOpen(false);
+                              setPage(1);
+                            }}
+                          >
+                            <span className="flex items-center gap-2 truncate">
+                              <FileSpreadsheet size={12} className="text-slate-400 shrink-0" />
+                              <span className="truncate">{f.file_name}</span>
+                            </span>
+                            <span className="flex items-center gap-2 shrink-0">
+                              <span className="rounded-md bg-slate-100 text-slate-500 px-1.5 py-0.5 text-[10px] tabular-nums">
+                                {f.rows.toLocaleString()} rows
+                              </span>
+                              {file === f.file_name && <Check size={12} className="text-indigo-600" />}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                    <div className="flex items-center justify-between px-3 pt-2 mt-1 border-t border-slate-100 text-[11px] text-slate-500">
+                      <span>
+                        {t.memberPage.totalFiles}: <strong className="text-slate-700">{files.length || totalFiles}</strong>
+                      </span>
+                      <span>
+                        {t.memberPage.totalRows}: <strong className="text-slate-700">{allRows.length.toLocaleString()}</strong>
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* meta line */}
+          <div className="mt-3 flex items-center gap-2 text-[11.5px] text-indigo-100/70 font-medium">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 border border-white/12 px-3 py-1">
+              {loading
+                ? (lang === "si" ? "දත්ත ලැබෙමින්…" : "Loading data…")
+                : (lang === "si"
+                    ? `පෙන්වන්නේ ${from.toLocaleString()}–${to.toLocaleString()} / ${filtered.length.toLocaleString()} පේළි`
+                    : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${filtered.length.toLocaleString()} entries`)}
+            </span>
+            {file !== "all" && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/15 border border-emerald-300/25 text-emerald-200 px-3 py-1">
+                <FileSpreadsheet size={11} /> {file}
+                <button onClick={() => setFile("all")} className="hover:text-white ml-0.5"><X size={11} /></button>
+              </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* table */}
-      <div className="card mt-5 overflow-x-auto">
-        <table className="table-corporate w-full">
-          <thead>
-            <tr>
-              {isMember && <th className="w-12">#</th>}
-              <th>{isMember ? t.memberPage.memberNo : t.memberPage.voterNo}</th>
-              <th>{t.memberPage.fullName}</th>
-              <th>{t.memberPage.nic}</th>
-              <th>{t.memberPage.address}</th>
-              <th>{isMember ? (lang === "si" ? "තැපැල් ලිපිනය" : "Postal Address") : (lang === "si" ? "තැපැල් ලිපිනය" : "Postal Address")}</th>
-              <th>{t.memberPage.gender}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {view.length === 0 ? (
-              <tr>
-                <td colSpan={isMember ? 7 : 6} className="text-center text-slate-400 py-10">
-                  {loading
-                    ? (lang === "si" ? "දත්ත ලැබෙමින්…" : "Loading data…")
-                    : allRows.length === 0
-                      ? (lang === "si"
-                          ? "තවම Excel දත්ත upload කර නැත — /admin/data එකෙන් upload කරන්න"
-                          : "No uploaded data yet — upload Excel from /admin/data")
-                      : (lang === "si" ? "දත්ත හමු නොවීය" : "No records found")}
-                </td>
+      {/* ═══════════════ table ═══════════════ */}
+      <div className="card mt-5 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white">
+                {isMember && <th className="w-12 px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-200">#</th>}
+                <th className="px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-200">{isMember ? t.memberPage.memberNo : t.memberPage.voterNo}</th>
+                <th className="px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-200">{t.memberPage.fullName}</th>
+                <th className="px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-200">{t.memberPage.nic}</th>
+                <th className="px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-200">{t.memberPage.address}</th>
+                <th className="px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-200">{lang === "si" ? "තැපැල් ලිපිනය" : "Postal Address"}</th>
+                <th className="px-4 py-3.5 text-left text-[10.5px] font-bold uppercase tracking-[0.14em] text-indigo-200">{t.memberPage.gender}</th>
               </tr>
-            ) : (
-              view.map((r, i) => (
-                <tr
-                  key={`${r.member_no ?? r.voter_no}-${i}`}
-                  onClick={() => setDetail(r)}
-                  className="cursor-pointer hover:bg-indigo-50/60 transition-colors"
-                  title={lang === "si" ? "සම්පූර්ණ විස්තර බලන්න" : "View full details"}
-                >
-                  {isMember && (
-                    <td className="font-bold text-indigo-600 tabular-nums">
-                      {(page - 1) * perPage + i + 1}
-                    </td>
-                  )}
-                  <td className="font-bold text-indigo-700 tabular-nums">{r.member_no ?? r.voter_no}</td>
-                  <td className="font-semibold text-slate-800">{r.full_name}</td>
-                  <td className="tabular-nums text-slate-600">{r.nic}</td>
-                  <td className="text-slate-600">{r.address}</td>
-                  <td className="text-slate-600">{r.postal_address || "—"}</td>
-                  <td>
-                    <span className="badge-amber rounded-full px-2.5 py-0.5 text-[11px] font-bold">
-                      {genderLabel(r.gender)}
-                    </span>
+            </thead>
+            <tbody>
+              {view.length === 0 ? (
+                <tr>
+                  <td colSpan={isMember ? 7 : 7} className="text-center py-14">
+                    {loading ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-10 h-10 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
+                        <span className="text-slate-400 text-[13px] font-medium">{lang === "si" ? "දත්ත ලැබෙමින්…" : "Loading data…"}</span>
+                      </div>
+                    ) : allRows.length === 0 ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+                          <FileSpreadsheet size={28} className="text-slate-300" />
+                        </div>
+                        <div className="text-slate-500 font-semibold text-[13.5px]">
+                          {lang === "si" ? "තවම Excel දත්ත upload කර නැත" : "No uploaded data yet"}
+                        </div>
+                        <div className="text-slate-400 text-[12px]">
+                          {lang === "si" ? "/admin/data එකෙන් Excel upload කරන්න" : "Upload Excel files from /admin/data"}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-slate-400 text-[13px]">{lang === "si" ? "දත්ත හමු නොවීය" : "No records found"}</div>
+                    )}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100 text-[13px]">
-          <div className="text-slate-500">
-            {t.memberPage.page} {page} / {totalPages.toLocaleString()}
+              ) : (
+                view.map((r, i) => {
+                  const tone = genderTone(r.gender);
+                  return (
+                    <tr
+                      key={`${r.member_no ?? r.voter_no}-${i}`}
+                      onClick={() => setDetail(r)}
+                      className="group cursor-pointer border-b border-slate-100/90 even:bg-slate-50/50 hover:bg-indigo-50/70 transition-colors"
+                      title={lang === "si" ? "සම්පූර්ණ විස්තර බලන්න" : "View full details"}
+                    >
+                      {isMember && (
+                        <td className="px-4 py-3 text-[12px] font-bold tabular-nums text-slate-400 group-hover:text-indigo-500">
+                          {(page - 1) * perPage + i + 1}
+                        </td>
+                      )}
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-lg bg-indigo-50 group-hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 text-[12.5px] font-extrabold tabular-nums transition-colors">
+                          {r.member_no ?? r.voter_no}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-[13.5px] font-semibold text-slate-800">
+                        <span className="inline-flex items-center gap-2">
+                          {r.full_name}
+                          <Eye size={13} className="text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-[13px] tabular-nums text-slate-600">{r.nic || "—"}</td>
+                      <td className="px-4 py-3 text-[13px] text-slate-600">{r.address || "—"}</td>
+                      <td className="px-4 py-3 text-[13px] text-slate-600">{r.postal_address || "—"}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                            tone === "rose"
+                              ? "bg-rose-50 text-rose-600 border border-rose-100"
+                              : tone === "indigo"
+                                ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
+                                : "bg-amber-50 text-amber-600 border border-amber-100"
+                          }`}
+                        >
+                          {genderLabel(r.gender) || "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ═══════════════ pagination ═══════════════ */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-slate-50/70 border-t border-slate-100">
+          <div className="text-[12px] text-slate-500 font-medium">
+            {lang === "si"
+              ? `පිටුව ${page.toLocaleString()} / ${totalPages.toLocaleString()} · පෙන්වන්නේ ${from.toLocaleString()}–${to.toLocaleString()} / ${filtered.length.toLocaleString()}`
+              : `Page ${page.toLocaleString()} / ${totalPages.toLocaleString()} · Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${filtered.length.toLocaleString()}`}
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1.5">
             <button
-              className="btn btn-outline !py-1.5 !px-4 !text-[12px]"
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[12px] font-semibold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-colors"
+              disabled={page <= 1}
+              onClick={() => setPage(1)}
+              title="First"
+            >
+              <ChevronsLeft size={14} />
+            </button>
+            <button
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12px] font-semibold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-colors"
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
             >
-              ‹ {t.memberPage.prev}
+              <ChevronLeft size={14} /> {t.memberPage.prev}
             </button>
+            <span className="inline-flex items-center rounded-xl bg-indigo-600 text-white px-4 py-2 text-[12px] font-extrabold tabular-nums shadow-md shadow-indigo-500/25">
+              {page.toLocaleString()}
+            </span>
             <button
-              className="btn btn-outline !py-1.5 !px-4 !text-[12px]"
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-[12px] font-semibold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-colors"
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
             >
-              {t.memberPage.next} ›
+              {t.memberPage.next} <ChevronRight size={14} />
+            </button>
+            <button
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[12px] font-semibold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-40 disabled:hover:border-slate-200 disabled:hover:text-slate-600 transition-colors"
+              disabled={page >= totalPages}
+              onClick={() => setPage(totalPages)}
+              title="Last"
+            >
+              <ChevronsRight size={14} />
             </button>
           </div>
         </div>
@@ -334,11 +428,10 @@ export function DirectoryTable({
 
       <div className="mt-4 text-[11.5px] text-slate-400 flex items-center gap-2">
         <Download size={13} />
-        RFC-4180 CSV · Sinhala text supported (CSV UTF-8 / Excel .xlsx)
-        {detail && ""}
+        RFC-4180 CSV · Sinhala text supported (CSV UTF-8 / Excel .xlsx) · {lang === "si" ? "විස්තර බලන්න පේළියක් click කරන්න" : "Click any row to view full details"}
       </div>
 
-      {/* ✅ සම්පූර්ණ විස්තර popup — පේළියක් click කළ විට */}
+      {/* ═══════════════ full details popup ═══════════════ */}
       {detail && (
         <div
           className="fixed inset-0 z-[100] bg-slate-900/55 backdrop-blur-sm flex items-center justify-center p-4"
@@ -348,7 +441,7 @@ export function DirectoryTable({
             className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-gradient-to-r from-indigo-700 to-indigo-500 px-6 py-5 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-indigo-800 to-indigo-600 px-6 py-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
                   <Users size={22} className="text-white" />
@@ -356,7 +449,7 @@ export function DirectoryTable({
                 <div>
                   <div className="text-white font-extrabold text-[15px] leading-tight">{detail.full_name || "—"}</div>
                   <div className="text-indigo-100 text-[11.5px] font-semibold tabular-nums">
-                    {isMember ? (lang === "si" ? "සාමාජික අංකය" : "Member No") : (lang === "si" ? "ඡන්ද අංකය" : "Voter No")}: {detail.member_no ?? detail.voter_no ?? "—"}
+                    {lang === "si" ? (isMember ? "සාමාජික අංකය" : "ඡන්ද අංකය") : noLabel}: {detail.member_no ?? detail.voter_no ?? "—"}
                   </div>
                 </div>
               </div>
