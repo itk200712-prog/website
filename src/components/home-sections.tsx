@@ -187,7 +187,7 @@ export function HomeSections({
       <section className="hero-dark relative overflow-hidden text-white">
         <HeroSlideshow images={settings.hero_images} />
         <div className="hero-overlay" />
-        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-32 sm:pb-36 min-h-[80vh] flex flex-col justify-center items-center text-center">
+        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-12 sm:pb-14 min-h-[68vh] flex flex-col justify-center items-center text-center">
           {/* ✅ coop pill + Est badge */}
           <div className="inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 backdrop-blur-md px-4 py-2">
             <SiteLogoBadge size={20} className="!shadow-none ring-1 ring-white/30" />
@@ -219,8 +219,8 @@ export function HomeSections({
           </div>
         </div>
 
-        {/* ✅ hero stats bar — image-1 වැනි dark glass strip */}
-        <div className="absolute bottom-0 left-0 right-0 z-30 px-4 sm:px-6 pb-6">
+        {/* ✅ hero stats bar — dark glass strip */}
+        <div className="relative z-30 px-4 sm:px-6 pb-10">
           <div className="max-w-3xl mx-auto rounded-2xl border border-white/15 bg-slate-950/65 backdrop-blur-xl px-4 sm:px-8 py-4">
             <div className="grid grid-cols-3 divide-x divide-white/12">
               <div className="flex items-center justify-center gap-2.5 px-2">
@@ -247,42 +247,29 @@ export function HomeSections({
             </div>
           </div>
         </div>
-      </section>
 
-      {/* ================= BOARD — background සීමාවට යටින්, glass profile cards ================= */}
-      <section
-        className="relative overflow-hidden bg-gradient-to-b from-slate-100 via-indigo-50/70 to-slate-50"
-        style={
-          settings.board_bg
-            ? { backgroundImage: `url(${settings.board_bg})`, backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }
-            : undefined
-        }
-      >
-        {/* ✅ background image එකක් තිබේ නම් — කියවිය හැකි වීමට dark overlay */}
-        {settings.board_bg ? (
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/82 via-slate-900/72 to-slate-950/88" />
-        ) : (
-          <>
-            <div className="absolute -top-28 -left-28 w-[420px] h-[420px] rounded-full bg-indigo-300/30 blur-3xl" />
-            <div className="absolute top-1/3 -right-28 w-[420px] h-[420px] rounded-full bg-fuchsia-300/25 blur-3xl" />
-            <div className="absolute bottom-0 left-1/4 w-[420px] h-[420px] rounded-full bg-amber-200/30 blur-3xl" />
-          </>
-        )}
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14 sm:py-16">
+        {/* ✅ HERO IMAGE එක දිගටම — board heading band එකත් එකම photo එක උඩ */}
+        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pb-14 sm:pb-16">
           <SectionHead
             badge={c.boardBadge}
             title={c.boardTitle}
             sub={c.boardSub}
-            dark={!!settings.board_bg}
+            dark
             right={
-              <Link
-                href={L("/board")}
-                className={settings.board_bg ? "btn !bg-white/10 !text-white !border-white/30 hover:!bg-white/20" : "btn btn-outline"}
-              >
+              <Link href={L("/board")} className="btn !bg-white/10 !text-white !border-white/30 hover:!bg-white/20">
                 {c.all}
               </Link>
             }
           />
+        </div>
+      </section>
+
+      {/* ================= BOARD DETAILS — photo එක ඉවර වෙන තැනින් පටන් ගන්නවා (animated gradient) ================= */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-slate-100 via-indigo-50/70 to-slate-50">
+        <div className="absolute -top-28 -left-28 w-[420px] h-[420px] rounded-full bg-indigo-300/30 blur-3xl" />
+        <div className="absolute top-1/3 -right-28 w-[420px] h-[420px] rounded-full bg-fuchsia-300/25 blur-3xl" />
+        <div className="absolute bottom-0 left-1/4 w-[420px] h-[420px] rounded-full bg-amber-200/30 blur-3xl" />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-10 sm:pt-12 pb-14 sm:pb-16">
           {/* සියලුම සාමාජිකයින් order පිළිවෙලට — පේලියකට 4ක් */}
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {sortedBoard.map((p) => (
@@ -296,7 +283,7 @@ export function HomeSections({
               {c.officersTitle && (
                 <div className="flex items-center gap-4">
                   <div className="h-px flex-1 bg-slate-300/70" />
-                  <div className={`text-[11px] font-bold tracking-[0.22em] uppercase text-center ${settings.board_bg ? "text-indigo-200" : "text-indigo-700"}`}>
+                  <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-center text-indigo-700">
                     {c.officersTitle}
                   </div>
                   <div className="h-px flex-1 bg-slate-300/70" />
