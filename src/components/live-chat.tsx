@@ -241,8 +241,8 @@ export function LiveChat() {
     push({
       from: "bot",
       text: si
-        ? "මට ඒක තේරුණේ නෑ 🤔 — නමුත් මට පුළුවන්:\n• සාමාජික අංකයක් (41/01) යවන්න\n• \"ව්‍යාපාර කළමනාකරුවන්\"\n• \"කාර්යාල වේලාවන්\"\n\nනැත්නම් "Message" tab එකෙන් අපට කෙලින්ම ලියන්න 📨"
-        : "I didn't catch that 🤔 — but I can:\n• Look up a member number (41/01)\n• List business managers\n• Share office hours\n\nOr use the "Message" tab to write to us 📨",
+        ? "මට ඒක තේරුණේ නෑ 🤔 — නමුත් මට පුළුවන්:\n• සාමාජික අංකයක් (41/01) යවන්න\n• \"ව්‍යාපාර කළමනාකරුවන්\"\n• \"කාර්යාල වේලාවන්\"\n\nනැත්නම් Message tab එකෙන් අපට කෙලින්ම ලියන්න 📨"
+        : "I didn't catch that 🤔 — but I can:\n• Look up a member number (41/01)\n• List business managers\n• Share office hours\n\nOr use the Message tab to write to us 📨",
       chips: si ? ["සාමාජික විස්තර", "ව්‍යාපාර කළමනාකරුවන්", "කාර්යාල වේලාවන්"] : ["Find a member", "Business managers", "Office hours"],
     });
   }
