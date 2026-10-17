@@ -4,7 +4,7 @@
 // Apply for MPCS Membership — form + instructions + certified form upload
 // ============================================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight, CheckCircle2, FileText, Info, LogIn, ShieldCheck, UploadCloud,
 } from "lucide-react";
@@ -18,6 +18,21 @@ export function ApplyForm() {
   const [hideBanner, setHideBanner] = useState(false);
   const [upMsg, setUpMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  // ✅ sign in වෙලා නම් banner නෑ — account එකෙන් data auto-fill
+  const [me, setMe] = useState<{ full_name?: string; nic?: string; phone?: string } | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { authedClient } = await import("@/lib/supabase/client");
+        const sb = await authedClient();
+        const { data: sess } = await sb.auth.getSession();
+        const uid = sess.session?.user?.id;
+        if (!uid) return;
+        const { data: prof } = await sb.from("profiles").select("full_name, nic, phone").eq("id", uid).single();
+        if (prof) setMe({ full_name: prof.full_name || "", nic: prof.nic || "", phone: prof.phone || "" });
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -101,8 +116,8 @@ export function ApplyForm() {
         </div>
       </div>
 
-      {/* auto-fill — "Later / Apply Now" ක්ලික් කළාම මේක අයින් වේ */}
-      {!hideBanner && (
+      {/* auto-fill — sign in වෙලා නම් නොපෙන්වයි ("Later / Apply Now" ක්ලික් කළත් අයින් වේ) */}
+      {!hideBanner && !me && (
       <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/70 p-6">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-white border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
@@ -160,11 +175,11 @@ export function ApplyForm() {
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <label className="field-label">{t.applyPage.nameSi} *</label>
-            <input name="name_si" required className="field" placeholder="උදා: නි. කේ. නිමල් පෙරේරා" />
+            <input name="name_si" required className="field" defaultValue={me?.full_name || ""} placeholder="උදා: නි. කේ. නිමල් පෙරේරා" />
           </div>
           <div>
             <label className="field-label">{t.applyPage.nameEn} *</label>
-            <input name="name_en" required className="field" placeholder="e.g. K. A. Nimal Perera" />
+            <input name="name_en" required className="field" defaultValue={me?.full_name || ""} placeholder="e.g. K. A. Nimal Perera" />
           </div>
         </div>
         <div>
@@ -178,11 +193,11 @@ export function ApplyForm() {
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <label className="field-label">{t.applyPage.nicField} *</label>
-            <input name="nic" required className="field" placeholder="e.g. 199012345678 or 901234567V" />
+            <input name="nic" required className="field" defaultValue={me?.nic || ""} placeholder="e.g. 199012345678 or 901234567V" />
           </div>
           <div>
             <label className="field-label">{t.applyPage.phoneField} *</label>
-            <input name="phone" required className="field" placeholder="07X XXXXXXX" />
+            <input name="phone" required className="field" defaultValue={me?.phone || ""} placeholder="07X XXXXXXX" />
           </div>
         </div>
         <div>

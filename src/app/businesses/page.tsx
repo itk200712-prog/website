@@ -2,6 +2,8 @@
 // Businesses overview — all divisions
 // ============================================================================
 
+export const dynamic = "force-dynamic"; // ✅ admin දත්ත දැම්ම ගමන් ම ප්‍රධාන site එකේ පේනවා
+
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { SectionHead } from "@/components/site-sections";

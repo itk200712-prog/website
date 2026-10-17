@@ -186,31 +186,64 @@ export function HomeSections({
       <section className="hero-dark relative overflow-hidden text-white">
         <HeroSlideshow images={settings.hero_images} />
         <div className="hero-overlay" />
-        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-16 sm:pb-20 min-h-[80vh] flex flex-col justify-center items-center text-center">
-          <h1 className="text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl text-center">{t.brandFull}</h1>
-
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Link href={L("/membership/apply")} className="btn btn-amber">
-              {c.cta1} <ArrowRight size={17} />
-            </Link>
-            <Link
-              href={L("/businesses")}
-              className="btn btn-outline !bg-white/10 !text-white !border-white/25 hover:!bg-white/20"
-            >
-              {c.cta2}
-            </Link>
+        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-32 sm:pb-36 min-h-[80vh] flex flex-col justify-center items-center text-center">
+          {/* ✅ coop pill + Est badge */}
+          <div className="inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 backdrop-blur-md px-4 py-2">
+            <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[7px] font-black flex items-center justify-center tracking-tight">coop</span>
+            <span className="text-[11px] sm:text-[12px] font-bold text-white/90">
+              {lang === "si" ? "ශ්‍රී ලංකා සමුපකාර චලනය" : "Sri Lanka Co-operative Movement"}
+            </span>
+            <span className="rounded-full bg-amber-400 text-slate-900 px-2.5 py-0.5 text-[10px] font-extrabold">Est. 1976</span>
           </div>
 
-          <div className="mt-10 flex flex-wrap justify-center gap-3 text-[12px]">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2">
-              <ShieldCheck size={14} className="text-emerald-300" /> {c.reg}: {SITE.reg_no}
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2">
-              <CalendarDays size={14} className="text-amber-300" /> {SITE.est}
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2">
-              <Phone size={14} className="text-sky-300" /> {SITE.phones[0]} | {SITE.phones[1]}
-            </span>
+          <h1 className="mt-7 text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl text-center">
+            {lang === "si" ? "පඬුවස්නුවර MPCS LTD" : "Panduwasnuwara MPCS LTD"}
+          </h1>
+          <div className="mt-3 text-[15px] sm:text-[18px] font-bold text-amber-200">{c.heroTag}</div>
+          <p className="mt-3.5 max-w-2xl text-[12.5px] sm:text-[14.5px] text-white/80 leading-relaxed">{c.heroDesc}</p>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href={L("/businesses")}
+              className="btn !bg-indigo-600 hover:!bg-indigo-500 !text-white !border-indigo-500 !px-7 !py-3.5 !text-[14px] !font-extrabold shadow-xl shadow-indigo-900/40"
+            >
+              {lang === "si" ? "ව්‍යාපාර බලන්න" : "Explore Businesses"} <ArrowRight size={17} />
+            </Link>
+            <Link
+              href={L("/membership/members")}
+              className="btn btn-outline !bg-white/10 !text-white !border-white/25 hover:!bg-white/20 !px-7 !py-3.5 !text-[14px] !font-bold"
+            >
+              {lang === "si" ? "සාමාජිකත්වය" : "Membership"}
+            </Link>
+          </div>
+        </div>
+
+        {/* ✅ hero stats bar — image-1 වැනි dark glass strip */}
+        <div className="absolute bottom-0 left-0 right-0 z-30 px-4 sm:px-6 pb-6">
+          <div className="max-w-3xl mx-auto rounded-2xl border border-white/15 bg-slate-950/65 backdrop-blur-xl px-4 sm:px-8 py-4">
+            <div className="grid grid-cols-3 divide-x divide-white/12">
+              <div className="flex items-center justify-center gap-2.5 px-2">
+                <Users size={18} className="text-amber-300" />
+                <div className="text-left">
+                  <div className="text-[13px] sm:text-[15px] font-extrabold text-amber-300 leading-tight">{live.years}+ {lang === "si" ? "වසර" : "Years"}</div>
+                  <div className="text-[9px] sm:text-[10px] text-white/65 font-semibold uppercase tracking-wide">{lang === "si" ? "කැපවූ සේවාව" : "Dedicated Service"}</div>
+                </div>
+              </div>
+              <div className="flex items-center justify-center gap-2.5 px-2">
+                <Building2 size={18} className="text-sky-300" />
+                <div className="text-left">
+                  <div className="text-[13px] sm:text-[15px] font-extrabold text-sky-300 leading-tight">100% {lang === "si" ? "දේශීය" : "Local"}</div>
+                  <div className="text-[9px] sm:text-[10px] text-white/65 font-semibold uppercase tracking-wide">{lang === "si" ? "සාමාජික පාලනය" : "Member Owned"}</div>
+                </div>
+              </div>
+              <div className="flex items-center justify-center gap-2.5 px-2">
+                <CheckCircle2 size={18} className="text-emerald-300" />
+                <div className="text-left">
+                  <div className="text-[13px] sm:text-[15px] font-extrabold text-emerald-300 leading-tight">{SITE.reg_no}</div>
+                  <div className="text-[9px] sm:text-[10px] text-white/65 font-semibold uppercase tracking-wide">{lang === "si" ? "නිල ලියාපදිංචිය" : "Official Registration"}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -583,7 +616,7 @@ export function HomeSections({
                 {lang === "si" ? SITE.address_si : SITE.address_en}
               </div>
               <a
-                href="https://maps.google.com/?q=Panduwasnuwara+MPCS"
+                href="https://maps.app.goo.gl/JFbV9o8sknmp1jDy7"
                 target="_blank"
                 rel="noreferrer"
                 className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-bold text-rose-600 hover:underline"
@@ -602,7 +635,7 @@ export function HomeSections({
               </div>
               <a
                 href={`mailto:${SITE.email}`}
-                className="mt-4 flex items-center justify-between rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-[12.5px] font-semibold text-slate-700 break-all hover:bg-sky-100 hover:border-sky-300 transition-colors"
+                className="mt-4 flex items-center justify-between gap-2 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-[12px] font-semibold text-slate-700 whitespace-nowrap overflow-hidden hover:bg-sky-100 hover:border-sky-300 transition-colors"
               >
                 {SITE.email}
                 <span className="text-[10px] font-bold text-sky-600 opacity-70 group-hover:opacity-100 shrink-0 ml-2">

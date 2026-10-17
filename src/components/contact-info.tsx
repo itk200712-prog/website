@@ -30,7 +30,7 @@ export function ContactInfoCard() {
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Head Office / Address</div>
             <a
-              href={`https://maps.google.com/?q=${encodeURIComponent(lang === "si" ? SITE.address_en : SITE.address_en)}`}
+              href="https://maps.app.goo.gl/JFbV9o8sknmp1jDy7"
               target="_blank"
               rel="noreferrer"
               className="font-semibold text-slate-800 text-[13.5px] mt-0.5 flex items-center gap-2 hover:text-indigo-700 transition-colors"
