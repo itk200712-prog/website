@@ -119,6 +119,7 @@ export function LiveChat() {
   const audioRef = useRef<AudioContext | null>(null);
   const soundRef = useRef(true);
   const typingAt = useRef(0);
+  const clearedAtRef = useRef("");
   const liveBoxRef = useRef<HTMLDivElement>(null);
   const lastTs = useRef("1970-01-01T00:00:00Z");
 
@@ -220,6 +221,7 @@ export function LiveChat() {
     if (key === "live") {
       setTab("live");
       setPanel(null);
+      setLiveUsed(true);       // ✅ live chat පටන් ගත්තා → polling on
       void logEvent("live_agent", "", 0, sessionRef.current);
       return;
     }
@@ -623,11 +625,14 @@ export function LiveChat() {
     try {
       const sb = createAnonClient();
       // ✅ user "End & clear" කළා නම් ඒ වෙලාවට පස්සේ එන messages විතරයි (admin history එහෙමම)
-      let clearedAt = "1970-01-01T00:00:00Z";
-      try {
-        clearedAt = localStorage.getItem("mpcs_chat_cleared_at") || clearedAt;
-      } catch {
-        /* ignore */
+      let clearedAt = clearedAtRef.current || "1970-01-01T00:00:00Z";
+      if (!clearedAtRef.current) {
+        try {
+          clearedAt = localStorage.getItem("mpcs_chat_cleared_at") || clearedAt;
+          clearedAtRef.current = clearedAt;
+        } catch {
+          /* ignore */
+        }
       }
       const { data, error } = await sb.rpc("chat_sync", {
         p_session: sessionKey,
@@ -663,7 +668,6 @@ export function LiveChat() {
   }
 
   useEffect(() => {
-    if (tab === "live") setLiveUsed(true);
     if (!sessionKey || !liveUsed) return;
     let alive = true;
     (async () => {
@@ -704,32 +708,40 @@ export function LiveChat() {
   // ✅ chat එක සම්පූර්ණයෙන්ම close — user side history අයින්, admin history ඉතුරු
   async function endChat() {
     if (!sessionKey) return;
+    // ⚡ marker + UI clear කලින්ම (poll එකට කලින් වැදගත්)
+    clearedAtRef.current = new Date().toISOString();
     try {
-      await createAnonClient().rpc("chat_close", { p_session: sessionKey, p_note: si ? "පැමිණිල්ල අවසන් කළා" : "Chat ended by visitor" });
+      localStorage.setItem("mpcs_chat_cleared_at", clearedAtRef.current);
+      localStorage.setItem("mpcs_chat_open", "0");
+      localStorage.setItem("mpcs_chat_min", "0");
+      localStorage.setItem("mpcs_chat_used", "0");
     } catch {
       /* ignore */
     }
     setLiveMsgs([]);
-    lastTs.current = "1970-01-01T00:00:00Z";
+    lastTs.current = clearedAtRef.current;
     setLiveStatus("closed");
     setAgentTyping(false);
     setOpen(false);
     setMinimized(false);
     setLiveUsed(false);
-    try {
-      localStorage.setItem("mpcs_chat_open", "0");
-      localStorage.setItem("mpcs_chat_min", "0");
-      localStorage.setItem("mpcs_chat_used", "0");
-      localStorage.setItem("mpcs_chat_cleared_at", new Date().toISOString());
-    } catch {
-      /* ignore */
-    }
     void logEvent("chat_closed", "", 0, sessionRef.current);
+
+    // DB එකට දැනුම් දීම පස්සේ (admin history එකේ "chat ended" note එක එකතු වේ)
+    try {
+      await createAnonClient().rpc("chat_close", {
+        p_session: sessionKey,
+        p_note: si ? "පැමිණිල්ල අවසන් කළා" : "Chat ended by visitor",
+      });
+    } catch {
+      /* RPC not created yet — ප්‍රශ්නයක් නෑ */
+    }
   }
 
   async function sendLive() {
     const body = liveText.trim();
     if (!body || !sessionKey || liveBusy) return;
+    setLiveUsed(true);
     setLiveText("");
     setLiveBusy(true);
     try {
