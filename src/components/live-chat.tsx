@@ -622,9 +622,16 @@ export function LiveChat() {
     if (!sessionKey) return;
     try {
       const sb = createAnonClient();
+      // ✅ user "End & clear" කළා නම් ඒ වෙලාවට පස්සේ එන messages විතරයි (admin history එහෙමම)
+      let clearedAt = "1970-01-01T00:00:00Z";
+      try {
+        clearedAt = localStorage.getItem("mpcs_chat_cleared_at") || clearedAt;
+      } catch {
+        /* ignore */
+      }
       const { data, error } = await sb.rpc("chat_sync", {
         p_session: sessionKey,
-        p_after: reset ? "1970-01-01T00:00:00Z" : lastTs.current,
+        p_after: reset ? clearedAt : lastTs.current,
       });
       if (error || !data) return;
       const d = data as { status?: string; agent?: string; typing?: boolean; messages?: LiveMsg[] };
@@ -634,7 +641,7 @@ export function LiveChat() {
       const list = d.messages ?? [];
       if (reset) {
         setLiveMsgs(list);
-        lastTs.current = list.length ? list[list.length - 1].created_at : "1970-01-01T00:00:00Z";
+        lastTs.current = list.length ? list[list.length - 1].created_at : clearedAt;
       } else if (list.length) {
         const seen = new Set(liveMsgs.map((m) => m.id));
         const fresh = list.filter((m) => !seen.has(m.id));
@@ -713,6 +720,7 @@ export function LiveChat() {
       localStorage.setItem("mpcs_chat_open", "0");
       localStorage.setItem("mpcs_chat_min", "0");
       localStorage.setItem("mpcs_chat_used", "0");
+      localStorage.setItem("mpcs_chat_cleared_at", new Date().toISOString());
     } catch {
       /* ignore */
     }
