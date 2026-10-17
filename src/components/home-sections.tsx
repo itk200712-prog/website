@@ -184,10 +184,10 @@ export function HomeSections({
   return (
     <main>
       {/* ================= HERO ================= */}
-      <section className="hero-dark relative overflow-hidden text-white">
+      <section className="hero-dark relative overflow-hidden text-white flex flex-col min-h-[calc(100vh-72px)]">
         <HeroSlideshow images={settings.hero_images} />
         <div className="hero-overlay" />
-        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-12 sm:pb-14 min-h-[68vh] flex flex-col justify-center items-center text-center">
+        <div className="relative z-30 max-w-7xl mx-auto w-full px-4 sm:px-6 pt-16 sm:pt-24 pb-10 sm:pb-12 flex-1 flex flex-col justify-center items-center text-center">
           {/* ✅ coop pill + Est badge */}
           <div className="inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-white/10 backdrop-blur-md px-4 py-2">
             <SiteLogoBadge size={20} className="!shadow-none ring-1 ring-white/30" />
@@ -197,8 +197,12 @@ export function HomeSections({
             <span className="rounded-full bg-amber-400 text-slate-900 px-2.5 py-0.5 text-[10px] font-extrabold">Est. 1976</span>
           </div>
 
-          <h1 className="mt-7 text-3xl sm:text-5xl font-black leading-[1.15] max-w-4xl text-center">
-            {lang === "si" ? "පඬුවස්නුවර MPCS LTD" : "Panduwasnuwara MPCS LTD"}
+          <h1
+            className={`mt-7 font-black leading-[1.2] max-w-5xl text-center ${
+              lang === "si" ? "text-[26px] sm:text-[40px] lg:text-[46px]" : "text-3xl sm:text-5xl"
+            }`}
+          >
+            {lang === "si" ? "සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය" : "Panduwasnuwara MPCS LTD"}
           </h1>
           {c.heroTag && <div className="mt-3 text-[15px] sm:text-[18px] font-bold text-amber-200">{c.heroTag}</div>}
           {c.heroDesc && <p className="mt-3.5 max-w-2xl text-[12.5px] sm:text-[14.5px] text-white/80 leading-relaxed">{c.heroDesc}</p>}
