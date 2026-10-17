@@ -595,18 +595,20 @@ export function LiveChat() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* launcher */}
+      {/* launcher — open වුණාම hide (header එකේ X එකෙන් close) */}
+      {!open && (
       <button
         onClick={() => setOpen((o) => !o)}
         className="fixed bottom-[72px] right-4 sm:bottom-20 sm:right-6 z-[90] h-14 w-14 rounded-full bg-gradient-to-br from-indigo-600 to-fuchsia-600 text-white shadow-2xl shadow-indigo-900/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform no-print"
         aria-label="Live chat"
       >
         {open ? <X size={22} /> : <MessageCircle size={24} />}
-        {!open && unread > 0 && (
+        {unread > 0 && (
           <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">{unread}</span>
         )}
-        {!open && <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white" />}
+        <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-white" />
       </button>
+      )}
 
       {open && (
         <div className="fixed bottom-[140px] right-4 sm:bottom-[150px] sm:right-6 z-[90] w-[calc(100vw-2rem)] sm:w-[400px] max-h-[min(660px,72vh)] rounded-3xl overflow-hidden bg-white shadow-[0_30px_80px_-20px_rgba(15,23,42,0.55)] border border-slate-200 flex flex-col pop-in no-print">
