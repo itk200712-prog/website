@@ -160,7 +160,7 @@ export default function AdminLiveChatPage() {
         <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="text-[12.5px] font-extrabold text-amber-800">⚠ live_chat_events table එක තවම හදලා නෑ</div>
           <p className="mt-1 text-[11.5px] text-amber-700">
-            `supabase/schema.sql` එකේ අන්තිම **§20. LIVE CHAT** block එක Supabase → SQL Editor එකේ run කරන්න. ඊට පස්සේ usage analytics පිරෙනවා.
+            supabase/schema.sql එකේ අන්තිම "§20. LIVE CHAT" block එක Supabase → SQL Editor එකේ run කරන්න. ඊට පස්සේ usage analytics පිරෙනවා.
           </p>
         </div>
       )}

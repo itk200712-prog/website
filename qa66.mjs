@@ -1,0 +1,17 @@
+import { chromium } from "playwright";
+const SITE = "https://website-blond-eta-94.vercel.app";
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+await page.goto(`${SITE}/si`, { waitUntil: "domcontentloaded" });
+await page.waitForTimeout(3000);
+await page.locator('button[aria-label="Live chat"]').click();
+await page.waitForTimeout(1200);
+const launcher = await page.locator('button[aria-label="Live chat"]').count();
+console.log("launcher while open:", launcher === 0 ? "✅ hidden" : "❌ still visible");
+const closeBtn = await page.locator('button[aria-label="Close"]').count();
+console.log("header close button:", closeBtn ? "✅" : "❌");
+await page.screenshot({ path: "/home/user/view-chat-si2.png" });
+await page.locator('button[aria-label="Close"]').first().click();
+await page.waitForTimeout(600);
+console.log("launcher after close:", (await page.locator('button[aria-label="Live chat"]').count()) ? "✅ back" : "❌");
+await browser.close();
