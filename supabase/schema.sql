@@ -902,3 +902,39 @@ grant execute on function public.chat_sync(text, timestamptz) to anon, authentic
 
 -- PostgREST schema cache reload (new tables/functions එකපාරටම හඳුනාගන්න)
 notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- §22. LIVE CHAT — typing indicators (visitor <-> admin)
+-- ---------------------------------------------------------------------------
+alter table public.chat_sessions add column if not exists visitor_typing_at timestamptz;
+alter table public.chat_sessions add column if not exists agent_typing_at timestamptz;
+
+create or replace function public.chat_typing(p_session text)
+returns void language sql security definer set search_path = public as $$
+  update public.chat_sessions set visitor_typing_at = now() where session_key = p_session;
+$$;
+grant execute on function public.chat_typing(text) to anon, authenticated;
+
+-- chat_sync v2 — typing + status + agent
+create or replace function public.chat_sync(p_session text, p_after timestamptz default '1970-01-01')
+returns jsonb language sql security definer set search_path = public as $$
+  select jsonb_build_object(
+    'status', coalesce((select status from public.chat_sessions where session_key = p_session), 'open'),
+    'agent',  coalesce((select agent_name from public.chat_sessions where session_key = p_session), ''),
+    'typing', coalesce((select (agent_typing_at is not null and agent_typing_at > now() - interval '5 seconds')
+                          from public.chat_sessions where session_key = p_session), false),
+    'messages', coalesce((
+      select jsonb_agg(to_jsonb(m) order by m.created_at)
+      from (
+        select id, sender, sender_name, body, created_at
+          from public.chat_messages
+         where session_key = p_session and created_at > p_after
+         order by created_at
+         limit 200
+      ) m
+    ), '[]'::jsonb)
+  );
+$$;
+grant execute on function public.chat_sync(text, timestamptz) to anon, authenticated;
+
+notify pgrst, 'reload schema';

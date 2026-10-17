@@ -23,6 +23,7 @@ type Session = {
   last_at: string;
   unread_admin: number;
   unread_visitor: number;
+  visitor_typing_at: string | null;
   page: string;
   created_at: string;
 };
@@ -57,10 +58,14 @@ export function AdminLiveChats() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
+  const typingAt = useRef(0);
   const [autoScroll, setAutoScroll] = useState(true);
   const activeKey = active?.session_key ?? "";
   // sessions list එකෙන් live status ගන්නවා (join වුණාම header එක update වේ)
   const current = sessions.find((x) => x.session_key === activeKey) ?? active;
+  const visitorTyping = Boolean(
+    current?.visitor_typing_at && Date.now() - new Date(current.visitor_typing_at).getTime() < 5000
+  );
 
   // admin ගේ නම
   useEffect(() => {
@@ -90,7 +95,7 @@ export function AdminLiveChats() {
 
   useEffect(() => {
     void loadSessions();
-    const t = setInterval(() => void loadSessions(), 4000);
+    const t = setInterval(() => void loadSessions(), 3000);
     return () => clearInterval(t);
   }, [loadSessions]);
 
@@ -312,6 +317,16 @@ export function AdminLiveChats() {
               className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-slate-50 min-h-0"
             >
               {msgs.length === 0 && <div className="text-center text-[11px] text-slate-400 py-6">messages නෑ</div>}
+              {visitorTyping && (
+                <div className="flex items-center gap-1.5">
+                  <div className="flex gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-2">
+                    {[0, 150, 300].map((d) => (
+                      <span key={d} className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                    ))}
+                  </div>
+                  <span className="text-[9.5px] font-semibold text-slate-400">Visitor is typing…</span>
+                </div>
+              )}
               {msgs.map((m) =>
                 m.sender === "system" ? (
                   <div key={m.id} className="text-center">
@@ -343,7 +358,20 @@ export function AdminLiveChats() {
               <div className="flex items-center gap-2">
                 <input
                   value={text}
-                  onChange={(e) => setText(e.target.value)}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    const now = Date.now();
+                    if (!activeKey || now - typingAt.current < 2500) return;
+                    typingAt.current = now;
+                    void (async () => {
+                      try {
+                        const sb = await authedClient();
+                        await sb.from("chat_sessions").update({ agent_typing_at: new Date().toISOString() }).eq("session_key", activeKey);
+                      } catch {
+                        /* ignore */
+                      }
+                    })();
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();

@@ -13,8 +13,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowRight, Bot, Building2, CheckCircle2, Clock, Loader2, MessageCircle,
-  Phone, PhoneCall, Search, Send, Sparkles, UserRound, X,
+  ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Loader2, MessageCircle,
+  Minus, Phone, PhoneCall, Search, Send, Sparkles, UserRound, X,
 } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
@@ -108,6 +108,13 @@ export function LiveChat() {
   const [visitorName, setVisitorName] = useState("");
   const [liveBusy, setLiveBusy] = useState(false);
   const [liveErr, setLiveErr] = useState("");
+  const [minimized, setMinimized] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  const [agentTyping, setAgentTyping] = useState(false);
+  const [liveUsed, setLiveUsed] = useState(false);
+  const audioRef = useRef<AudioContext | null>(null);
+  const soundRef = useRef(true);
+  const typingAt = useRef(0);
   const liveBoxRef = useRef<HTMLDivElement>(null);
   const lastTs = useRef("1970-01-01T00:00:00Z");
 
@@ -148,10 +155,39 @@ export function LiveChat() {
       setSessionKey(k);
       const n = localStorage.getItem("mpcs_chat_name");
       if (n) setVisitorName(n);
+
+      // ✅ refresh කළත් chat එක close වෙන්නේ නෑ
+      const t = localStorage.getItem("mpcs_chat_tab");
+      if (t === "live" || t === "form" || t === "chat") setTab(t);
+      if (localStorage.getItem("mpcs_chat_sound") === "0") {
+        setSoundOn(false);
+        soundRef.current = false;
+      }
+      if (localStorage.getItem("mpcs_chat_used") === "1") setLiveUsed(true);
+      if (localStorage.getItem("mpcs_chat_min") === "1") {
+        setMinimized(true);
+        setOpen(true);
+      } else if (localStorage.getItem("mpcs_chat_open") === "1") {
+        setOpen(true);
+      }
     } catch {
       /* private mode */
     }
   }, []);
+
+  // ✅ state persist — open / minimized / tab / sound
+  useEffect(() => {
+    try {
+      localStorage.setItem("mpcs_chat_open", open ? "1" : "0");
+      localStorage.setItem("mpcs_chat_min", minimized ? "1" : "0");
+      localStorage.setItem("mpcs_chat_tab", tab);
+      localStorage.setItem("mpcs_chat_sound", soundOn ? "1" : "0");
+      localStorage.setItem("mpcs_chat_used", liveUsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+    soundRef.current = soundOn;
+  }, [open, minimized, tab, soundOn, liveUsed]);
 
   useEffect(() => {
     if (open) {
@@ -472,6 +508,44 @@ export function LiveChat() {
   // ─────────────────────────────────────────────────────────────────────────
   //  LIVE AGENT (2-way with admin)
   // ─────────────────────────────────────────────────────────────────────────
+  // ── notification sound (Web Audio — file එකක් ඕන නෑ) ──
+  function unlockAudio() {
+    try {
+      if (!audioRef.current) {
+        const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AC) return;
+        audioRef.current = new AC();
+      }
+      if (audioRef.current.state === "suspended") void audioRef.current.resume();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function ping() {
+    if (!soundRef.current) return;
+    try {
+      const ctx = audioRef.current ?? new AudioContext();
+      audioRef.current = ctx;
+      if (ctx.state === "suspended") void ctx.resume();
+      const t0 = ctx.currentTime;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(880, t0);
+      o.frequency.exponentialRampToValueAtTime(1320, t0 + 0.12);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.22, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start(t0);
+      o.stop(t0 + 0.55);
+    } catch {
+      /* browser blocked */
+    }
+  }
+
   async function pull(reset = false) {
     if (!sessionKey) return;
     try {
@@ -481,20 +555,27 @@ export function LiveChat() {
         p_after: reset ? "1970-01-01T00:00:00Z" : lastTs.current,
       });
       if (error || !data) return;
-      const d = data as { status?: string; agent?: string; messages?: LiveMsg[] };
+      const d = data as { status?: string; agent?: string; typing?: boolean; messages?: LiveMsg[] };
       setLiveStatus((d.status as "open" | "joined" | "closed") ?? "open");
       setAgentName(d.agent ?? "");
+      setAgentTyping(Boolean(d.typing));
       const list = d.messages ?? [];
       if (reset) {
         setLiveMsgs(list);
         lastTs.current = list.length ? list[list.length - 1].created_at : "1970-01-01T00:00:00Z";
       } else if (list.length) {
+        const seen = new Set(liveMsgs.map((m) => m.id));
+        const fresh = list.filter((m) => !seen.has(m.id));
+        const newAgent = fresh.filter((m) => m.sender === "agent");
         setLiveMsgs((xs) => {
-          const seen = new Set(xs.map((m) => m.id));
-          return [...xs, ...list.filter((m) => !seen.has(m.id))];
+          const s2 = new Set(xs.map((m) => m.id));
+          return [...xs, ...fresh.filter((m) => !s2.has(m.id))];
         });
         lastTs.current = list[list.length - 1].created_at;
-        if (tab !== "live") setUnread((u) => u + list.filter((m) => m.sender === "agent").length);
+        if (newAgent.length) {
+          ping();                                   // 🔔 admin message → sound
+          if (tab !== "live" || !open) setUnread((u) => u + newAgent.length);
+        }
       }
       setLiveErr("");
     } catch {
@@ -503,7 +584,8 @@ export function LiveChat() {
   }
 
   useEffect(() => {
-    if (tab !== "live" || !sessionKey) return;
+    if (tab === "live") setLiveUsed(true);
+    if (!sessionKey || !liveUsed) return;
     let alive = true;
     (async () => {
       try {
@@ -522,11 +604,23 @@ export function LiveChat() {
       clearInterval(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, sessionKey]);
+  }, [tab, sessionKey, liveUsed]);
 
   useEffect(() => {
     liveBoxRef.current?.scrollTo({ top: liveBoxRef.current.scrollHeight, behavior: "smooth" });
   }, [liveMsgs, liveStatus]);
+
+  function onLiveType(v: string) {
+    setLiveText(v);
+    const now = Date.now();
+    if (!sessionKey || now - typingAt.current < 2500) return;
+    typingAt.current = now;
+    try {
+      void createAnonClient().rpc("chat_typing", { p_session: sessionKey });
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function sendLive() {
     const body = liveText.trim();
@@ -765,7 +859,11 @@ export function LiveChat() {
       {/* launcher — open වුණාම hide (header එකේ X එකෙන් close) */}
       {!open && (
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          unlockAudio();
+          setMinimized(false);
+          setOpen((o) => !o);
+        }}
         className="fixed bottom-[72px] right-4 sm:bottom-20 sm:right-6 z-[90] h-14 w-14 rounded-full bg-gradient-to-br from-indigo-600 to-fuchsia-600 text-white shadow-2xl shadow-indigo-900/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform no-print"
         aria-label="Live chat"
       >
@@ -777,7 +875,33 @@ export function LiveChat() {
       </button>
       )}
 
-      {open && (
+      {/* minimized bar */}
+      {open && minimized && (
+        <button
+          onClick={() => setMinimized(false)}
+          className="fixed bottom-[72px] right-4 sm:bottom-20 sm:right-6 z-[90] flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white pl-2 pr-3.5 py-2 shadow-[0_18px_50px_-12px_rgba(15,23,42,0.45)] hover:shadow-2xl transition no-print"
+        >
+          <span className="relative w-9 h-9 rounded-full bg-gradient-to-br from-indigo-600 to-fuchsia-600 text-white flex items-center justify-center">
+            <MessageCircle size={16} />
+            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${liveStatus === "joined" ? "bg-emerald-400" : "bg-amber-400"}`} />
+          </span>
+          <span className="text-left max-w-[160px]">
+            <span className="block text-[11.5px] font-extrabold text-slate-800 leading-tight">{si ? "සජීවී චැට්" : "Live Chat"}</span>
+            <span className="block text-[9.5px] text-slate-500 truncate">
+              {agentTyping
+                ? si ? "නිලධාරියා ලියනවා…" : "Officer is typing…"
+                : liveMsgs.length
+                  ? liveMsgs[liveMsgs.length - 1].body
+                  : liveStatus === "joined"
+                    ? si ? `${agentName || "නිලධාරියා"} සම්බන්ධයි` : `${agentName || "Officer"} connected`
+                    : si ? "කුඩා කර ඇත — විවෘත කරන්න" : "Minimized — tap to open"}
+            </span>
+          </span>
+          {unread > 0 && <span className="rounded-full bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5">{unread}</span>}
+        </button>
+      )}
+
+      {open && !minimized && (
         <div className="fixed bottom-[140px] right-4 sm:bottom-[150px] sm:right-6 z-[90] w-[calc(100vw-2rem)] sm:w-[400px] max-h-[min(660px,72vh)] rounded-3xl overflow-hidden bg-white shadow-[0_30px_80px_-20px_rgba(15,23,42,0.55)] border border-slate-200 flex flex-col pop-in no-print">
           {/* ── header ── */}
           <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-fuchsia-600 px-4 pt-3.5 pb-3 text-white shrink-0">
@@ -795,7 +919,25 @@ export function LiveChat() {
               <a href={`tel:${SITE.phones[0].replace(/\s/g, "")}`} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition" title={si ? "අමතන්න" : "Call us"}>
                 <Phone size={14} />
               </a>
-              <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition" aria-label="Close">
+              <button
+                onClick={() => {
+                  setMinimized(true);
+                  setOpen(true);
+                }}
+                className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition"
+                aria-label="Minimize"
+                title={si ? "කුඩා කරන්න" : "Minimize"}
+              >
+                <Minus size={15} />
+              </button>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  setMinimized(false);
+                }}
+                className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition"
+                aria-label="Close"
+              >
                 <X size={15} />
               </button>
             </div>
@@ -1090,17 +1232,34 @@ export function LiveChat() {
                     liveStatus === "joined" ? "bg-emerald-500" : liveStatus === "closed" ? "bg-slate-400" : "bg-amber-500 animate-pulse"
                   }`}
                 />
-                {liveStatus === "joined"
-                  ? si
-                    ? `🟢 ${agentName || "නිලධාරියෙක්"} සම්බන්ධ වී ඇත`
-                    : `🟢 ${agentName || "An officer"} is connected`
-                  : liveStatus === "closed"
+                <span className="truncate">
+                  {liveStatus === "joined"
                     ? si
-                      ? "chat එක අවසන් — නැවත ලිවිය හැක"
-                      : "Chat closed — you can write again"
-                    : si
-                      ? "⏳ නිලධාරියෙක් සම්බන්ධ වෙනතුරු රැඳී සිටින්න"
-                      : "⏳ Waiting for an officer to join"}
+                      ? `🟢 ${agentName || "නිලධාරියෙක්"} සම්බන්ධ වී ඇත`
+                      : `🟢 ${agentName || "An officer"} is connected`
+                    : liveStatus === "closed"
+                      ? si
+                        ? "chat එක අවසන් — නැවත ලිවිය හැක"
+                        : "Chat closed — you can write again"
+                      : si
+                        ? "⏳ නිලධාරියෙක් සම්බන්ධ වෙනතුරු රැඳී සිටින්න"
+                        : "⏳ Waiting for an officer to join"}
+                </span>
+                <button
+                  onClick={() => {
+                    const next = !soundOn;
+                    setSoundOn(next);
+                    soundRef.current = next;
+                    if (next) {
+                      unlockAudio();
+                      ping();
+                    }
+                  }}
+                  className="ml-auto shrink-0 rounded-lg px-1.5 py-0.5 hover:bg-black/5"
+                  title={soundOn ? (si ? "ශබ්දය on" : "Sound on") : si ? "ශබ්දය off" : "Sound off"}
+                >
+                  {soundOn ? <Bell size={12} /> : <BellOff size={12} />}
+                </button>
               </div>
 
               <div ref={liveBoxRef} className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2 bg-slate-50 min-h-[160px]">
@@ -1109,6 +1268,16 @@ export function LiveChat() {
                     {si
                       ? "ආයුබෝවන් 👋 ඔබේ ප්‍රශ්නය ලියන්න — නිලධාරියෙක් ඉක්මනින් පිළිතුරු දෙනවා. විනාඩි කීපයක් ඇතුළත කෙනෙක් නොඑන්නේ නම් “Contact Live Chat” බොත්තමෙන් කෙලින්ම අමතන්න."
                       : "Hello 👋 Type your question — an officer will reply shortly. If no one joins within a few minutes, use “Contact Live Chat” to request a call."}
+                  </div>
+                )}
+                {agentTyping && (
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-2">
+                      {[0, 150, 300].map((d) => (
+                        <span key={d} className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                      ))}
+                    </div>
+                    <span className="text-[9.5px] font-semibold text-slate-400">{si ? "නිලධාරියා ලියනවා…" : "Officer is typing…"}</span>
                   </div>
                 )}
                 {liveMsgs.map((m) =>
@@ -1151,7 +1320,7 @@ export function LiveChat() {
                 <div className="flex items-center gap-2">
                   <input
                     value={liveText}
-                    onChange={(e) => setLiveText(e.target.value)}
+                    onChange={(e) => onLiveType(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
