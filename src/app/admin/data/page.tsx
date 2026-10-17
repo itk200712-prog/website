@@ -131,78 +131,8 @@ async function parseSpreadsheet(file: File): Promise<ParsedRow[]> {
 
 /* ------------------------------------------------------------------ PDF -- */
 async function buildPdf(label: string, kind: "member" | "voter", rows: ParsedRow[], onProgress: (pct: number) => void) {
-  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
-
-  const PER_PAGE = 30;
-  const pages: ParsedRow[][] = [];
-  for (let i = 0; i < rows.length; i += PER_PAGE) pages.push(rows.slice(i, i + PER_PAGE));
-  if (!pages.length) pages.push([]);
-
-  // hidden render container — browser fonts => perfect Sinhala
-  const host = document.createElement("div");
-  host.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;background:#fff;z-index:-1;";
-  document.body.appendChild(host);
-
-  const head = kind === "member"
-    ? ["Member No", "NIC", "Full Name", "Address", "Postal Address", "Gender"]
-    : ["Voter No", "NIC", "Full Name", "Address", "Postal Address", "Gender"];
-  const keyOf = kind === "member" ? "member_no" : "member_no"; // same shape
-  void keyOf;
-
-  const makePage = (pageRows: ParsedRow[], idx: number, total: number) => {
-    const el = document.createElement("div");
-    el.style.cssText = "width:794px;min-height:1123px;padding:42px 40px;box-sizing:border-box;background:#fff;font-family:'Iskoola Pota','Noto Sans Sinhala',sans-serif;";
-    el.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #3730a3;padding-bottom:12px;">
-        <div>
-          <div style="font-size:19px;font-weight:800;color:#1e1b4b;">Panduwasnuwara New MPCS</div>
-          <div style="font-size:12px;color:#6366f1;font-weight:700;">${kind === "member" ? "Member Register" : "Electoral Register"} · ${label}</div>
-        </div>
-        <div style="text-align:right;font-size:11px;color:#64748b;">
-          <div>${new Date().toLocaleDateString()} · ${rows.length.toLocaleString()} records</div>
-          <div>Page ${idx + 1} / ${total}</div>
-        </div>
-      </div>
-      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:11px;">
-        <thead>
-          <tr style="background:#3730a3;color:#fff;">
-            ${head.map((h) => `<th style="padding:8px 6px;text-align:left;font-weight:700;">${h}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${pageRows
-            .map(
-              (r, i) => `<tr style="background:${i % 2 ? "#f5f7ff" : "#fff"};">
-            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.member_no || ""}</td>
-            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.nic || ""}</td>
-            <td style="padding:6px;border-bottom:1px solid #e2e8f0;font-weight:600;">${r.full_name || ""}</td>
-            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.address || ""}</td>
-            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.postal_address || ""}</td>
-            <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${r.gender || ""}</td>
-          </tr>`
-            )
-            .join("")}
-        </tbody>
-      </table>
-      <div style="margin-top:18px;font-size:10px;color:#94a3b8;text-align:center;">
-        Panduwasnuwara Multi-Purpose Cooperative Society · Reg. No කුරු/186 · Generated ${new Date().toLocaleString()}
-      </div>`;
-    return el;
-  };
-
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  for (let i = 0; i < pages.length; i++) {
-    const el = makePage(pages[i], i, pages.length);
-    host.appendChild(el);
-    const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff" });
-    const img = canvas.toDataURL("image/jpeg", 0.92);
-    if (i > 0) doc.addPage();
-    doc.addImage(img, "JPEG", 0, 0, 595.28, 841.89);
-    host.removeChild(el);
-    onProgress(Math.round(((i + 1) / pages.length) * 100));
-  }
-  document.body.removeChild(host);
-  doc.save(`${label}-${kind === "member" ? "members" : "voters"}.pdf`);
+  const { buildRegisterPdf } = await import("@/lib/pdf-register");
+  await buildRegisterPdf({ kind, label, rows, onProgress });
 }
 
 function downloadCsv(label: string, rows: ParsedRow[]) {

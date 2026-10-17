@@ -81,7 +81,31 @@ export function DirectoryTable({
   const [fileQ, setFileQ] = useState("");
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<AnyRow | null>(null);
+  const [pdfAnim, setPdfAnim] = useState<{ pct: number; done: boolean; label: string } | null>(null);
   const perPage = 25;
+
+  // ✅ professional PDF — තෝරා ඇති file/සොයුම අනුව සියලු member details, සියලු පිටු වලට
+  async function downloadPdf() {
+    if (!filtered.length) {
+      alert(lang === "si" ? "PDF කිරීමට දත්ත නැත" : "No data to export");
+      return;
+    }
+    const label = file === "all" ? (kind === "member" ? "All-Files-Members" : "All-Files-Voters") : file;
+    setPdfAnim({ pct: 0, done: false, label });
+    try {
+      const { buildRegisterPdf } = await import("@/lib/pdf-register");
+      await buildRegisterPdf({
+        kind,
+        label,
+        rows: filtered.map((r) => ({ ...r })),
+        onProgress: (pct) => setPdfAnim({ pct, done: false, label }),
+      });
+      setPdfAnim({ pct: 100, done: true, label });
+      setTimeout(() => setPdfAnim(null), 2200);
+    } catch {
+      setPdfAnim(null);
+    }
+  }
 
   const [allRows, setAllRows] = useState<AnyRow[]>([]);
   const [files, setFiles] = useState<DataFile[]>([]);
@@ -183,7 +207,7 @@ export function DirectoryTable({
               </div>
             </div>
             <button
-              onClick={() => window.print()}
+              onClick={downloadPdf}
               className="inline-flex items-center gap-2 rounded-2xl bg-amber-400 hover:bg-amber-300 active:scale-[0.97] text-slate-900 font-extrabold text-[13px] px-5 py-3 shadow-lg shadow-amber-500/25 transition-all"
             >
               <Printer size={16} /> {t.memberPage.downloadPdf}
@@ -450,6 +474,35 @@ export function DirectoryTable({
         <Download size={13} />
         RFC-4180 CSV · Sinhala text supported (CSV UTF-8 / Excel .xlsx) · {lang === "si" ? "විස්තර බලන්න පේළියක් click කරන්න" : "Click any row to view full details"}
       </div>
+
+      {/* ═══════════════ PDF progress overlay ═══════════════ */}
+      {pdfAnim && (
+        <div className="fixed inset-0 z-[110] bg-slate-900/55 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-3xl p-8 w-[360px] text-center shadow-2xl">
+            {!pdfAnim.done ? (
+              <>
+                <div className="mx-auto w-16 h-16 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
+                <div className="mt-4 font-extrabold text-slate-900 text-[15px]">
+                  {lang === "si" ? "සකසමින්" : "Preparing"} <span className="text-indigo-700">{pdfAnim.label}</span> PDF…
+                </div>
+                <div className="mt-3 h-2 rounded-full bg-indigo-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-emerald-500 transition-all duration-500" style={{ width: `${pdfAnim.pct}%` }} />
+                </div>
+                <div className="mt-2 text-[11px] text-slate-500 tabular-nums">
+                  {pdfAnim.pct}% · {lang === "si" ? "සියලු සාමාජික විස්තර ඇතුළත් වෙමින්" : "including all member details"}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </div>
+                <div className="mt-4 font-extrabold text-emerald-700 text-[15px]">✅ {pdfAnim.label}.pdf {lang === "si" ? "download විය!" : "downloaded!"}</div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════ full details popup ═══════════════ */}
       {detail && (
