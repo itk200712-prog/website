@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { Check, Fuel, ListOrdered, Pencil, Phone, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Check, Fuel, ListOrdered, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
 import { authedClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { FUEL_PRICES } from "@/lib/seed";
@@ -29,7 +29,6 @@ export default function AdminFuelPricesPage() {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [editAmt, setEditAmt] = useState("");
-  const [phone, setPhone] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -48,8 +47,6 @@ export default function AdminFuelPricesPage() {
         }
         const { data: st } = await sb.from("fuel_stock").select("*").order("created_at", { ascending: false }).limit(100);
         setRows((st as StockRow[]) ?? []);
-        const { data: ph } = await sb.from("system_settings").select("value").eq("key", "fuel_contact_phone").maybeSingle();
-        setPhone(ph?.value ?? "");
       } catch { /* ignore */ }
     })();
   }, []);
@@ -91,16 +88,9 @@ export default function AdminFuelPricesPage() {
     show("✅ Deleted");
   }
 
-  async function savePhone() {
-    const sb = await authedClient();
-    const { error } = await sb.from("system_settings").upsert({ key: "fuel_contact_phone", value: phone }, { onConflict: "key" });
-    if (error) return show(`⚠ ${error.message}`);
-    show("✅ අමතන්න අංකය saved — 24h පසුව පෙන්වන warning එකේ call button එකට මේ අංකය යනවා");
-  }
-
   return (
     <div>
-      <AdminTopbar title="Fuel Price Management" sub="Fuel prices, live stock entries and the contact number shown to F28 members" />
+      <AdminTopbar title="Fuel Price Management" sub="Fuel prices and live stock entries — F28 members ලට පෙනෙන දත්ත" />
       {node}
 
       {/* ---------------- prices ---------------- */}
@@ -238,21 +228,6 @@ export default function AdminFuelPricesPage() {
         </div>
       </div>
 
-      {/* ---------------- contact number ---------------- */}
-      <div className="card p-7 max-w-5xl mt-6">
-        <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-          <Phone size={19} className="text-emerald-700" /> &quot;අමතන්න&quot; අංකය (24h warning එකේ call button එක)
-        </h2>
-        <p className="text-slate-500 text-[12px] mt-1">
-          Live stock එක පැය 24ක් යාවත්කාලීන නොකළොත් F28 members ලට &quot;අද දිනට යාවත්කාලීන කර නැත — අමතන්න&quot; කියලා පෙන්වනවා. මේ අංකයට තමයි call එක යන්නෙ.
-        </p>
-        <div className="flex flex-wrap items-center gap-3 mt-4">
-          <input className="field !w-auto flex-1 min-w-[220px]" placeholder="උදා: 077 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          <button className="btn btn-primary" onClick={savePhone}>
-            <Check size={16} /> Save Number
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

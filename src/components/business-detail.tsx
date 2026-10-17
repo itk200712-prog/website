@@ -359,11 +359,11 @@ function StockCard({ type, amount, price, idx }: { type: string; amount: number;
 }
 
 export function FuelLiveStockSection() {
+  const { lang } = useLang();
   const [allowed, setAllowed] = useState(false);
   const [ready, setReady] = useState(false);
   const [rows, setRows] = useState<StockRow[]>([]);
   const [prices, setPrices] = useState<Record<string, number>>({});
-  const [phone, setPhone] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -374,14 +374,12 @@ export function FuelLiveStockSection() {
         const { data: m } = await sb.from("f28_members").select("status").eq("user_id", u.user.id).maybeSingle();
         if (!m || m.status !== "active") { setReady(true); return; }
         setAllowed(true);
-        const [st, pr, ph] = await Promise.all([
+        const [st, pr] = await Promise.all([
           sb.from("fuel_stock").select("*").order("created_at", { ascending: false }).limit(200),
           sb.from("fuel_prices").select("*"),
-          sb.from("system_settings").select("value").eq("key", "fuel_contact_phone").maybeSingle(),
         ]);
         setRows((st.data as StockRow[]) ?? []);
         setPrices(Object.fromEntries(((pr.data as { type: string; price: number }[]) ?? []).map((r) => [r.type, Number(r.price)])));
-        setPhone((ph.data as { value: string } | null)?.value ?? "");
       } catch { /* not allowed */ }
       setReady(true);
     })();
@@ -402,7 +400,15 @@ export function FuelLiveStockSection() {
     const t = new Date(r.updated_at || r.created_at || 0).getTime();
     return t > acc ? t : acc;
   }, 0);
-  const stale = !lastUpdate || Date.now() - lastUpdate > 24 * 60 * 60 * 1000;
+  // ✅ අවසාන යාවත්කාලීන දිනය හා වේලාව — පැහැදිලි, වෘත්තීය ආකෘතියෙන්
+  const updatedAt = lastUpdate ? new Date(lastUpdate) : null;
+  // "වප්"/"ඔක්තෝබර්" වගේ අවුල් නැති වෙන්න දිනය සර්වසාධාරණ ආකෘතියෙන් (16 Oct 2026)
+  const dateText = updatedAt
+    ? updatedAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+    : "—";
+  const timeText = updatedAt
+    ? updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+    : "";
   const totalValue = Object.entries(latest).reduce((a, [type, amt]) => a + amt * (prices[type] ?? 0), 0);
 
   return (
@@ -410,10 +416,8 @@ export function FuelLiveStockSection() {
       <style>{`
         @keyframes fuelFadeUp { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
         @keyframes fuelShimmer { 0% { filter: brightness(1); } 50% { filter: brightness(1.25); } 100% { filter: brightness(1); } }
-        @keyframes fuelPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.35); } 50% { box-shadow: 0 0 0 10px rgba(239,68,68,0); } }
         .fuel-fade-up { animation: fuelFadeUp .7s ease both; }
         .fuel-shimmer { animation: fuelShimmer 2.2s ease-in-out infinite; }
-        .fuel-pulse { animation: fuelPulse 1.8s ease-out infinite; }
       `}</style>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
         <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
@@ -427,9 +431,6 @@ export function FuelLiveStockSection() {
           <div className="text-right">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Total Stock Value</div>
             <div className="text-3xl font-black text-slate-900 tabular-nums">Rs. {totalValue.toLocaleString()}</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              {lastUpdate ? `අන්තිමට යාවත්කාලීන කළේ: ${new Date(lastUpdate).toLocaleString()}` : "තාම යාවත්කාලීන කර නෑ"}
-            </div>
           </div>
         </div>
 
@@ -439,26 +440,27 @@ export function FuelLiveStockSection() {
           ))}
         </div>
 
-        {stale && (
-          <div className="mt-8 rounded-3xl border-2 border-rose-300 bg-rose-50 p-6 flex flex-wrap items-center justify-between gap-4 fuel-pulse">
+        <div className="mt-8 rounded-2xl border border-slate-200 bg-white px-5 sm:px-6 py-4 shadow-[0_14px_36px_-24px_rgba(15,23,42,0.45)] flex flex-wrap items-center justify-between gap-4 fuel-fade-up">
+          <div className="flex items-center gap-3.5">
+            <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-md shadow-indigo-600/25">
+              <Clock size={19} />
+            </span>
             <div>
-              <div className="flex items-center gap-2 text-rose-700 font-extrabold text-[15px]">
-                ⚠ අද දිනට යාවත්කාලීන කර නැත
+              <div className={`text-[10px] font-bold uppercase text-slate-400 ${lang === "si" ? "tracking-[0.06em]" : "tracking-[0.2em]"}`}>
+                {lang === "si" ? "අවසාන යාවත්කාලීන කිරීම" : "Last Updated"}
               </div>
-              <div className="text-rose-600/90 text-[12.5px] mt-1">
-                Live stock එක පැය 24කින් වැඩි කාලයක් යාවත්කාලීන කර නැත
-                {lastUpdate ? ` — අන්තිමට යාවත්කාලීන කළේ: ${new Date(lastUpdate).toLocaleString()}` : ""}.
-                වැඩිදුර විස්තර සඳහා අමතන්න.
+              <div className="text-[13.5px] font-bold text-slate-800 mt-0.5">
+                {lang === "si" ? "අවසානවරට යාවත්කාලීන කළ දිනය හා වේලාව" : "Date and time of the last stock update"}
               </div>
             </div>
-            <a
-              href={`tel:${(phone || "").replace(/[^\d+]/g, "")}`}
-              className="inline-flex items-center gap-2 rounded-full bg-rose-600 text-white px-6 py-3 text-[13px] font-extrabold hover:bg-rose-700 transition"
-            >
-              📞 අමතන්න
-            </a>
           </div>
-        )}
+          <div className="text-right leading-tight">
+            <div className="text-[15px] font-extrabold text-slate-900 tabular-nums">{dateText}</div>
+            <div className="text-[12px] font-semibold text-slate-500 tabular-nums mt-0.5">
+              {timeText || (lang === "si" ? "තාම යාවත්කාලීන කර නැත" : "Not updated yet")}
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
