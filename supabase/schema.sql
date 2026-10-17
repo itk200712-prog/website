@@ -899,3 +899,6 @@ returns jsonb language sql security definer set search_path = public as $$
   );
 $$;
 grant execute on function public.chat_sync(text, timestamptz) to anon, authenticated;
+
+-- PostgREST schema cache reload (new tables/functions එකපාරටම හඳුනාගන්න)
+notify pgrst, 'reload schema';
