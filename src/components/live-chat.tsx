@@ -43,6 +43,7 @@ type Msg = {
   rows?: MemberRow[];
   query?: string;
   ref?: string;
+  choices?: { label: string; kind: "yes" | "no" }[];
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -97,10 +98,12 @@ export function LiveChat() {
 
   const boxRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(1);
+  const flowRef = useRef(0);          // flow එකක් අතරමැදි වීම වළක්වයි
+  const [autoScroll, setAutoScroll] = useState(true);
   const started = useRef(false);
   const sessionRef = useRef("");
 
-  const push = (m: Omit<Msg, "id">) => setMsgs((xs) => [...xs, { ...m, id: idRef.current++ }]);
+  const push = (m: Omit<Msg, "id">) => setMsgs((xs) => [...xs, { ...m, id: idRef.current++ }].slice(-80));
 
   // ── session + පළමු පණිවිඩය ──
   useEffect(() => {
@@ -128,8 +131,10 @@ export function LiveChat() {
   }, [open]);
 
   useEffect(() => {
+    // user උඩට scroll කරලා කියවනවා නම් බලෙන් පහළට ඇදින්නේ නෑ
+    if (!autoScroll) return;
     boxRef.current?.scrollTo({ top: boxRef.current.scrollHeight, behavior: "smooth" });
-  }, [msgs, typing, panel, tab]);
+  }, [msgs, typing, panel, tab, autoScroll]);
 
   const closePanel = () => {
     setPanel(null);
@@ -141,9 +146,12 @@ export function LiveChat() {
   //  ACTIONS
   // ─────────────────────────────────────────────────────────────────────────
   async function runAction(key: ActionKey) {
+    const my = ++flowRef.current;          // පරණ flow එක නවත්වයි
     setTab("chat");
     setTerm("");
     setCSent(false);
+    setPanel(null);                        // පරණ panel එක වහනවා
+    setAutoScroll(true);
     void logEvent(key, "", 0, sessionRef.current);
 
     if (key === "find") {
@@ -181,6 +189,7 @@ export function LiveChat() {
           text: si ? "එක් එක් අංශය වෙන වෙනම පහතින්." : "Each division is listed separately below.",
         });
         for (const ct of contacts) {
+          if (flowRef.current !== my) return;   // වෙන action එකක් එබුවා නම් නවත්වන්න
           const unit = units.find((x) => x.slug === ct.business_slug);
           const unitName = si ? unit?.name_si || unit?.name_en || ct.business_slug : unit?.name_en || ct.business_slug;
           const manager = (ct.name ?? "").replace(/\s*\(manager\)\s*$/i, "").trim();
@@ -258,6 +267,7 @@ export function LiveChat() {
         });
         // 4 blocks per message — කියවන්න ලේසි
         for (let i = 0; i < contacts.length; i += 4) {
+          if (flowRef.current !== my) return;
           const chunk = contacts.slice(i, i + 4);
           const text = chunk
             .map((ct) => {
@@ -370,8 +380,8 @@ export function LiveChat() {
     push({ from: "me", text: `${name} · ${nic} · ${phone}` });
     try {
       const { getLiveChatEmail } = await import("@/lib/contact-email");
-      const to = await getLiveChatEmail();
-      await fetch(`https://formsubmit.co/ajax/${to}`, {
+      const to = (await getLiveChatEmail()).trim();
+      if (to) await fetch(`https://formsubmit.co/ajax/${to}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
@@ -412,14 +422,45 @@ export function LiveChat() {
     setCSent(true);
     push({
       from: "bot",
-      bold: si ? "⏳ නිලධාරියෙක් එනතුරු රැඳී සිටින්න" : "⏳ Waiting for an officer",
+      bold: si ? "✅ ඉල්ලීම යවන ලදි" : "✅ Request sent",
       text: si
-        ? "ඔබේ ඉල්ලීම අපගේ කාර්යාලයට ලැබුණා ✅\n\n⏱ Waiting a few minutes — our officer will contact you.\n\nකරුණාකර දුරකථනය ළඟ රැඳී සිටින්න."
-        : "Your request has reached our office ✅\n\n⏱ Waiting a few minutes — our officer will contact you.\n\nPlease keep your phone close.",
+        ? "ඔබේ තොරතුරු අපගේ කාර්යාලයට ලැබුණා.\nතහවුරු කිරීමේ email එකක් ද යවා ඇත.\n\n⏱ විනාඩි කීපයක් ඇතුළත අපගේ නිලධාරියෙක් ඔබට කතා කරනවා.\n\nකරුණාකර දුරකථනය ළඟ රැඳී සිටින්න."
+        : "Your details have reached our office and a confirmation email was sent.\n\n⏱ Our officer will contact you within a few minutes.\n\nPlease keep your phone close.",
       card: "waiting",
       ref,
     });
     setTimeout(() => setCSent(false), 8000);
+  }
+
+  // ── "Do you want to contact an officer?" — Yes / No ──
+  function askOfficer() {
+    setTab("chat");
+    setPanel(null);
+    setCSent(false);
+    push({
+      from: "bot",
+      bold: si ? "🤝 නිලධාරියෙක් සම්බන්ධ කරගන්නද?" : "🤝 Do you want to contact an officer?",
+      text: si
+        ? "අපගේ නිලධාරියෙක් ඔබට කෙලින්ම කතා කරන්න පුළුවන්.\nඔබේ නම, NIC සහ දුරකථන අංකය දුන්නොත් විනාඩි කීපයක් ඇතුළත අපි සම්බන්ධ කරගන්නම්."
+        : "One of our officers can call you back directly.\nShare your name, NIC and phone number and we will contact you within a few minutes.",
+      choices: [
+        { label: si ? "ඔව්, සම්බන්ධ කරගන්න" : "Yes, contact me", kind: "yes" },
+        { label: si ? "නෑ, පස්සේ" : "No, not now", kind: "no" },
+      ],
+    });
+    void logEvent("ask_officer", "", 0, sessionRef.current);
+  }
+
+  function declineContact() {
+    push({
+      from: "bot",
+      bold: si ? "🙏 කමක් නෑ" : "🙏 No problem",
+      text: si
+        ? "ඕනෑම වෙලාවක “Contact Live Chat” බොත්තමෙන් අපිට කියන්න පුළුවන්.\n📞 දැන්ම කතා කරන්න ඕන නම්: " + SITE.phones[0]
+        : "You can reach us anytime with the “Contact Live Chat” button.\n📞 To talk right now: " + SITE.phones[0],
+      chips: si ? ["කාර්යාල වේලාවන්", "සාමාජික සොයන්න"] : ["Office hours", "Find Member"],
+    });
+    void logEvent("decline_officer", "", 0, sessionRef.current);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -510,6 +551,15 @@ export function LiveChat() {
       return;
     }
 
+    // “live chat / contact agent / officer / talk to someone” → Yes/No confirm
+    if (
+      /(live ?chat|contact (an )?(agent|officer|person|someone)|agent|officer|human|representative|call ?back|customer (care|service)|support team|talk to (someone|somebody|a person)|සජීවී|නිලධාරි|නිලධාරී|කතා කරන්න|කතාකරන්න|සම්බන්ධ කර|සම්බන්ධකර)/.test(n)
+    ) {
+      void logEvent("intent_officer", q, 0, sessionRef.current);
+      askOfficer();
+      return;
+    }
+
     if (/(phone|call|දුරකථන|අමතන්න|contact|manager|කළමනාකර)/.test(n)) {
       push({
         from: "bot",
@@ -562,8 +612,8 @@ export function LiveChat() {
     };
     try {
       const { getLiveChatEmail } = await import("@/lib/contact-email");
-      const to = await getLiveChatEmail();
-      await fetch(`https://formsubmit.co/ajax/${to}`, {
+      const to = (await getLiveChatEmail()).trim();
+      if (to) await fetch(`https://formsubmit.co/ajax/${to}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(payload),
@@ -667,7 +717,15 @@ export function LiveChat() {
               </div>
 
               {/* ── messages ── */}
-              <div ref={boxRef} className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2.5 bg-slate-50 min-h-[180px]">
+              <div
+                ref={boxRef}
+                onScroll={() => {
+                  const el = boxRef.current;
+                  if (!el) return;
+                  setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 90);
+                }}
+                className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2.5 bg-slate-50 min-h-[180px]"
+              >
                 {msgs.map((m) => (
                   <div key={m.id} className={`flex ${m.from === "me" ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[88%] ${m.from === "me" ? "order-1" : ""}`}>
@@ -737,6 +795,28 @@ export function LiveChat() {
                           )}
                         </div>
                       </div>
+
+                      {m.choices && m.choices.length > 0 && (
+                        <div className="mt-2 ml-7 flex gap-2">
+                          {m.choices.map((c) => (
+                            <button
+                              key={c.kind}
+                              onClick={() => {
+                                setMsgs((xs) => xs.map((x) => (x.id === m.id ? { ...x, choices: undefined, chips: undefined } : x)));
+                                if (c.kind === "yes") void runAction("contact");
+                                else declineContact();
+                              }}
+                              className={`flex-1 rounded-xl px-3 py-2 text-[11.5px] font-extrabold transition ${
+                                c.kind === "yes"
+                                  ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:opacity-95 shadow-sm shadow-emerald-600/20"
+                                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              {c.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       {m.chips && m.chips.length > 0 && (
                         <div className="mt-1.5 ml-7 flex flex-wrap gap-1.5">

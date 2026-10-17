@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, ArrowUpRight, CheckCircle2, Clock, Mail, MessageCircle, Phone,
-  RefreshCw, Save, Search, Send, TrendingUp, UserRound,
+  RefreshCw, Save, Search, Send, TrendingUp, UserRound, X as XIcon,
 } from "lucide-react";
 import { AdminStatCard, AdminTopbar, dbUpdate, dbUpsert, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
@@ -31,6 +31,9 @@ const TYPE_META: Record<string, { label: string; tone: string; icon: typeof Acti
   contact: { label: "Contact request", tone: "bg-fuchsia-50 text-fuchsia-700", icon: Send },
   message: { label: "Message form", tone: "bg-slate-100 text-slate-700", icon: Mail },
   search_error: { label: "Search error", tone: "bg-rose-50 text-rose-700", icon: Activity },
+  intent_officer: { label: "Asked for an officer", tone: "bg-fuchsia-50 text-fuchsia-700", icon: MessageCircle },
+  ask_officer: { label: "Officer Yes/No prompt", tone: "bg-fuchsia-50 text-fuchsia-700", icon: MessageCircle },
+  decline_officer: { label: "Officer — declined", tone: "bg-slate-100 text-slate-600", icon: XIcon },
 };
 
 export default function AdminLiveChatPage() {
