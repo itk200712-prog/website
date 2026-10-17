@@ -437,3 +437,105 @@ export async function setBackupSecret(key: "backup_download_password" | "backup_
   const { error } = await sb.from("backup_secrets").upsert({ key, value }, { onConflict: "key" });
   return error ? error.message : null;
 }
+
+
+/* ============================================================================
+ * FULL BACKUP ZIP — database.sql + Member/Voter XLSX registers + README
+ *   · සියලු tables (settings, profiles, passwords, images, live chat…)
+ *   · Members Register (සියලු පේළි) + Voters Register — Excel (.xlsx)
+ *   · Import කරද්දී SQL එකෙන් සියල්ල restore වේ (images ඇතුළුව)
+ * ========================================================================== */
+export async function generateBackupZip(onProgress: (msg: string, pct: number) => void): Promise<Blob> {
+  const zipMod = await import("jszip");
+  const JSZip = zipMod.default;
+  const xlsxMod = await import("xlsx");
+  const XLSX = xlsxMod.default ?? xlsxMod;
+  const zip = new JSZip();
+
+  // 1) database.sql (images base64 සමඟ)
+  const sql = await generateBackupSql((msg, pct) => onProgress(msg, Math.round(pct * 0.75)));
+  zip.file("database.sql", sql);
+
+  // 2) registers → XLSX
+  const sb = await authedClient();
+
+  async function allRows(table: "member_rows" | "voter_rows") {
+    const out: Record<string, unknown>[] = [];
+    for (let from = 0; from < 200000; from += 1000) {
+      const { data, error } = await sb.from(table).select("*").range(from, from + 999);
+      if (error) break;
+      const got = (data ?? []) as Record<string, unknown>[];
+      out.push(...got);
+      if (got.length < 1000) break;
+    }
+    return out;
+  }
+
+  function sheet(rows: Record<string, unknown>[], noKey: string) {
+    return rows.map((r, i) => ({
+      "#": i + 1,
+      [noKey === "member_no" ? "Member No" : "Voter No"]: r[noKey] ?? "",
+      "Full Name": r.full_name ?? "",
+      NIC: r.nic ?? "",
+      Address: r.address ?? "",
+      "Postal Address": r.postal_address ?? "",
+      Gender: r.gender ?? "",
+      File: r.file_name ?? "",
+    }));
+  }
+
+  onProgress("Exporting Member Register (XLSX)…", 80);
+  const members = await allRows("member_rows");
+  const mSheet = sheet(members, "member_no");
+  const mWb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(mWb, XLSX.utils.json_to_sheet(mSheet), "Members");
+  const mBuf = XLSX.write(mWb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+  zip.file("Members-Register.xlsx", mBuf);
+
+  onProgress("Exporting Voter Register (XLSX)…", 87);
+  const voters = await allRows("voter_rows");
+  const vWb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(vWb, XLSX.utils.json_to_sheet(sheet(voters, "voter_no")), "Voters");
+  const vBuf = XLSX.write(vWb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+  zip.file("Voters-Register.xlsx", vBuf);
+
+  // 3) CSV (Excel/Numbers වලට backup එකක් විදිහට — UTF-8 BOM සමඟ Sinhala හරි)
+  const csvOf = (rows: Record<string, string | number>[]) => {
+    const keys = rows.length ? Object.keys(rows[0]) : [];
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    return "\ufeff" + [keys.map(esc).join(","), ...rows.map((r) => keys.map((k) => esc(r[k])).join(","))].join("\r\n");
+  };
+  zip.file("Members-Register.csv", csvOf(mSheet as unknown as Record<string, string | number>[]));
+  zip.file("Voters-Register.csv", csvOf(sheet(voters, "voter_no") as unknown as Record<string, string | number>[]));
+
+  // 4) README
+  zip.file(
+    "README.txt",
+    [
+      "Panduwasnuwara New MPCS — FULL SITE BACKUP",
+      "Generated: " + new Date().toISOString(),
+      "",
+      "මේ ZIP එකේ තියෙන්නේ:",
+      "  • database.sql        — සියලු tables (members, voters, profiles+passwords,",
+      "                          system settings, board, news, gallery, messages(live chat),",
+      "                          applications, fuel, f28, activity logs, images(base64))",
+      "  • Members-Register.xlsx — සියලු සාමාජික විස්තර (" + members.length + " පේළි)",
+      "  • Voters-Register.xlsx  — සියලු ඡන්ද හිමි විස්තර (" + voters.length + " පේළි)",
+      "  • Members-Register.csv / Voters-Register.csv — UTF-8 CSV",
+      "",
+      "RESTORE කරන විදිහ:",
+      "  1) Admin → Backup & Restore → Import (import password එක දෙන්න)",
+      "  2) හෝ Supabase → SQL Editor → database.sql run කරන්න (fresh project එකකට)",
+      "  3) ඉන්පසු admin එකේ Backup → Import එකෙන් images storage එකට re-upload වේ",
+      "",
+      "⚠ auth.users passwords Supabase එකෙන් පිටතට export කළ නොහැක (security).",
+      "   නමුත් සියලු profiles + password_display (base64) + role/status backup එකේ ඇත.",
+      "   Restore එකෙන් පසු අවශ්‍ය නම් password reset කරන්න.",
+    ].join("\n")
+  );
+
+  onProgress("Creating ZIP archive…", 93);
+  return await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } }, (meta) =>
+    onProgress("Compressing… " + Math.round(meta.percent) + "%", 93 + Math.round(meta.percent * 0.07))
+  );
+}

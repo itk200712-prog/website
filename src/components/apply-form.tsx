@@ -50,7 +50,9 @@ export function ApplyForm() {
       }
     } catch { /* upload fail — photo නැතුව continue */ }
     try {
-      await fetch(`https://formsubmit.co/ajax/${fd.get("_to") || "itk200712@gmail.com"}`, {
+      const { getContactEmail } = await import("@/lib/contact-email");
+      const to = (fd.get("_to") as string) || (await getContactEmail());
+      await fetch(`https://formsubmit.co/ajax/${to}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({

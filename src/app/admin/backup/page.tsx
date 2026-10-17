@@ -13,7 +13,7 @@ import {
 import { AdminTopbar, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
 import {
-  generateBackupSql, getBackupSecrets, parseBackupSql, restoreBackup, setBackupSecret,
+  generateBackupZip, getBackupSecrets, parseBackupSql, restoreBackup, setBackupSecret,
 } from "@/lib/backup";
 import { logActivity } from "@/lib/activity";
 
@@ -51,14 +51,14 @@ export default function AdminBackupPage() {
     setBusy(true);
     setAnim({ pct: 0, msg: "Preparing backup…", done: false });
     try {
-      const sql = await generateBackupSql((msg, pct) => setAnim({ pct, msg, done: false }));
-      const blob = new Blob([sql], { type: "application/sql" });
+      // ✅ සම්පූර්ණ ZIP: database.sql + Member/Voter XLSX + CSV + README
+      const blob = await generateBackupZip((msg, pct) => setAnim({ pct, msg, done: false }));
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `mpcs-backup-${new Date().toISOString().slice(0, 10)}.sql`;
+      a.download = `mpcs-full-backup-${new Date().toISOString().slice(0, 10)}.zip`;
       a.click();
-      URL.revokeObjectURL(a.href);
-      void logActivity("BACKUP_DOWNLOAD", `Full-site .sql backup generated & downloaded (${a.download})`);
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      void logActivity("BACKUP_DOWNLOAD", `Full ZIP backup (SQL + registers XLSX/CSV + images) — ${a.download}`);
       setAnim({ pct: 100, msg: "Backup downloaded ✅", done: true });
       setTimeout(() => setAnim(null), 1800);
     } catch (e) {

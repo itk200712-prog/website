@@ -11,6 +11,7 @@ import {
   BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut,
   Mail, Megaphone, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X, Save, Activity } from "lucide-react";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { SiteLogoBadge } from "@/components/site-logo";
 import { logActivity } from "@/lib/activity";
 
 function brief(v: Record<string, unknown>): string {
@@ -51,6 +52,7 @@ export function AdminSidebar() {
   const path = usePathname();
   const [allowed, setAllowed] = useState<string[] | null>(null); // null = loading
   const [isSuper, setIsSuper] = useState(false);
+  const [navQ, setNavQ] = useState("");
 
   // section permissions load (superadmin/empty = සේරම ඉඩ)
   useEffect(() => {
@@ -79,35 +81,79 @@ export function AdminSidebar() {
 
   return (
     <aside className="w-[218px] shrink-0 bg-[#0b1029] text-white min-h-screen sticky top-0 flex flex-col no-print">
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-white/10">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[8px] font-black">
-          coop
-        </div>
-        <div>
-          <div className="font-extrabold text-[11px] leading-tight">PANDUWASNUWARA</div>
+      <Link href="/admin" className="flex items-center gap-2.5 px-4 py-4 border-b border-white/10 hover:bg-white/5 transition-colors">
+        <SiteLogoBadge size={32} className="!shadow-none" />
+        <div className="min-w-0">
+          <div className="font-extrabold text-[11px] leading-tight truncate">PANDUWASNUWARA</div>
           <div className="text-[8.5px] text-slate-400 tracking-wide">Admin Console</div>
         </div>
-      </div>
+      </Link>
       <div className="px-4 pt-3.5 pb-1.5 text-[8.5px] font-bold tracking-[0.18em] text-slate-500">NAVIGATION</div>
+      {/* ✅ quick search — panels ගොඩක් තියෙන නිසා ඉක්මනින් හොයන්න */}
+      <div className="px-2.5 pb-2">
+        <div className="relative">
+          <input
+            value={navQ}
+            onChange={(e) => setNavQ(e.target.value)}
+            placeholder="Search panels…"
+            className="w-full rounded-lg bg-white/8 border border-white/10 text-white placeholder:text-slate-500 text-[10.5px] pl-7 pr-2 py-1.5 outline-none focus:border-indigo-400/60 focus:bg-white/12"
+          />
+          <svg className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+        </div>
+      </div>
       <nav className="flex-1 px-2.5 space-y-0.5 overflow-y-auto pb-6">
-        {items.map((n) => {
-          const active = path === n.href;
-          return (
-            <Link key={n.href} href={n.href} className={`admin-nav-item !text-[11.5px] !py-[7px] ${active ? "active" : ""}`}>
-              <n.icon size={14} />
-              <span className="flex-1">{n.label}</span>
-              {n.badge && (
-                <span className="text-[8px] font-bold rounded-full px-1.5 py-0.5 bg-indigo-500/30 text-indigo-200">{n.badge}</span>
-              )}
-            </Link>
-          );
-        })}
+        {items
+          .filter((n) => !navQ.trim() || n.label.toLowerCase().includes(navQ.trim().toLowerCase()))
+          .map((n) => {
+            const active = path === n.href;
+            return (
+              <Link
+                key={n.href}
+                href={n.href}
+                className={`admin-nav-item !text-[11.5px] !py-[7px] transition-all duration-150 ${active ? "active" : ""}`}
+              >
+                <n.icon size={14} className={active ? "text-amber-300" : ""} />
+                <span className="flex-1">{n.label}</span>
+                {n.badge && (
+                  <span className="text-[8px] font-bold rounded-full px-1.5 py-0.5 bg-indigo-500/30 text-indigo-200">{n.badge}</span>
+                )}
+              </Link>
+            );
+          })}
       </nav>
+      <div className="px-3 py-3 border-t border-white/10 text-[8.5px] text-slate-500">
+        © {new Date().getFullYear()} Panduwasnuwara MPCS
+      </div>
     </aside>
   );
 }
 
 export function AdminTopbar({ title, sub }: { title: string; sub: string }) {
+  // ✅ hardcoded නම වෙනුවට sign-in වී ඉන්න සැබෑ admin ගේ නම + role + photo
+  const [who, setWho] = useState<{ name: string; role: string; avatar: string }>({ name: "", role: "", avatar: "" });
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const sb = await authedClient();
+        const { data: u } = await sb.auth.getUser();
+        if (!u?.user) return;
+        const { data: prof } = await sb.from("profiles").select("full_name, role, avatar_url").eq("id", u.user.id).maybeSingle();
+        if (!alive) return;
+        setWho({
+          name: (prof as { full_name?: string } | null)?.full_name || u.user.email || "Administrator",
+          role: (prof as { role?: string } | null)?.role || "admin",
+          avatar: (prof as { avatar_url?: string } | null)?.avatar_url || "",
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const initials = (who.name || "A").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 mb-7">
       <div>
@@ -115,19 +161,28 @@ export function AdminTopbar({ title, sub }: { title: string; sub: string }) {
         <p className="text-slate-500 text-[12.5px] mt-0.5">{sub}</p>
       </div>
       <div className="flex items-center gap-2.5">
-        <a href="/" className="btn btn-outline !py-2 !px-3.5 !text-[12px]">
+        <a href="/" target="_blank" rel="noreferrer" className="btn btn-outline !py-2 !px-3.5 !text-[12px]">
           <ExternalLink size={14} /> Live Website
         </a>
-        <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5">
-          <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center text-[11px] font-black">SA</div>
-          <div className="leading-tight">
-            <div className="text-[12px] font-bold text-slate-800 flex items-center gap-1.5">
-              Super Administrator
-              <span className="badge-amber rounded-full px-1.5 py-0.5 text-[8px] font-black">SUPER</span>
-            </div>
-            <div className="text-[10px] text-slate-400">superadmin</div>
+        <a href="/admin/profile" className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 hover:border-indigo-300 transition-colors">
+          <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-900 text-white flex items-center justify-center text-[11px] font-black shrink-0">
+            {who.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={who.avatar} alt={who.name} className="w-full h-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
-        </div>
+          <div className="leading-tight min-w-0">
+            <div className="text-[12px] font-bold text-slate-800 flex items-center gap-1.5 max-w-[160px]">
+              <span className="truncate">{who.name || "Loading…"}</span>
+              {who.role === "superadmin" && (
+                <span className="badge-amber rounded-full px-1.5 py-0.5 text-[8px] font-black shrink-0">SUPER</span>
+              )}
+            </div>
+            <div className="text-[10px] text-slate-400 capitalize">{who.role || "admin"}</div>
+          </div>
+        </a>
         <button
           onClick={() => (window.location.href = "/")}
           className="btn btn-outline !py-2 !px-3.5 !text-[12px] !text-red-600 !border-red-200 hover:!bg-red-50"

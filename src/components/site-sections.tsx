@@ -181,7 +181,9 @@ export function InquiryForm({ department, compact }: { department?: string; comp
     const fd = new FormData(form);
     // FormSubmit delivery (admin settings email එකට) — client-side සිට direct POST
     try {
-      await fetch(`https://formsubmit.co/ajax/${(fd.get("_to") as string) || "itk200712@gmail.com"}`, {
+      const { getContactEmail } = await import("@/lib/contact-email");
+      const to = (fd.get("_to") as string) || (await getContactEmail());
+      await fetch(`https://formsubmit.co/ajax/${to}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({

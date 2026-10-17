@@ -270,7 +270,9 @@ export function LiveChat() {
       Message: String(fd.get("message") || ""),
     };
     try {
-      await fetch("https://formsubmit.co/ajax/itk200712@gmail.com", {
+      const { getContactEmail } = await import("@/lib/contact-email");
+      const to = await getContactEmail();
+      await fetch(`https://formsubmit.co/ajax/${to}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(payload),
