@@ -12,13 +12,25 @@ import {
 import { useLang } from "@/lib/i18n";
 import type { BusinessContact, BusinessService, BoardMember } from "@/lib/types";
 
-export function SectionHead({ badge, title, sub, right }: { badge: string; title: string; sub?: string; right?: React.ReactNode }) {
+export function SectionHead({
+  badge,
+  title,
+  sub,
+  right,
+  dark = false,
+}: {
+  badge: string;
+  title: string;
+  sub?: string;
+  right?: React.ReactNode;
+  dark?: boolean;
+}) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 mb-7">
       <div>
         {badge && <div className="section-badge mb-2">{badge}</div>}
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">{title}</h2>
-        {sub && <p className="text-slate-500 text-sm mt-1.5 max-w-2xl">{sub}</p>}
+        <h2 className={`text-2xl sm:text-3xl font-extrabold ${dark ? "text-white" : "text-slate-900"}`}>{title}</h2>
+        {sub && <p className={`text-sm mt-1.5 max-w-2xl ${dark ? "text-white/70" : "text-slate-500"}`}>{sub}</p>}
       </div>
       {right}
     </div>

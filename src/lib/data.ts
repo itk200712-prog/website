@@ -131,6 +131,7 @@ export async function getSettings(): Promise<SiteSettings> {
       members_files_count: Number(map.get("members_files_count") ?? SETTINGS.members_files_count),
       voters_files_count: Number(map.get("voters_files_count") ?? SETTINGS.voters_files_count),
       hero_images: parseHeroImages(map.get("hero_images")),
+      board_bg: map.get("board_bg") ?? "",
     };
   }, SETTINGS);
 }

@@ -26,6 +26,8 @@ export default function AdminSettingsPage() {
   const [socialFb, setSocialFb] = useState("");
   const [siteLogo, setSiteLogo] = useState("");
   const [logoBusy, setLogoBusy] = useState(false);
+  const [boardBg, setBoardBg] = useState("");
+  const [boardBusy, setBoardBusy] = useState(false);
 
   // DB එකෙන් saved values load කරන්න (seed නෙමෙයි!)
   useEffect(() => {
@@ -46,6 +48,7 @@ export default function AdminSettingsPage() {
         if (g("social_whatsapp") != null) setSocialWa(g("social_whatsapp")!);
         if (g("social_facebook") != null) setSocialFb(g("social_facebook")!);
         if (g("site_logo") != null) setSiteLogo(g("site_logo")!);
+        if (g("board_bg") != null) setBoardBg(g("board_bg")!);
         const hero = g("hero_images");
         if (hero) {
           try { const arr = JSON.parse(hero); if (Array.isArray(arr)) setHeroImages(arr); } catch { /* ignore */ }
@@ -192,6 +195,79 @@ export default function AdminSettingsPage() {
           </div>
           <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 text-[11.5px] text-amber-900 mt-3">
             💡 Upload කළ ගමන්ම save වේ. හොඳම ප්‍රතිඵලයට <strong>500×500 ට අඩු රවුම් (square) PNG</strong> එකක් භාවිතා කරන්න.
+          </div>
+        </section>
+
+        {/* ✅ BOARD SECTION BACKGROUND — board details වලට යටින් පෙනෙන image එක */}
+        <section className="border-t border-slate-100 pt-7">
+          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
+            <ImageIcon size={20} className="text-emerald-600" /> Board Section Background Image
+          </h2>
+          <p className="text-slate-500 text-[12.5px] mt-1.5 leading-relaxed">
+            Home page එකේ hero එකට යටින් තියෙන <strong>white section</strong> එකට background image එකක්.
+            Image එකක් set කළොත් ඒක උඩින් board of directors විස්තර (glass cards) පේනවා. Image එකක් නැත්නම්
+            කලින් වගේ light gradient එක පේනවා.
+          </p>
+          <div className="mt-4 flex flex-wrap items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="w-48 h-28 rounded-xl overflow-hidden bg-slate-200 shrink-0 flex items-center justify-center">
+              {boardBg ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={boardBg} alt="Board background" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[11px] font-semibold text-slate-400">No image</span>
+              )}
+            </div>
+            <div className="flex-1 min-w-[240px]">
+              <div className="flex flex-wrap gap-2">
+                <label className="btn btn-outline cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={boardBusy}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      setBoardBusy(true);
+                      const { url, error } = await uploadSiteImage(file, "board");
+                      if (error || !url) {
+                        setBoardBusy(false);
+                        show(`⚠ ${error}`);
+                        return;
+                      }
+                      setBoardBg(url);
+                      const err = await dbUpsert("system_settings", { key: "board_bg", value: url });
+                      setBoardBusy(false);
+                      show(err ? `⚠ ${err}` : "✅ Board background එක set විය — site එකේ පෙන්වයි");
+                    }}
+                  />
+                  <Upload size={15} /> {boardBusy ? "Uploading…" : "Background Image Upload"}
+                </label>
+                {boardBg && (
+                  <button
+                    type="button"
+                    className="btn btn-outline !text-rose-600 !border-rose-200 hover:!bg-rose-50"
+                    onClick={async () => {
+                      setBoardBg("");
+                      const err = await dbUpsert("system_settings", { key: "board_bg", value: "" });
+                      show(err ? `⚠ ${err}` : "✅ Background එක ඉවත් කළා");
+                    }}
+                  >
+                    <Trash2 size={15} /> ඉවත් කරන්න
+                  </button>
+                )}
+              </div>
+              <input
+                value={boardBg}
+                onChange={(e) => setBoardBg(e.target.value)}
+                className="field mt-2.5 !text-[12px]"
+                placeholder="හෝ image URL එකක්: https://... (Save Settings ඔබන්න)"
+              />
+            </div>
+          </div>
+          <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-[11.5px] text-emerald-900 mt-3">
+            💡 Upload කළ ගමන්ම save වේ. තද පැහැති (dark) ඡායාරූපයක් දැම්මොත් board cards හොඳට කැපී පේනවා.
           </div>
         </section>
 
@@ -419,6 +495,7 @@ Message: Customer inquiry text...`}
                 { key: "social_whatsapp", value: socialWa },
                 { key: "social_facebook", value: socialFb },
                 { key: "site_logo", value: siteLogo },
+                { key: "board_bg", value: boardBg },
               ];
               let err: string | null = null;
               for (const row of rows) {

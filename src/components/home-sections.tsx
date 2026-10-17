@@ -250,17 +250,35 @@ export function HomeSections({
       </section>
 
       {/* ================= BOARD — background සීමාවට යටින්, glass profile cards ================= */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-slate-100 via-indigo-50/70 to-slate-50">
-        <div className="absolute -top-28 -left-28 w-[420px] h-[420px] rounded-full bg-indigo-300/30 blur-3xl" />
-        <div className="absolute top-1/3 -right-28 w-[420px] h-[420px] rounded-full bg-fuchsia-300/25 blur-3xl" />
-        <div className="absolute bottom-0 left-1/4 w-[420px] h-[420px] rounded-full bg-amber-200/30 blur-3xl" />
+      <section
+        className="relative overflow-hidden bg-gradient-to-b from-slate-100 via-indigo-50/70 to-slate-50"
+        style={
+          settings.board_bg
+            ? { backgroundImage: `url(${settings.board_bg})`, backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }
+            : undefined
+        }
+      >
+        {/* ✅ background image එකක් තිබේ නම් — කියවිය හැකි වීමට dark overlay */}
+        {settings.board_bg ? (
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/82 via-slate-900/72 to-slate-950/88" />
+        ) : (
+          <>
+            <div className="absolute -top-28 -left-28 w-[420px] h-[420px] rounded-full bg-indigo-300/30 blur-3xl" />
+            <div className="absolute top-1/3 -right-28 w-[420px] h-[420px] rounded-full bg-fuchsia-300/25 blur-3xl" />
+            <div className="absolute bottom-0 left-1/4 w-[420px] h-[420px] rounded-full bg-amber-200/30 blur-3xl" />
+          </>
+        )}
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14 sm:py-16">
           <SectionHead
             badge={c.boardBadge}
             title={c.boardTitle}
             sub={c.boardSub}
+            dark={!!settings.board_bg}
             right={
-              <Link href={L("/board")} className="btn btn-outline">
+              <Link
+                href={L("/board")}
+                className={settings.board_bg ? "btn !bg-white/10 !text-white !border-white/30 hover:!bg-white/20" : "btn btn-outline"}
+              >
                 {c.all}
               </Link>
             }
@@ -278,7 +296,7 @@ export function HomeSections({
               {c.officersTitle && (
                 <div className="flex items-center gap-4">
                   <div className="h-px flex-1 bg-slate-300/70" />
-                  <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-indigo-700 text-center">
+                  <div className={`text-[11px] font-bold tracking-[0.22em] uppercase text-center ${settings.board_bg ? "text-indigo-200" : "text-indigo-700"}`}>
                     {c.officersTitle}
                   </div>
                   <div className="h-px flex-1 bg-slate-300/70" />

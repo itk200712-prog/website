@@ -185,6 +185,8 @@ export interface SiteSettings {
   voters_files_count: number;
   /** hero background slideshow images (5ක්+ auto-change, admin settings වලින්) */
   hero_images: string[];
+  /** ✅ board section background image (admin settings වලින් set කරනවා) */
+  board_bg?: string;
 }
 
 export interface HeroStat {
