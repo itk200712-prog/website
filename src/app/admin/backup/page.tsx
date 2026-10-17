@@ -71,12 +71,23 @@ export default function AdminBackupPage() {
   async function importBackup(file: File) {
     if (!secrets) return show("⚠ backup_secrets table එක නෑ — පහත SQL block එක run කරන්න");
     if (imPw !== secrets.importPw) return show("⚠ Import password එක වැරදියි ❌");
-    if (!file.name.endsWith(".sql")) return show("⚠ .sql backup file එකක් තෝරන්න");
+    if (!/\.(sql|zip)$/i.test(file.name)) return show("⚠ .sql හෝ .zip backup file එකක් තෝරන්න");
     if (!confirm("⚠ Import එක දැන් තියෙන දත්ත සම්පූර්ණයෙන් replace කරයි. ඉදිරියට යන්නද?")) return;
     setBusy(true);
     setAnim({ pct: 0, msg: "Reading backup file…", done: false });
     try {
-      const sql = await file.text();
+      let sql: string;
+      if (/\.zip$/i.test(file.name)) {
+        // ✅ ZIP backup එකක් නම් ඇතුළේ database.sql එක ගන්නවා
+        setAnim({ pct: 2, msg: "Opening ZIP…", done: false });
+        const JSZip = (await import("jszip")).default;
+        const zip = await JSZip.loadAsync(file);
+        const entry = zip.file("database.sql") ?? zip.file(/database\.sql$/i)[0];
+        if (!entry) throw new Error("ZIP එකේ database.sql නෑ");
+        sql = await entry.async("string");
+      } else {
+        sql = await file.text();
+      }
       const inserts = parseBackupSql(sql);
       if (!inserts.length) throw new Error("backup file එකේ INSERT rows නෑ");
       const { restored, errors } = await restoreBackup(inserts, (msg, pct) => setAnim({ pct, msg, done: false }));
@@ -158,7 +169,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           <label className="field-label mt-4">Import Password</label>
           <input type="password" className="field" value={imPw} onChange={(e) => setImPw(e.target.value)} placeholder="Import password එක ඇතුළත් කරන්න" />
           <label className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/60 p-5 cursor-pointer hover:border-emerald-400 mt-4">
-            <input type="file" accept=".sql" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importBackup(f); }} />
+            <input type="file" accept=".sql,.zip" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importBackup(f); }} />
             <span className="btn btn-outline !py-2 !px-4 !text-[12px]">Choose .sql File</span>
             <span className="text-slate-500 text-[12.5px]">backup file එක තෝරන්න…</span>
           </label>
