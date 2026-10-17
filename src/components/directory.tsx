@@ -74,6 +74,7 @@ export function DirectoryTable({
   const [fileOpen, setFileOpen] = useState(false);
   const [fileQ, setFileQ] = useState("");
   const [page, setPage] = useState(1);
+  const [detail, setDetail] = useState<AnyRow | null>(null);
   const perPage = 25;
 
   const [allRows, setAllRows] = useState<AnyRow[]>([]);
@@ -263,13 +264,14 @@ export function DirectoryTable({
               <th>{t.memberPage.fullName}</th>
               <th>{t.memberPage.nic}</th>
               <th>{t.memberPage.address}</th>
+              <th>{isMember ? (lang === "si" ? "තැපැල් ලිපිනය" : "Postal Address") : (lang === "si" ? "තැපැල් ලිපිනය" : "Postal Address")}</th>
               <th>{t.memberPage.gender}</th>
             </tr>
           </thead>
           <tbody>
             {view.length === 0 ? (
               <tr>
-                <td colSpan={isMember ? 6 : 5} className="text-center text-slate-400 py-10">
+                <td colSpan={isMember ? 7 : 6} className="text-center text-slate-400 py-10">
                   {loading
                     ? (lang === "si" ? "දත්ත ලැබෙමින්…" : "Loading data…")
                     : allRows.length === 0
@@ -281,7 +283,12 @@ export function DirectoryTable({
               </tr>
             ) : (
               view.map((r, i) => (
-                <tr key={`${r.member_no ?? r.voter_no}-${i}`}>
+                <tr
+                  key={`${r.member_no ?? r.voter_no}-${i}`}
+                  onClick={() => setDetail(r)}
+                  className="cursor-pointer hover:bg-indigo-50/60 transition-colors"
+                  title={lang === "si" ? "සම්පූර්ණ විස්තර බලන්න" : "View full details"}
+                >
                   {isMember && (
                     <td className="font-bold text-indigo-600 tabular-nums">
                       {(page - 1) * perPage + i + 1}
@@ -291,6 +298,7 @@ export function DirectoryTable({
                   <td className="font-semibold text-slate-800">{r.full_name}</td>
                   <td className="tabular-nums text-slate-600">{r.nic}</td>
                   <td className="text-slate-600">{r.address}</td>
+                  <td className="text-slate-600">{r.postal_address || "—"}</td>
                   <td>
                     <span className="badge-amber rounded-full px-2.5 py-0.5 text-[11px] font-bold">
                       {genderLabel(r.gender)}
@@ -327,7 +335,62 @@ export function DirectoryTable({
       <div className="mt-4 text-[11.5px] text-slate-400 flex items-center gap-2">
         <Download size={13} />
         RFC-4180 CSV · Sinhala text supported (CSV UTF-8 / Excel .xlsx)
+        {detail && ""}
       </div>
+
+      {/* ✅ සම්පූර්ණ විස්තර popup — පේළියක් click කළ විට */}
+      {detail && (
+        <div
+          className="fixed inset-0 z-[100] bg-slate-900/55 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setDetail(null)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-indigo-700 to-indigo-500 px-6 py-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
+                  <Users size={22} className="text-white" />
+                </div>
+                <div>
+                  <div className="text-white font-extrabold text-[15px] leading-tight">{detail.full_name || "—"}</div>
+                  <div className="text-indigo-100 text-[11.5px] font-semibold tabular-nums">
+                    {isMember ? (lang === "si" ? "සාමාජික අංකය" : "Member No") : (lang === "si" ? "ඡන්ද අංකය" : "Voter No")}: {detail.member_no ?? detail.voter_no ?? "—"}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setDetail(null)}
+                className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white text-lg leading-none flex items-center justify-center"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 space-y-3.5">
+              {[
+                { label: lang === "si" ? "සම්පූර්ණ නම" : "Full Name", value: detail.full_name },
+                { label: "NIC", value: detail.nic },
+                { label: lang === "si" ? "ලිපිනය" : "Address", value: detail.address },
+                { label: lang === "si" ? "තැපැල් ලිපිනය" : "Postal Address", value: detail.postal_address },
+                { label: lang === "si" ? "ස්ත්‍රී/පුරුෂ" : "Gender", value: genderLabel(detail.gender) },
+                { label: lang === "si" ? "ගොනුව" : "File", value: detail.file_name },
+              ].map((f) => (
+                <div key={f.label} className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2.5">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide shrink-0">{f.label}</span>
+                  <span className="text-[13px] font-semibold text-slate-800 text-right">{f.value || "—"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="px-6 pb-6">
+              <button onClick={() => setDetail(null)} className="btn btn-primary w-full">
+                {lang === "si" ? "වසන්න" : "Close"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

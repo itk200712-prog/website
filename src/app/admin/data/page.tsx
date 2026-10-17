@@ -44,6 +44,17 @@ const HINTS: Record<keyof ParsedRow, string[]> = {
 };
 const NIC_LIKE = /^(\d{9}[vVxX]|\d{12}|\d{10}|0+)$/;
 
+// ✅ ඔයාගේ excel වල title/notes පේළි (උදා: "කාරක සභා 41 සාමාජික ලේඛනය") ඉවත් — ඇත්ත member පේළි විතරයි
+function isRealMemberRow(r: ParsedRow): boolean {
+  const no = r.member_no.trim();
+  const nic = r.nic.trim();
+  const name = r.full_name.trim();
+  if (no.length > 25 || name.length > 100) return false; // title/note පේළි
+  if (NIC_LIKE.test(nic)) return true; // NIC තියෙනවා → ඇත්ත පේළියක්
+  if (name.length >= 2 && name.length <= 60) return true; // නම තියෙනවා → ඇත්ත පේළියක්
+  return false;
+}
+
 function parseRows(grid: unknown[][]): ParsedRow[] {
   const rowsIn = grid.filter((r) => Array.isArray(r) && r.some((c) => String(c ?? "").trim() !== ""));
   if (!rowsIn.length) return [];
@@ -84,7 +95,7 @@ function parseRows(grid: unknown[][]): ParsedRow[] {
           gender: g(map.gender),
         };
       })
-      .filter((r) => r.full_name || r.nic || r.member_no);
+      .filter((r) => isRealMemberRow(r));
   }
 
   // ✅ header නැති ඔයාගේ excel format එක — කොලම අනුව: අංකය, NIC, නම, ලිපිනය, තැපැල්, ස්ත්‍රී/පුරුෂ
@@ -98,7 +109,7 @@ function parseRows(grid: unknown[][]): ParsedRow[] {
       // [අංකය, NIC, නම, ලිපිනය, තැපැල්, ස්ත්‍රී/පුරුෂ] ← ඔයාගේ format එක
       return { member_no: c[0] ?? "", nic: c[1] ?? "", full_name: c[2] ?? "", address: c[3] ?? "", postal_address: c[4] ?? "", gender: c[5] ?? "" };
     })
-    .filter((r) => r.full_name || r.nic || r.member_no);
+    .filter((r) => isRealMemberRow(r));
 }
 
 async function parseSpreadsheet(file: File): Promise<ParsedRow[]> {
@@ -106,9 +117,16 @@ async function parseSpreadsheet(file: File): Promise<ParsedRow[]> {
   const buf = await file.arrayBuffer();
   // ✅ raw: true — member numbers "33/02" වගේ text විදිහටම තියෙන්න ඕනේ (date විදිහට නොවෙන)
   const wb = XLSX.read(buf, { type: "array", raw: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", raw: true });
-  return parseRows(grid as unknown[][]);
+  // ✅ සියලු sheets පරීක්ෂා කරයි — මුල් sheet එක හිස්/cover නම් ඊළඟ එකෙන් data ගනී
+  const out: ParsedRow[] = [];
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", raw: true });
+    out.push(...parseRows(grid as unknown[][]));
+    if (out.length) break;
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------ PDF -- */
