@@ -55,11 +55,9 @@ async function fetchAllRows(table: "member_rows" | "voter_rows"): Promise<AnyRow
   return out;
 }
 
-function genderTone(g: string): string {
-  const s = String(g || "").toLowerCase();
-  if (/ස්ත්‍රි|ස්ත්‍රී|ගැහැණ|කාන්ත|^f/.test(s)) return "rose";
-  if (/පුරුෂ|පිරිමි|^m/.test(s)) return "indigo";
-  return "slate";
+// ✅ ස්ත්‍රී/පුරුෂ — දෙකම එකම නිල් පාටින්
+function genderTone(_g: string): string {
+  return "indigo";
 }
 
 export function DirectoryTable({
@@ -390,24 +388,18 @@ export function DirectoryTable({
                           {r.member_no ?? r.voter_no}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-[13.5px] font-semibold text-slate-800">
+                      <td className="font-book px-4 py-3 text-[13.5px] font-semibold text-slate-800">
                         <span className="inline-flex items-center gap-2">
                           {r.full_name}
                           <Eye size={13} className="text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-[13px] tabular-nums text-slate-600">{r.nic || "—"}</td>
-                      <td className="px-4 py-3 text-[13px] text-slate-600">{r.address || "—"}</td>
-                      <td className="px-4 py-3 text-[13px] text-slate-600">{r.postal_address || "—"}</td>
+                      <td className="font-book px-4 py-3 text-[13px] tabular-nums text-slate-600">{r.nic || "—"}</td>
+                      <td className="font-book px-4 py-3 text-[13px] text-slate-600">{r.address || "—"}</td>
+                      <td className="font-book px-4 py-3 text-[13px] text-slate-600">{r.postal_address || "—"}</td>
                       <td className="px-4 py-3">
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                            tone === "rose"
-                              ? "bg-rose-50 text-rose-600 border border-rose-100"
-                              : tone === "indigo"
-                                ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
-                                : "bg-amber-50 text-amber-600 border border-amber-100"
-                          }`}
+                          className={`font-book inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-600`}
                         >
                           {genderLabel(r.gender) || "—"}
                         </span>
@@ -527,7 +519,7 @@ export function DirectoryTable({
             </div>
             <div className="p-6 space-y-3.5">
               {[
-                { label: lang === "si" ? "සම්පූර්ණ නම" : "Full Name", value: detail.full_name },
+                { label: lang === "si" ? "සම්පූර්ණ නම" : "Full Name", value: detail.full_name, book: true },
                 { label: "NIC", value: detail.nic },
                 { label: lang === "si" ? "ලිපිනය" : "Address", value: detail.address },
                 { label: lang === "si" ? "තැපැල් ලිපිනය" : "Postal Address", value: detail.postal_address },
@@ -536,7 +528,7 @@ export function DirectoryTable({
               ].map((f) => (
                 <div key={f.label} className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2.5">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide shrink-0">{f.label}</span>
-                  <span className="text-[13px] font-semibold text-slate-800 text-right">{f.value || "—"}</span>
+                  <span className={`font-book text-[13px] font-semibold text-slate-800 text-right`}>{f.value || "—"}</span>
                 </div>
               ))}
             </div>

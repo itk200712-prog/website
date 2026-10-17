@@ -1145,8 +1145,8 @@ export function LiveChat() {
                             m.from === "me" ? "bg-indigo-600 text-white rounded-br-md" : "bg-white text-slate-700 border border-slate-200 rounded-bl-md shadow-sm"
                           }`}
                         >
-                          {m.bold && <div className="font-extrabold mb-1 text-slate-900">{m.bold}</div>}
-                          {m.text}
+                          {m.bold && <div className="font-book font-extrabold mb-1 text-slate-900">{m.bold}</div>}
+                          <span className="font-book">{m.text}</span>
 
                           {/* business / board button panel */}
                           {m.card === "choices" && m.list && (
@@ -1184,10 +1184,10 @@ export function LiveChat() {
                                   className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-left hover:border-indigo-300 hover:bg-white transition"
                                 >
                                   <span className="flex items-start justify-between gap-2">
-                                    <span className="font-extrabold text-[12px] text-slate-900 leading-tight">{r.full_name || "—"}</span>
+                                    <span className="font-book font-extrabold text-[12px] text-slate-900 leading-tight">{r.full_name || "—"}</span>
                                     <span className="shrink-0 rounded-md bg-indigo-600 text-white text-[9.5px] font-black px-1.5 py-0.5">{r.member_no || "—"}</span>
                                   </span>
-                                  <span className="mt-1 block text-[10.5px] text-slate-500 leading-relaxed">
+                                  <span className="font-book mt-1 block text-[10.5px] text-slate-500 leading-relaxed">
                                     <span className="font-semibold text-slate-600">NIC:</span> {r.nic || "—"}
                                     <br />
                                     <span className="font-semibold text-slate-600">{si ? "ලිපිනය" : "Address"}:</span> {r.address || "—"}

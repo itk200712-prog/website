@@ -395,3 +395,11 @@ body {
 }
 .btn-amber:hover { filter: brightness(1.06); transform: translateY(-1px); }
 
+/* ============================================================================
+   "ඉස්කෝල පොත" ෆොන්ට් — සාමාජික දත්ත / PDF සඳහා
+   Iskoola Pota තියෙන උපාංගවල ඒකම, නැත්නම් embed කරපු Abhaya Libre
+   ============================================================================ */
+.font-book {
+  font-family: "Iskoola Pota", "Iskoola-Pota", "Iskpota", var(--font-book), "Abhaya Libre", serif;
+  font-feature-settings: "liga" 1, "kern" 1;
+}

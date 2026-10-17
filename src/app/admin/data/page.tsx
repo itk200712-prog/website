@@ -265,6 +265,27 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
     }
   }
 
+  // Excel sheet එකේ හැම cell එකකටම Iskoola Pota ෆොන්ට් දානවා
+  function applyBookFont(ws: Record<string, unknown>) {
+    try {
+      const range = (ws["!ref"] as string) || "";
+      if (!range) return;
+      const dec = range.split(":").map((c) => c.replace(/\D/g, ""));
+      const maxCol = Number(dec[1] ?? dec[0] ?? 20);
+      const maxRow = Number(range.split(":")[1]?.replace(/\D/g, "") ?? 200);
+      for (let r = 0; r <= maxRow; r++) {
+        for (let c = 0; c <= maxCol; c++) {
+          const addr = String.fromCharCode(65 + (c % 26)) + (c >= 26 ? String(Math.floor(c / 26)) : "") + (r + 1);
+          const cell = ws[addr] as { s?: Record<string, unknown> } | undefined;
+          if (!cell) continue;
+          cell.s = { ...(cell.s ?? {}), font: { name: "Iskoola Pota", sz: 11 } };
+        }
+      }
+    } catch {
+      /* style නොදැම්මත් export එක වැඩ කරයි */
+    }
+  }
+
   function downloadSample(xlsx: boolean) {
     const head = ["Member Number", "NIC", "FULL NAME", "ADDRESS", "POSTAL ADDRESS", "GENDER"];
     const sample = [{ member_no: "001", nic: "199012345678", full_name: "නිමල් පෙරේරා", address: "හෙට්ටිපොල", postal_address: "හෙට්ටිපොල", gender: "Male" }];
@@ -273,6 +294,8 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
         const XLSX = await import("xlsx");
         const ws = XLSX.utils.json_to_sheet(sample, { header: head });
         const wb = XLSX.utils.book_new();
+        // ✅ "ඉස්කෝල පොත" ෆොන්ට් — Excel cell font (Iskoola Pota)
+        applyBookFont(ws);
         XLSX.utils.book_append_sheet(wb, ws, "Members");
         XLSX.writeFile(wb, `member-template.xlsx`);
       })();

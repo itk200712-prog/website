@@ -32,6 +32,15 @@ export async function buildRegisterPdf(opts: {
 }): Promise<void> {
   const { kind, label, rows, onProgress } = opts;
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
+  // ✅ "ඉස්කෝල පොත" font එක load වනතුරු ඉන්නවා (නැත්නම් fallback වේ)
+  try {
+    await document.fonts?.ready;
+    await document.fonts?.load('700 12px "Iskoola Pota"');
+    await document.fonts?.load('700 12px "Abhaya Libre"');
+    await document.fonts?.load('400 12px "Abhaya Libre"');
+  } catch {
+    /* ignore */
+  }
 
   const PER_PAGE = 30;
   const pages: RegisterRow[][] = [];
@@ -64,7 +73,7 @@ export async function buildRegisterPdf(opts: {
   const makePage = (pageRows: RegisterRow[], idx: number, total: number) => {
     const el = document.createElement("div");
     el.style.cssText =
-      "width:794px;min-height:1123px;padding:36px 38px;box-sizing:border-box;background:#fff;font-family:'Iskoola Pota','Noto Sans Sinhala','Inter',sans-serif;color:#1e293b;";
+      "width:794px;min-height:1123px;padding:36px 38px;box-sizing:border-box;background:#fff;font-family:'Iskoola Pota','Iskoola-Pota','Abhaya Libre','Noto Sans Sinhala',Arial,sans-serif;color:#1e293b;";
     const bodyRows = pageRows
       .map((r, i) => {
         const no = String((idx * PER_PAGE + i + 1) as number | string);

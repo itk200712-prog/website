@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Noto_Sans_Sinhala } from "next/font/google";
+import { Abhaya_Libre, Inter, Noto_Sans_Sinhala } from "next/font/google";
 import { FloatingLang } from "@/components/floating-lang";
 import { OnlinePresence } from "@/components/online-presence";
 import { LiveChat } from "@/components/live-chat";
@@ -9,6 +9,13 @@ import { LanguageProvider } from "@/lib/i18n";
 import type { Lang } from "@/lib/types";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+// ✅ "ඉස්කෝල පොත" (Iskoola Pota) වගේ serif Sinhala — PDF + සාමාජික දත්ත සඳහා
+const bookFont = Abhaya_Libre({
+  subsets: ["sinhala", "latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-book",
+  display: "swap",
+});
 const sinhala = Noto_Sans_Sinhala({
   subsets: ["sinhala"],
   variable: "--font-sinhala",
@@ -29,7 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const lang: Lang = raw === "si" ? "si" : "en"; // default = English
   return (
     <html lang={lang}>
-      <body className={`${inter.variable} ${sinhala.variable}`}>
+      <body className={`${inter.variable} ${sinhala.variable} ${bookFont.variable}`}>
         <LanguageProvider initialLang={lang}>
           {children}
           <FloatingLang />
