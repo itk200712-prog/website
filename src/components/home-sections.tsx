@@ -220,7 +220,7 @@ export function HomeSections({
         </div>
 
         {/* ✅ hero stats bar — dark glass strip */}
-        <div className="relative z-30 px-4 sm:px-6 pb-10">
+        <div className="relative z-30 px-4 sm:px-6 pb-12 sm:pb-14">
           <div className="max-w-3xl mx-auto rounded-2xl border border-white/15 bg-slate-950/65 backdrop-blur-xl px-4 sm:px-8 py-4">
             <div className="grid grid-cols-3 divide-x divide-white/12">
               <div className="flex items-center justify-center gap-2.5 px-2">
@@ -247,21 +247,6 @@ export function HomeSections({
             </div>
           </div>
         </div>
-
-        {/* ✅ HERO IMAGE එක දිගටම — board heading band එකත් එකම photo එක උඩ */}
-        <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 pb-14 sm:pb-16">
-          <SectionHead
-            badge={c.boardBadge}
-            title={c.boardTitle}
-            sub={c.boardSub}
-            dark
-            right={
-              <Link href={L("/board")} className="btn !bg-white/10 !text-white !border-white/30 hover:!bg-white/20">
-                {c.all}
-              </Link>
-            }
-          />
-        </div>
       </section>
 
       {/* ================= BOARD DETAILS — photo එක ඉවර වෙන තැනින් පටන් ගන්නවා (animated gradient) ================= */}
@@ -269,7 +254,19 @@ export function HomeSections({
         <div className="absolute -top-28 -left-28 w-[420px] h-[420px] rounded-full bg-indigo-300/30 blur-3xl" />
         <div className="absolute top-1/3 -right-28 w-[420px] h-[420px] rounded-full bg-fuchsia-300/25 blur-3xl" />
         <div className="absolute bottom-0 left-1/4 w-[420px] h-[420px] rounded-full bg-amber-200/30 blur-3xl" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-10 sm:pt-12 pb-14 sm:pb-16">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-12 sm:pt-14 pb-14 sm:pb-16">
+          {/* ✅ Board of Directors heading — hero photo එකට යටින් */}
+          <SectionHead
+            badge={c.boardBadge}
+            title={c.boardTitle}
+            sub={c.boardSub}
+            right={
+              <Link href={L("/board")} className="btn btn-outline">
+                {c.all}
+              </Link>
+            }
+          />
+
           {/* සියලුම සාමාජිකයින් order පිළිවෙලට — පේලියකට 4ක් */}
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {sortedBoard.map((p) => (
