@@ -94,6 +94,44 @@ async function fetchSchemaCols(tables: BackupTable[]): Promise<Record<string, Co
   return out;
 }
 
+// anon role ට access නැති tables OpenAPI spec එකේ පේන්නේ නෑ → හරි DDL එක මෙතන
+const DDL_OVERRIDE: Record<string, string> = {
+  chat_sessions: `create table if not exists public.chat_sessions (
+  id uuid primary key default gen_random_uuid(),
+  session_key text unique not null,
+  visitor_name text default '',
+  visitor_phone text default '',
+  status text not null default 'open',
+  agent_id uuid,
+  agent_name text default '',
+  last_message text default '',
+  last_at timestamptz default now(),
+  unread_admin int not null default 0,
+  unread_visitor int not null default 0,
+  visitor_typing_at timestamptz,
+  agent_typing_at timestamptz,
+  page text default '',
+  created_at timestamptz default now()
+);`,
+  chat_messages: `create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  session_key text not null,
+  sender text not null default 'visitor',
+  sender_name text default '',
+  body text not null default '',
+  seen boolean not null default false,
+  created_at timestamptz default now()
+);`,
+  live_chat_events: `create table if not exists public.live_chat_events (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null default 'open',
+  query text default '',
+  matched int default 0,
+  session_id text default '',
+  created_at timestamptz default now()
+);`,
+};
+
 function ddlFor(t: BackupTable, cols: ColType[]): string {
   if (!cols.length)
     return `create table if not exists public.${t.name} (${colName(t.pk)} text primary key, data jsonb default '{}'::jsonb);`;
@@ -196,7 +234,7 @@ export async function generateBackupSql(onProgress: (msg: string, pct: number) =
   onProgress("Writing table DDL…", 50);
   lines.push(`-- ------------------------------- TABLES -------------------------------`);
   for (const t of BACKUP_TABLES) {
-    lines.push(ddlFor(t, schemaCols[t.name] ?? []));
+    lines.push(DDL_OVERRIDE[t.name] ?? ddlFor(t, schemaCols[t.name] ?? []));
     lines.push(``);
   }
 
