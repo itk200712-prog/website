@@ -27,6 +27,47 @@ export function decodePw(enc: string): string {
   }
 }
 
+// ============================================================================
+// Validation (⑳) — NIC · Phone · Password
+// ============================================================================
+/** NIC: ඉලක්කම් 12 හෝ ඉලක්කම් 9 + v/V */
+export function validateNic(raw: string): string | null {
+  const v = raw.trim();
+  if (!v) return "NIC අංකය ඇතුළත් කරන්න / NIC is required";
+  if (/^\d{12}$/.test(v)) return null;
+  if (/^\d{9}[vV]$/.test(v)) return null;
+  return "NIC අංකය වැරදියි — ඉලක්කම් 12ක් හෝ ඉලක්කම් 9ක් + v/V (උදා: 200012345678 / 912345678V)";
+}
+
+/** Phone: 0 + ඉලක්කම් 9 (මුළු 10) හෝ +94 + ඉලක්කම් 9 */
+export function validatePhone(raw: string): string | null {
+  const v = raw.replace(/[\s-]/g, "");
+  if (!v) return "දුරකථන අංකය ඇතුළත් කරන්න / Phone is required";
+  if (/^0\d{9}$/.test(v)) return null;
+  if (/^\+94\d{9}$/.test(v)) return null;
+  if (/^94\d{9}$/.test(v)) return null;
+  return "දුරකථන අංකය වැරදියි — 0 සමඟ ඉලක්කම් 10ක් (උදා: 0771234567) හෝ +94 සමඟ ඉලක්කම් 9ක් (උදා: +94771234567)";
+}
+
+/** දුර්වල මුරපද — 123456, 111111, 654321, 11112222 වගේ */
+export function validatePassword(pw: string): string | null {
+  if (!pw) return "මුරපදය ඇතුළත් කරන්න / Password is required";
+  if (pw.length < 6) return "මුරපදය අවම අකුරු 6ක් විය යුතුය";
+  if (/^(\d)\1+$/.test(pw)) return "මේ මුරපදය දුර්වලයි — එකම ඉලක්කම් නැවත නැවත භාවිතා කර ඇත";
+  // ඉලක්කම් පමණක් නම්: අනුක්‍රමික (123456/654321) හෝ පුනරාවර්තන (11112222) බැ
+  if (/^\d+$/.test(pw)) {
+    const seq = "0123456789876543210";
+    if (seq.includes(pw)) return "මේ මුරපදය දුර්වලයි — අනුක්‍රමික ඉලක්කම් භාවිතා කර ඇත";
+    const uniq = new Set(pw.split("")).size;
+    if (uniq <= 2) return "මේ මුරපදය දුර්වලයි — ඉලක්කම් 2කට වඩා වැඩි විය යුතුය";
+    const half = pw.slice(0, Math.floor(pw.length / 2));
+    if (pw.startsWith(half + half)) return "මේ මුරපදය දුර්වලයි — එකම කොටස නැවත නැවත භාවිතා කර ඇත";
+  }
+  const common = ["password", "qwerty", "abc123", "admin123", "iloveyou", "123456789", "888888", "666666", "777777", "000000"];
+  if (common.includes(pw.toLowerCase())) return "මේ මුරපදය ඉතා පොදුයි — වෙනත් මුරපදයක් තෝරන්න";
+  return null;
+}
+
 export async function registerMember(input: {
   full_name: string;
   nic: string;

@@ -5,7 +5,7 @@
 // ============================================================================
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, BadgeCheck, Eye, EyeOff, Lock, LogIn, MessageCircle, ShieldCheck, UserRound, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { logActivity } from "@/lib/activity";
@@ -13,10 +13,53 @@ import { loginWithNic } from "@/lib/auth";
 
 export default function SignInPage() {
   const { t, lang } = useLang();
+  // ✅ දැනටම sign in වෙලා නම් signin page එක ලෝඩ් නොවී යන්න ඕන තැනට යවනවා
+  const [checking, setChecking] = useState(true);
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [waOpen, setWaOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { createClient, isSupabaseConfigured } = await import("@/lib/supabase/client");
+        if (!isSupabaseConfigured()) {
+          if (alive) setChecking(false);
+          return;
+        }
+        const sb = createClient();
+        const { data } = await sb.auth.getSession();
+        let role = "";
+        if (!data.session) {
+          // localStorage token (custom auth) එකක් තියෙනවද?
+          const at = localStorage.getItem("mpcs_at");
+          if (!at) {
+            if (alive) setChecking(false);
+            return;
+          }
+          const { data: u } = await sb.auth.getUser(at);
+          if (!u?.user) {
+            if (alive) setChecking(false);
+            return;
+          }
+          const { data: prof } = await sb.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
+          role = (prof as { role?: string } | null)?.role ?? "";
+          if (alive) window.location.replace(role === "admin" || role === "superadmin" ? "/admin" : "/dashboard");
+          return;
+        }
+        const { data: prof } = await sb.from("profiles").select("role").eq("id", data.session.user.id).maybeSingle();
+        role = (prof as { role?: string } | null)?.role ?? "";
+        if (alive) window.location.replace(role === "admin" || role === "superadmin" ? "/admin" : "/dashboard");
+      } catch {
+        if (alive) setChecking(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -31,6 +74,17 @@ export default function SignInPage() {
     }
     if (role === "superadmin" || role === "admin") await logActivity("LOGIN", `logged in as ${role} (NIC: ${String(fd.get("nic"))})`);
     window.location.href = role === "superadmin" || role === "admin" ? "/admin" : "/";
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="mx-auto w-10 h-10 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
+          <div className="mt-3 text-[12px] font-semibold text-slate-500">{lang === "si" ? "පරීක්ෂා කරමින්…" : "Checking session…"}</div>
+        </div>
+      </div>
+    );
   }
 
   return (

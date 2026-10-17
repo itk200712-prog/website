@@ -50,23 +50,35 @@ export function ApplyForm() {
       }
     } catch { /* upload fail — photo නැතුව continue */ }
     try {
-      const { getContactEmail } = await import("@/lib/contact-email");
-      const to = (fd.get("_to") as string) || (await getContactEmail());
-      await fetch(`https://formsubmit.co/ajax/${to}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          _subject: "New MPCS Membership Application",
-          "Name (Sinhala)": fd.get("name_si"),
-          "Name (English)": fd.get("name_en"),
-          Address: fd.get("address"),
-          "Postal Address": fd.get("postal"),
-          NIC: fd.get("nic"),
-          Phone: fd.get("phone"),
-          Email: fd.get("email") || "—",
-          "Certified Form": photoUrl || fileName || "—",
-        }),
-      });
+      const payload = {
+        _subject: "New MPCS Membership Application",
+        "Name (Sinhala)": fd.get("name_si"),
+        "Name (English)": fd.get("name_en"),
+        Address: fd.get("address"),
+        "Postal Address": fd.get("postal"),
+        NIC: fd.get("nic"),
+        Phone: fd.get("phone"),
+        Email: fd.get("email") || "—",
+        "Certified Form": photoUrl || fileName || "—",
+        Source: "Website — Membership Application",
+      };
+      // ✅ Admin → Emails එකේ add කරපු හැම ලිපිනයකටම යවනවා (2, 3, ...)
+      const { getNotifyEmails, sendToAllEmails } = await import("@/lib/notify-emails");
+      const list = await getNotifyEmails();
+      if (list.length) {
+        await sendToAllEmails(payload);
+      } else {
+        // ලැයිස්තුවක් නැත්නම් පරණ ක්‍රමයට contact email එකට
+        const { getContactEmail } = await import("@/lib/contact-email");
+        const to = (fd.get("_to") as string) || (await getContactEmail());
+        if (to) {
+          await fetch(`https://formsubmit.co/ajax/${to}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(payload),
+          });
+        }
+      }
     } catch {
       /* demo mode */
     }

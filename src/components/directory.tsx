@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState } from "react";
+import { rowMatch } from "@/lib/search";
 import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, FileSpreadsheet, Layers, Printer, Search, Users, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
@@ -148,17 +149,13 @@ export function DirectoryTable({
   }, [kind]);
 
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
+    if (!q.trim()) return allRows.filter((r) => file === "all" || r.file_name === file);
+    // ✅ "ඉඳුවර කුමාරතුංග" → වචන දෙකම තියෙන සියලු අය (පිළිවෙළ වැදගත් නෑ)
     return allRows.filter((r) => {
       if (file !== "all" && r.file_name !== file) return false;
-      if (!s) return true;
-      return (
-        r.full_name.toLowerCase().includes(s) ||
-        r.nic.toLowerCase().includes(s) ||
-        r.address.includes(q.trim()) ||
-        (r.member_no ?? r.voter_no ?? "").toLowerCase().includes(s) ||
-        r.file_name.toLowerCase().includes(s)
-      );
+      return rowMatch(r as unknown as Record<string, unknown>, q, [
+        "full_name", "nic", "address", "member_no", "voter_no", "file_name",
+      ]);
     });
   }, [q, file, allRows]);
 

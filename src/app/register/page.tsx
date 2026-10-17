@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, BadgeCheck, Eye, EyeOff, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
 import { useLang } from "@/lib/i18n";
-import { registerMember } from "@/lib/auth";
+import { registerMember, validateNic, validatePassword, validatePhone } from "@/lib/auth";
 
 const SITE_REG = "කුරු/186";
 
@@ -24,8 +24,19 @@ export default function RegisterPage() {
     setError("");
     const fd = new FormData(e.currentTarget);
     const password = String(fd.get("password"));
-    if (password.length < 5) {
-      setError("Password must be at least 5 characters / මුරපදය අකුරු 5කට වැඩි විය යුතුය");
+    const nicErr = validateNic(String(fd.get("nic") || ""));
+    if (nicErr) {
+      setError(nicErr);
+      return;
+    }
+    const phoneErr = validatePhone(String(fd.get("phone") || ""));
+    if (phoneErr) {
+      setError(phoneErr);
+      return;
+    }
+    const pwErr = validatePassword(password);
+    if (pwErr) {
+      setError(pwErr);
       return;
     }
     setBusy(true);

@@ -355,7 +355,14 @@ export function AdminLiveChats() {
               )}
             </div>
 
-            {/* composer */}
+            {/* composer — closed chat එකේ visitor ලියනකන් reply කරන්න බෑ */}
+            {current?.status === "closed" ? (
+              <div className="border-t border-amber-100 bg-amber-50 p-2.5">
+                <div className="text-center text-[10.5px] font-bold text-amber-800">
+                  🔒 මේ chat එක close කරලා. Visitor නැවත message එකක් එවූ පසු reply කරන්න පුළුවන්.
+                </div>
+              </div>
+            ) : (
             <div className="border-t border-slate-100 p-2.5">
               <div className="flex items-center gap-2">
                 <input
@@ -395,6 +402,7 @@ export function AdminLiveChats() {
                 <CheckCheck size={10} /> ඔබ යවන පණිවිඩය visitor ගේ chat එකේ 2 තත්පරයක් ඇතුළත පේනවා
               </div>
             </div>
+            )}
           </div>
         )}
       </div>

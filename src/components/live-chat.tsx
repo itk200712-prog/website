@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
+import { tokens } from "@/lib/search";
 import { SITE } from "@/lib/seed";
 
 type MemberRow = {
@@ -31,7 +32,8 @@ type MemberRow = {
   file_name?: string;
 };
 
-type CardType = "members" | "apply" | "waiting";
+type CardType = "members" | "apply" | "waiting" | "choices";
+type ListItem = { label: string; sub?: string; value: string };
 
 type LiveMsg = { id: string; sender: "visitor" | "agent" | "system"; sender_name: string; body: string; created_at: string };
 
@@ -46,6 +48,8 @@ type Msg = {
   query?: string;
   ref?: string;
   choices?: { label: string; kind: "yes" | "no" }[];
+  list?: ListItem[];
+  action?: "biz" | "board";
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -252,27 +256,29 @@ export function LiveChat() {
         const units = (u ?? []) as U[];
         const contacts = (c ?? []) as C[];
         setTyping(false);
-        if (!contacts.length) {
-          push({ from: "bot", text: si ? "දැනට කළමනාකරු තොරතුරු නොමැත." : "No manager details available right now." });
+        if (flowRef.current !== my) return;
+        if (!units.length) {
+          push({ from: "bot", text: si ? "දැනට ව්‍යාපාර තොරතුරු නොමැත." : "No business details available right now." });
           return;
         }
-        push({
-          from: "bot",
-          bold: si ? "🏢 ව්‍යාපාර අංශ සහ කළමනාකරුවන්" : "🏢 Business Divisions & Managers",
-          text: si ? "එක් එක් අංශය වෙන වෙනම පහතින්." : "Each division is listed separately below.",
+        // ✅ ව්‍යාපාර වල නම් සහිත බොත්තම් panel එක
+        const list: ListItem[] = units.map((un) => {
+          const ct = contacts.find((x) => x.business_slug === un.slug);
+          return {
+            label: (si ? un.name_si || un.name_en : un.name_en) ?? un.slug,
+            sub: ct ? (ct.name ?? "").replace(/\s*\(manager\)\s*$/i, "").trim() : "",
+            value: un.slug,
+          };
         });
-        for (const ct of contacts) {
-          if (flowRef.current !== my) return;   // වෙන action එකක් එබුවා නම් නවත්වන්න
-          const unit = units.find((x) => x.slug === ct.business_slug);
-          const unitName = si ? unit?.name_si || unit?.name_en || ct.business_slug : unit?.name_en || ct.business_slug;
-          const manager = (ct.name ?? "").replace(/\s*\(manager\)\s*$/i, "").trim();
-          push({ from: "bot", bold: `🏢 ${unitName}`, text: `👤 ${si ? "කළමනාකරු" : "Manager"}: ${manager || "—"}` });
-          await sleep(190);
-        }
         push({
           from: "bot",
-          text: si ? "දුරකථන අංක සඳහා “කළමනාකරු දුරකථන” තෝරන්න." : "Tap “Managers Phones” for their phone numbers.",
-          chips: si ? ["කළමනාකරු දුරකථන", "කාර්යාල දුරකථන"] : ["Managers Phones", "Office Phones"],
+          bold: si ? "🏢 ව්‍යාපාර අංශ" : "🏢 Business Divisions",
+          text: si
+            ? "ඔබට අදාළ ව්‍යාපාරයේ බොත්තම ඔබන්න — කළමනාකරුගේ නම සහ දුරකථන අංකය එවන්නම්."
+            : "Tap your business below — I'll show the manager's name and phone number.",
+          card: "choices",
+          list,
+          action: "biz",
         });
       } catch {
         setTyping(false);
@@ -292,22 +298,22 @@ export function LiveChat() {
         setTyping(false);
         type B = { name_en?: string; name_si?: string; position_en?: string; position_si?: string; phone?: string };
         const rows = (data ?? []) as B[];
+        if (!rows.length) {
+          push({ from: "bot", text: si ? "දුරකථන තොරතුරු නොමැත." : "No phone numbers available." });
+          return;
+        }
+        // ✅ අධ්‍යක්ෂවරුන්ගේ නම් සහිත බොත්තම් panel එක
         push({
           from: "bot",
-          bold: si ? "☎️ කාර්යාල දුරකථන — අධ්‍යක්ෂ මණ්ඩලය" : "☎️ Office Phones — Board of Directors",
-          text: rows.length
-            ? rows
-                .map(
-                  (r) =>
-                    `• ${(si ? r.name_si || r.name_en : r.name_en) ?? "—"}${
-                      (si ? r.position_si || r.position_en : r.position_en) ? ` (${si ? r.position_si || r.position_en : r.position_en})` : ""
-                    }\n   📞 ${r.phone || "—"}`
-                )
-                .join("\n")
-            : si
-              ? "දුරකථන තොරතුරු නොමැත."
-              : "No phone numbers available.",
-          chips: si ? ["කළමනාකරු දුරකථන", "සජීවී සම්බන්ධය"] : ["Managers Phones", "Contact Live Chat"],
+          bold: si ? "☎️ කාර්යාල දුරකථන" : "☎️ Office Phones",
+          text: si ? "අදාළ පුද්ගලයාගේ බොත්තම ඔබන්න — දුරකථන අංකය එවන්නම්." : "Tap a name below to see the phone number.",
+          card: "choices",
+          action: "board",
+          list: rows.map((r, i) => ({
+            label: (si ? r.name_si || r.name_en : r.name_en) ?? "—",
+            sub: (si ? r.position_si || r.position_en : r.position_en) ?? "",
+            value: String(i),
+          })),
         });
       } catch {
         setTyping(false);
@@ -379,6 +385,62 @@ export function LiveChat() {
     }
   }
 
+  // ── business / board button එකක් එබුවම ──
+  async function pickFromList(action: "biz" | "board", value: string, label: string) {
+    push({ from: "me", text: label });
+    setTyping(true);
+    try {
+      const sb = createAnonClient();
+      if (action === "biz") {
+        const [{ data: u }, { data: c }] = await Promise.all([
+          sb.from("business_units").select("slug,name_en,name_si").eq("slug", value).limit(1),
+          sb.from("business_contacts").select("name,phone,role_en,role_si,location").eq("business_slug", value).limit(10),
+        ]);
+        setTyping(false);
+        const unit = (u ?? [])[0] as { name_en?: string; name_si?: string } | undefined;
+        const cs = (c ?? []) as { name?: string; phone?: string; role_en?: string; role_si?: string; location?: string }[];
+        const unitName = (si ? unit?.name_si || unit?.name_en : unit?.name_en) ?? label;
+        if (!cs.length) {
+          push({ from: "bot", bold: `🏢 ${unitName}`, text: si ? "මෙම අංශයට කළමනාකරු තොරතුරු නොමැත." : "No manager details for this division." });
+          return;
+        }
+        push({
+          from: "bot",
+          bold: `🏢 ${unitName}`,
+          text: cs
+            .map((x) => {
+              const role = si ? x.role_si || x.role_en : x.role_en || x.role_si;
+              const nm = (x.name ?? "").replace(/\s*\(manager\)\s*$/i, "").trim();
+              return `${si ? "👤 කළමනාකරු" : "👤 Manager"}: ${nm || "—"}${role ? `\n🏷 ${role}` : ""}\n📞 ${x.phone || "—"}${x.location ? `\n📍 ${x.location}` : ""}`;
+            })
+            .join("\n\n"),
+          chips: si ? ["ව්‍යාපාර කළමනාකරුවන්", "සජීවී චැට්"] : ["Business Managers", "Live Chat"],
+        });
+      } else {
+        const { data } = await sb
+          .from("board_members")
+          .select("name_en,name_si,position_en,position_si,phone,email")
+          .order("order");
+        setTyping(false);
+        const rows = (data ?? []) as { name_en?: string; name_si?: string; position_en?: string; position_si?: string; phone?: string; email?: string }[];
+        const r = rows[Number(value)];
+        if (!r) {
+          push({ from: "bot", text: si ? "තොරතුරු හමු නොවීය." : "Details not found." });
+          return;
+        }
+        push({
+          from: "bot",
+          bold: (si ? r.name_si || r.name_en : r.name_en) ?? label,
+          text: `${(si ? r.position_si || r.position_en : r.position_en) ?? ""}\n📞 ${r.phone || "—"}${r.email ? `\n📧 ${r.email}` : ""}`,
+          chips: si ? ["කාර්යාල දුරකථන", "ඇමතුමක් ඉල්ලන්න"] : ["Office Phones", "Request a Call"],
+        });
+      }
+    } catch {
+      setTyping(false);
+      push({ from: "bot", text: si ? "⚠ දත්ත ලබාගත නොහැකි විය." : "⚠ Could not load data." });
+    }
+  }
+
   // ── Find member search ──
   async function searchMember(e: React.FormEvent) {
     e.preventDefault();
@@ -389,13 +451,21 @@ export function LiveChat() {
     setBusy(true);
     setTyping(true);
     const safe = raw.replace(/[%,()*]/g, " ").replace(/\s+/g, " ").trim();
+    // ✅ "ඉඳුවර කුමාරතුංග" → වචන දෙකම තියෙන සියලු අය (පිළිවෙළ වැදගත් නෑ)
+    const toks = tokens(raw).map((t) => t.replace(/[%,()*]/g, "")).filter(Boolean);
+    const FIELDS = "member_no,full_name,nic,address,postal_address,gender,file_name";
+    const orFor = (t: string) => `or(full_name.ilike.*${t}*,nic.ilike.*${t}*,member_no.ilike.*${t}*)`;
+    // PostgREST nested logic — or=(and(or(...),or(...)))
+    const q1 = toks.length > 1 ? `(and(${toks.map(orFor).join(",")}))` : orFor(safe);
     try {
       const sb = createAnonClient();
-      const { data, error } = await sb
-        .from("member_rows")
-        .select("member_no,full_name,nic,address,postal_address,gender,file_name")
-        .or(`full_name.ilike.*${safe}*,nic.ilike.*${safe}*,member_no.ilike.*${safe}*`)
-        .limit(8);
+      let { data, error } = await sb.from("member_rows").select(FIELDS).or(q1).limit(40);
+      // exact tokens වලින් නැත්නම් — වචනයක් වත් ගැළපෙන ඒවා
+      if (!error && (!data || data.length === 0) && toks.length > 1) {
+        const r2 = await sb.from("member_rows").select(FIELDS).or(`(${toks.map(orFor).join(",")})`).limit(40);
+        data = r2.data;
+        error = r2.error;
+      }
       setTyping(false);
       setBusy(false);
       if (error) throw new Error(error.message);
@@ -404,8 +474,10 @@ export function LiveChat() {
       if (rows.length) {
         push({
           from: "bot",
-          bold: si ? `✅ ප්‍රතිඵල ${rows.length}` : `✅ ${rows.length} result${rows.length > 1 ? "s" : ""}`,
-          text: si ? `“${raw}” සඳහා ගැළපෙන සාමාජිකයන්:` : `Members matching “${raw}”:`,
+          bold: si ? `✅ ප්‍රතිඵල ${rows.length}${rows.length >= 40 ? "+" : ""}` : `✅ ${rows.length}${rows.length >= 40 ? "+" : ""} result${rows.length > 1 ? "s" : ""}`,
+          text: si
+            ? `“${raw}” සමඟ ගැළපෙන සාමාජිකයන් ${rows.length}ක්. එක් අයෙකුගේ නම ඔබන්න — සම්පූර්ණ විස්තර පෙන්නන්නම්.`
+            : `${rows.length} match${rows.length > 1 ? "es" : ""} for “${raw}”. Tap a name to see full details.`,
           card: "members",
           rows,
           query: raw,
@@ -620,6 +692,31 @@ export function LiveChat() {
     } catch {
       /* ignore */
     }
+  }
+
+  // ✅ chat එක සම්පූර්ණයෙන්ම close — user side history අයින්, admin history ඉතුරු
+  async function endChat() {
+    if (!sessionKey) return;
+    try {
+      await createAnonClient().rpc("chat_close", { p_session: sessionKey, p_note: si ? "පැමිණිල්ල අවසන් කළා" : "Chat ended by visitor" });
+    } catch {
+      /* ignore */
+    }
+    setLiveMsgs([]);
+    lastTs.current = "1970-01-01T00:00:00Z";
+    setLiveStatus("closed");
+    setAgentTyping(false);
+    setOpen(false);
+    setMinimized(false);
+    setLiveUsed(false);
+    try {
+      localStorage.setItem("mpcs_chat_open", "0");
+      localStorage.setItem("mpcs_chat_min", "0");
+      localStorage.setItem("mpcs_chat_used", "0");
+    } catch {
+      /* ignore */
+    }
+    void logEvent("chat_closed", "", 0, sessionRef.current);
   }
 
   async function sendLive() {
@@ -1031,21 +1128,52 @@ export function LiveChat() {
                           {m.bold && <div className="font-extrabold mb-1 text-slate-900">{m.bold}</div>}
                           {m.text}
 
-                          {/* member result cards */}
+                          {/* business / board button panel */}
+                          {m.card === "choices" && m.list && (
+                            <div className="mt-2 grid grid-cols-1 gap-1.5">
+                              {m.list.map((it) => (
+                                <button
+                                  key={it.value + it.label}
+                                  onClick={() => void pickFromList(m.action ?? "biz", it.value, it.label)}
+                                  className="w-full rounded-xl border border-indigo-200 bg-white px-2.5 py-2 text-left hover:border-indigo-400 hover:bg-indigo-50 transition"
+                                >
+                                  <span className="block text-[11.5px] font-extrabold text-slate-800 leading-tight">{it.label}</span>
+                                  {it.sub && <span className="block text-[9.5px] text-slate-500 truncate">{it.sub}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* member result cards — click → full details */}
                           {m.card === "members" && m.rows && (
                             <div className="mt-2 space-y-1.5">
                               {m.rows.map((r, i) => (
-                                <div key={i} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="font-extrabold text-[12px] text-slate-900 leading-tight">{r.full_name || "—"}</div>
+                                <button
+                                  key={i}
+                                  onClick={() => {
+                                    push({ from: "me", text: `${r.full_name || ""} (${r.member_no || "—"})` });
+                                    push({
+                                      from: "bot",
+                                      bold: si ? "👤 සම්පූර්ණ විස්තර" : "👤 Full details",
+                                      text: si
+                                        ? `සාමාජික අංකය: ${r.member_no || "—"}\n👤 නම: ${r.full_name || "—"}\n📇 NIC: ${r.nic || "—"}\n🏠 ලිපිනය: ${r.address || "—"}\n📮 තැපැල් ලිපිනය: ${r.postal_address || "—"}\n⚧ ස්ත්‍රී/පුරුෂ: ${r.gender || "—"}\n📁 ගොනුව: ${r.file_name || "—"}`
+                                        : `Member No: ${r.member_no || "—"}\n👤 Name: ${r.full_name || "—"}\n📇 NIC: ${r.nic || "—"}\n🏠 Address: ${r.address || "—"}\n📮 Postal: ${r.postal_address || "—"}\n⚧ Gender: ${r.gender || "—"}\n📁 File: ${r.file_name || "—"}`,
+                                      chips: si ? ["සාමාජික සොයන්න", "සජීවී චැට්"] : ["Find Member", "Live Chat"],
+                                    });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-left hover:border-indigo-300 hover:bg-white transition"
+                                >
+                                  <span className="flex items-start justify-between gap-2">
+                                    <span className="font-extrabold text-[12px] text-slate-900 leading-tight">{r.full_name || "—"}</span>
                                     <span className="shrink-0 rounded-md bg-indigo-600 text-white text-[9.5px] font-black px-1.5 py-0.5">{r.member_no || "—"}</span>
-                                  </div>
-                                  <div className="mt-1 text-[10.5px] text-slate-500 leading-relaxed">
+                                  </span>
+                                  <span className="mt-1 block text-[10.5px] text-slate-500 leading-relaxed">
                                     <span className="font-semibold text-slate-600">NIC:</span> {r.nic || "—"}
                                     <br />
                                     <span className="font-semibold text-slate-600">{si ? "ලිපිනය" : "Address"}:</span> {r.address || "—"}
-                                  </div>
-                                </div>
+                                  </span>
+                                  <span className="mt-1 block text-[9.5px] font-bold text-indigo-600">{si ? "සම්පූර්ණ විස්තර බලන්න →" : "View full details →"}</span>
+                                </button>
                               ))}
                               <button
                                 onClick={applyCta}
@@ -1330,6 +1458,18 @@ export function LiveChat() {
               {liveErr && <div className="shrink-0 border-t border-rose-100 bg-rose-50 px-3 py-1.5 text-[10.5px] font-bold text-rose-700">{liveErr}</div>}
 
               <div className="shrink-0 border-t border-slate-200 bg-white p-2.5">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[9px] text-slate-400">{si ? "ඔබේ chat history ඔබේ උපාංගයේ පමණයි" : "Your chat history stays on your device"}</span>
+                  <button
+                    onClick={() => {
+                      if (confirm(si ? "chat එක සම්පූර්ණයෙන්ම අවසන් කරන්නද? ඔබේ history ඉවත් වේ." : "End this chat completely? Your history will be cleared.")) void endChat();
+                    }}
+                    className="flex items-center gap-1 rounded-lg bg-rose-50 px-2 py-1 text-[9.5px] font-extrabold text-rose-600 hover:bg-rose-100"
+                    title={si ? "chat එක අවසන් කරන්න" : "End chat"}
+                  >
+                    <X size={10} /> {si ? "අවසන් කරන්න" : "End & clear"}
+                  </button>
+                </div>
                 {!visitorName.trim() && (
                   <input
                     value={visitorName}

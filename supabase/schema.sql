@@ -938,3 +938,42 @@ $$;
 grant execute on function public.chat_sync(text, timestamptz) to anon, authenticated;
 
 notify pgrst, 'reload schema';
+-- chat_close — visitor chat එක අවසන් කරනවා (history admin ට ඉතුරු වේ)
+create or replace function public.chat_close(p_session text, p_note text default 'Chat ended')
+returns void language sql security definer set search_path = public as $$
+  update public.chat_sessions
+     set status = 'closed', last_at = now(), unread_visitor = 0
+   where session_key = p_session;
+
+  insert into public.chat_messages (session_key, sender, sender_name, body)
+  values (p_session, 'system', 'Visitor', left(coalesce(p_note, 'Chat ended'), 200));
+$$;
+grant execute on function public.chat_close(text, text) to anon, authenticated;
+
+notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- §23. NOTIFICATION EMAILS (⑳) — applications/inquiries යන email ලැයිස්තුව
+-- ---------------------------------------------------------------------------
+create table if not exists public.notify_emails (
+  id uuid primary key default gen_random_uuid(),
+  label text not null default '',
+  email text not null,
+  active boolean not null default true,
+  verification text not null default 'pending',   -- pending | activated | failed
+  verified_at timestamptz,
+  created_at timestamptz default now()
+);
+create unique index if not exists notify_emails_email_uidx on public.notify_emails (lower(email));
+
+alter table public.notify_emails enable row level security;
+
+-- browser (anon) ට කියවන්න පුළුවන් — form submit වෙද්දී ලැයිස්තුව ඕන නිසා
+drop policy if exists notify_emails_read on public.notify_emails;
+create policy notify_emails_read on public.notify_emails for select using (true);
+
+-- ලියන්න admin ට විතරයි
+drop policy if exists notify_emails_admin on public.notify_emails;
+create policy notify_emails_admin on public.notify_emails for all using (public.is_admin()) with check (public.is_admin());
+
+notify pgrst, 'reload schema';
