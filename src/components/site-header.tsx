@@ -242,11 +242,8 @@ export function SiteHeader() {
                       me.name.trim().charAt(0).toUpperCase()
                     )}
                   </span>
-                  <span className="hidden sm:flex flex-col items-start leading-tight">
-                    <span className="max-w-[110px] truncate font-bold text-white">{me.name}</span>
-                    <span className="text-[9px] font-semibold tracking-[0.12em] uppercase text-amber-300/90">
-                      {lang === "si" ? "සාමාජික" : "Member"}
-                    </span>
+                  <span className="hidden sm:inline-block max-w-[130px] truncate font-bold text-white leading-tight">
+                    {me.name}
                   </span>
                   <ChevDown size={13} className="hidden sm:inline text-white/70" />
                 </button>
