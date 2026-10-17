@@ -5,6 +5,7 @@
 // ============================================================================
 
 import Link from "next/link";
+import { useOnlineCounts } from "@/components/online-presence";
 import { useEffect, useState } from "react";
 import {
   Activity, Clock3, Database, FileText, Fuel, Mail, RefreshCw, UsersRound, Vote, Wifi,
@@ -16,6 +17,8 @@ import { NEWS, SETTINGS } from "@/lib/seed";
 type Row = Record<string, unknown>;
 
 export default function AdminDashboard() {
+  // ✅ Live guests — Supabase Realtime presence (sign in නොවී site එකේ ඉන්න අය)
+  const online = useOnlineCounts();
   const [updated, setUpdated] = useState(new Date().toLocaleTimeString("en-US", { hour12: true }));
   const [stats, setStats] = useState({
     users: 0,
@@ -90,7 +93,14 @@ export default function AdminDashboard() {
         <div className="text-[11px] text-slate-400 font-semibold">7 Metrics Active</div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <AdminStatCard tag="Live Activity" value="—" label="Users Online Now (Guests)" sub="Real-time visitors active on website (not signed in)" icon={<Activity size={18} />} tone="green" />
+        <AdminStatCard
+          tag="Live Activity"
+          value={String(online.guests)}
+          label="Users Online Now (Guests)"
+          sub={online.ready ? `Real-time visitors · ${online.total} online total` : "Connecting…"}
+          icon={<Activity size={18} />}
+          tone="green"
+        />
         <AdminStatCard tag="Accounts" value={String(stats.users)} label="Registered Website Users" sub="Total registered accounts on website" icon={<UsersRound size={18} />} />
         <AdminStatCard tag="CSV / Excel" value={stats.members.toLocaleString()} label="Members (Excel / CSV)" sub="Total cooperative members loaded from dataset" icon={<Database size={18} />} />
         <AdminStatCard tag="Electoral" value={stats.voters.toLocaleString()} label="Eligible Voters" sub="Members with verified voting eligibility" icon={<Vote size={18} />} />

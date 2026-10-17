@@ -71,12 +71,12 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 bg-slate-900 border-b border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-[72px] gap-3">
+        <div className="flex items-center justify-between h-[72px] gap-4 lg:gap-6">
           {/* logo */}
-          <Link href={L("/")} className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <Link href={L("/")} className="flex items-center gap-2.5 sm:gap-3 min-w-0 shrink-0">
             <SiteLogoBadge size={44} />
             <div className="leading-tight min-w-0">
-              <div className="font-extrabold text-white text-[10px] sm:text-[11.5px] leading-[1.3] sm:leading-tight max-w-[190px] sm:max-w-[300px] sm:whitespace-nowrap" title={t.brand}>{t.brand}</div>
+              <div className="font-extrabold text-white text-[10px] sm:text-[11.5px] leading-[1.3] sm:leading-tight max-w-[150px] lg:max-w-[190px] xl:max-w-[260px] truncate" title={t.brand}>{t.brand}</div>
               <div className="text-[9px] sm:text-[9.5px] text-slate-400 tracking-wide uppercase truncate">Panduwasnuwara New MPCS</div>
             </div>
           </Link>
@@ -84,7 +84,7 @@ export function SiteHeader() {
           {/* desktop nav */}
           <nav
             ref={navRef}
-            className="hidden lg:flex items-center gap-0.5 text-[13px] font-semibold text-slate-200 whitespace-nowrap relative"
+            className="hidden lg:flex items-center gap-0.5 text-[13px] font-semibold text-slate-200 whitespace-nowrap relative ml-1 xl:ml-4"
             onMouseLeave={() => setGlide((g) => ({ ...g, on: false }))}
           >
             {/* sliding hover glider */}

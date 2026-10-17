@@ -236,7 +236,11 @@ export async function dbUpsert(
   try {
     const { error } = await (await authedClient()).from(table).upsert(row, { onConflict });
     if (!error) void logActivity("UPSERT", `${table} — ${brief(row)}`);
-    return error ? error.message : null;
+    if (!error) return null;
+    if (/row-level security|violates row-level/i.test(error.message)) {
+      return "ඔබට මේ වගුවට ලියන්න අවසර නෑ — admin ගිණුමකින් නැවත sign in වන්න (RLS)";
+    }
+    return error.message;
   } catch (e) {
     return String(e);
   }

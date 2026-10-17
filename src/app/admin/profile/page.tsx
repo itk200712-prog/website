@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, KeyRound, Lock, Save, ShieldCheck, UserRound } from "lucide-react";
+import { Camera, Eye, EyeOff, KeyRound, Lock, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { AdminTopbar, dbUpdate, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
 import { decodePw, encodePw } from "@/lib/auth";
@@ -27,6 +27,10 @@ export default function AdminProfilePage() {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [busy, setBusy] = useState(false);
+  // ✅ admin ගේම profile photo
+  const [avatar, setAvatar] = useState("");
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarMsg, setAvatarMsg] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -43,10 +47,45 @@ export default function AdminProfilePage() {
           setEmail(prof.auth_email ?? u.user.email ?? "");
           setRole(prof.role ?? "admin");
           setCurrentPw(decodePw(prof.password_display ?? ""));
+          setAvatar((prof as { avatar_url?: string }).avatar_url ?? "");
         }
       } catch { /* ignore */ }
     })();
   }, []);
+
+  // ✅ profile photo upload — storage + profiles.avatar_url
+  async function uploadAvatar(file: File) {
+    if (!uid) return;
+    if (!file.type.startsWith("image/")) return setAvatarMsg("⚠ Image file එකක් තෝරන්න");
+    if (file.size > 5 * 1024 * 1024) return setAvatarMsg("⚠ 5MB ට වඩා පොඩි image එකක් තෝරන්න");
+    setAvatarBusy(true);
+    setAvatarMsg("");
+    try {
+      const sb = await authedClient();
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const path = `avatars/${uid}-${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from("site-images").upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) throw upErr;
+      const url = sb.storage.from("site-images").getPublicUrl(path).data.publicUrl;
+      const err = await dbUpdate("profiles", { id: uid }, { avatar_url: url });
+      if (err) throw new Error(err);
+      setAvatar(url);
+      setAvatarMsg("✅ Profile photo එක update විය!");
+      void logActivity("AVATAR_CHANGE", "admin profile photo changed");
+    } catch (e) {
+      setAvatarMsg(String(e).includes("avatar_url") ? "⚠ SQL §18 (avatar_url column) run කරන්න" : "⚠ Upload කරන්න බැරි විය");
+    }
+    setAvatarBusy(false);
+  }
+
+  async function removeAvatar() {
+    if (!uid) return;
+    setAvatarBusy(true);
+    const err = await dbUpdate("profiles", { id: uid }, { avatar_url: "" });
+    setAvatar("");
+    setAvatarMsg(err ? `⚠ ${err}` : "✅ Photo එක ඉවත් කළා");
+    setAvatarBusy(false);
+  }
 
   async function saveProfile() {
     if (!uid) return;
@@ -102,15 +141,62 @@ export default function AdminProfilePage() {
       <div className="card p-6 mb-6 border-l-4 border-indigo-600">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-slate-900 text-amber-400 flex items-center justify-center">
-              <ShieldCheck size={28} />
+            {/* ✅ admin profile photo */}
+            <div className="relative shrink-0">
+              <div className="w-16 h-16 rounded-full overflow-hidden bg-slate-900 text-amber-400 flex items-center justify-center ring-4 ring-white shadow-lg">
+                {avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatar} alt={fullName} className="w-full h-full object-cover" />
+                ) : (
+                  <ShieldCheck size={28} />
+                )}
+              </div>
+              <label
+                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center cursor-pointer shadow-md"
+                title="Profile photo එකක් දාන්න"
+              >
+                <Camera size={13} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={avatarBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadAvatar(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="text-2xl font-extrabold text-slate-900">{fullName || "Administrator"}</span>
                 <span className="badge-amber rounded-full px-3 py-1 text-[10px] font-black tracking-wider uppercase">{role}</span>
               </div>
               <div className="text-slate-500 text-[13px] mt-0.5">{email || "—"}</div>
+              <div className="flex items-center gap-2 mt-2">
+                <label className="text-[11px] font-bold text-indigo-700 hover:underline cursor-pointer">
+                  {avatarBusy ? "Uploading…" : avatar ? "Photo වෙනස් කරන්න" : "Profile Photo එකක් දාන්න"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={avatarBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) uploadAvatar(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {avatar && (
+                  <button type="button" className="text-[11px] font-bold text-rose-600 hover:underline flex items-center gap-1" onClick={removeAvatar}>
+                    <Trash2 size={11} /> ඉවත් කරන්න
+                  </button>
+                )}
+              </div>
+              {avatarMsg && <div className={`mt-1.5 text-[11px] font-semibold ${avatarMsg.startsWith("✅") ? "text-emerald-600" : "text-rose-600"}`}>{avatarMsg}</div>}
             </div>
           </div>
           <span className="badge-green rounded-full px-4 py-2 text-[12px] font-bold">● Active Authenticated Session</span>

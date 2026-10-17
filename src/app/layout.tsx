@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Sans_Sinhala } from "next/font/google";
 import { FloatingLang } from "@/components/floating-lang";
+import { OnlinePresence } from "@/components/online-presence";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
@@ -31,6 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <LanguageProvider initialLang={lang}>
           {children}
           <FloatingLang />
+          <OnlinePresence />
         </LanguageProvider>
       </body>
     </html>
