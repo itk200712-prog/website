@@ -2,7 +2,8 @@
 
 // HQ contact info card
 
-import { Building2, Clock, ExternalLink, Mail, MapPin, Phone } from "lucide-react";
+import { Building2, ExternalLink } from "lucide-react";
+import { BoxIcon } from "@/components/box-icon";
 import { useLang } from "@/lib/i18n";
 import { SITE } from "@/lib/seed";
 
@@ -25,7 +26,7 @@ export function ContactInfoCard() {
       <ul className="space-y-5">
         <li className="flex gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-            <MapPin size={18} />
+            <BoxIcon name="map" size={18} />
           </div>
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Head Office / Address</div>
@@ -43,7 +44,7 @@ export function ContactInfoCard() {
         </li>
         <li className="flex gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <Phone size={18} />
+            <BoxIcon name="phone" size={18} />
           </div>
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Hotline / Phone</div>
@@ -56,7 +57,7 @@ export function ContactInfoCard() {
         </li>
         <li className="flex gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
-            <Mail size={18} />
+            <BoxIcon name="envelope" size={18} />
           </div>
           <div>
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Email</div>
@@ -65,7 +66,7 @@ export function ContactInfoCard() {
         </li>
         <li className="flex gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Clock size={18} />
+            <BoxIcon name="clock" size={18} />
           </div>
           <div>
             <div className="font-bold text-slate-900 text-[14px]">Mon – Fri : 8.30 AM – 5.30 PM</div>

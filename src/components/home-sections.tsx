@@ -29,6 +29,7 @@ import { HeroSlideshow } from "@/components/hero-slideshow";
 import { SiteLogoBadge } from "@/components/site-logo";
 import { createClient } from "@/lib/supabase/client";
 import { SectionHead, StatCard, PersonCard } from "@/components/site-sections";
+import { BoxIcon } from "@/components/box-icon";
 import { HomeClientBits } from "@/components/home-client";
 import { useLang } from "@/lib/i18n";
 import { SITE } from "@/lib/seed";
@@ -582,7 +583,7 @@ export function HomeSections({
             sub={c.contactSub}
             right={
               <Link href={L("/contact")} className="btn btn-primary">
-                <Send size={15} /> {c.inquire}
+                <BoxIcon name="send" size={16} /> {c.inquire}
               </Link>
             }
           />
@@ -591,7 +592,7 @@ export function HomeSections({
             <div className="group rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_18px_45px_-16px_rgba(15,23,42,0.2)] p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_26px_60px_-16px_rgba(15,23,42,0.3)]">
               <div className="flex items-center gap-2.5">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200">
-                  <Phone size={18} />
+                  <BoxIcon name="phone" size={19} />
                 </div>
                 <div className="font-extrabold text-slate-900 text-[14px]">{c.callUs}</div>
               </div>
@@ -615,7 +616,7 @@ export function HomeSections({
             <div className="group rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_18px_45px_-16px_rgba(15,23,42,0.2)] p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_26px_60px_-16px_rgba(15,23,42,0.3)]">
               <div className="flex items-center gap-2.5">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-500 text-white flex items-center justify-center shadow-lg shadow-rose-200">
-                  <MapPin size={18} />
+                  <BoxIcon name="map" size={19} />
                 </div>
                 <div className="font-extrabold text-slate-900 text-[14px]">{c.visitUs}</div>
               </div>
@@ -636,7 +637,7 @@ export function HomeSections({
             <div className="group rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_18px_45px_-16px_rgba(15,23,42,0.2)] p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_26px_60px_-16px_rgba(15,23,42,0.3)]">
               <div className="flex items-center gap-2.5">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white flex items-center justify-center shadow-lg shadow-sky-200">
-                  <Mail size={18} />
+                  <BoxIcon name="envelope" size={19} />
                 </div>
                 <div className="font-extrabold text-slate-900 text-[14px]">{c.emailUs}</div>
               </div>
@@ -655,7 +656,7 @@ export function HomeSections({
             <div className="group rounded-3xl bg-white/60 backdrop-blur-xl border border-white/70 shadow-[0_18px_45px_-16px_rgba(15,23,42,0.2)] p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_26px_60px_-16px_rgba(15,23,42,0.3)]">
               <div className="flex items-center gap-2.5">
                 <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-lg shadow-emerald-200">
-                  <Clock size={18} />
+                  <BoxIcon name="clock" size={19} />
                 </div>
                 <div className="font-extrabold text-slate-900 text-[14px]">{c.hoursTitle}</div>
               </div>
