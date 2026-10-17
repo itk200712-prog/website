@@ -5,7 +5,9 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Heart, ImageIcon, LogIn, MessageSquare, Send, X } from "lucide-react";
+import { useLang } from "@/lib/i18n";
 import type { GalleryComment, GalleryItem } from "@/lib/types";
 import { authedClient } from "@/lib/supabase/client";
 
@@ -51,6 +53,87 @@ export function useMe(): Me {
     };
   }, []);
   return me;
+}
+
+// ============================================================================
+// Sign-in prompt — professional popup (Like / Comment කරන්න sign-in අවශ්‍ය විට)
+// ============================================================================
+function SignInPrompt({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { lang } = useLang();
+  const si = lang === "si";
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || !mounted) return null;
+  const next =
+    typeof window !== "undefined" ? encodeURIComponent(window.location.pathname + window.location.search) : "";
+
+  // ✅ createPortal — card එකේ overflow-hidden / transform වලින් කැපෙන්නේ නෑ
+  return createPortal(
+    <div className="fixed inset-0 z-[130] flex items-center justify-center px-4 no-print" role="dialog" aria-modal="true">
+      <button aria-label="Close" onClick={onClose} className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] cursor-default" />
+      <div className="relative w-full max-w-[380px] overflow-hidden rounded-3xl bg-white shadow-[0_40px_90px_-20px_rgba(15,23,42,0.6)] ring-1 ring-slate-900/10 pop-in">
+        {/* gradient head */}
+        <div className="relative bg-gradient-to-br from-indigo-700 via-indigo-600 to-fuchsia-600 px-6 pt-7 pb-12 text-center text-white">
+          <button
+            onClick={onClose}
+            className="absolute right-3.5 top-3.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 transition"
+            aria-label="Close"
+          >
+            <X size={15} />
+          </button>
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/30 backdrop-blur">
+            <Heart size={26} className="fill-white/90 text-white/90" />
+          </div>
+        </div>
+
+        {/* body card */}
+        <div className="relative z-10 -mt-8 px-5 pb-5">
+          <div className="rounded-2xl bg-white p-5 text-center shadow-[0_16px_40px_-24px_rgba(15,23,42,0.5)] ring-1 ring-slate-100">
+            <h3 className="text-[16px] font-extrabold leading-tight text-slate-900">
+              {si ? "Sign In අවශ්‍යයි" : "Sign in required"}
+            </h3>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-500">
+              {si
+                ? "ඡායාරූප Like කිරීමට සහ අදහස් (Comments) දැමීමට කරුණාකර ඔබේ ගිණුමට පිවිසෙන්න."
+                : "Please sign in to your account to like photos and post comments."}
+            </p>
+
+            <div className="mt-4 grid gap-2">
+              <a
+                href={`/signin${next ? `?next=${next}` : ""}`}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-[12.5px] font-extrabold text-white shadow-lg shadow-indigo-600/25 transition hover:bg-indigo-700"
+              >
+                <LogIn size={15} /> {si ? "Sign In වන්න" : "Sign In"}
+              </a>
+              <button
+                onClick={onClose}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[12.5px] font-bold text-slate-600 transition hover:bg-slate-50"
+              >
+                {si ? "පසුව" : "Not now"}
+              </button>
+            </div>
+
+            <p className="mt-3 text-[10.5px] leading-relaxed text-slate-400">
+              {si
+                ? "ගිණුමක් නැද්ද? පිවිසුම් පිටුවේ “ලියාපදිංචි වන්න” තෝරන්න."
+                : "No account yet? Choose “Register” on the sign-in page."}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 }
 
 // ============================================================================
@@ -149,14 +232,7 @@ export function GallerySocial({
         </span>
       </div>
 
-      {needSignin && (
-        <a
-          href="/signin"
-          className="mt-2.5 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-[11.5px] font-bold text-amber-700 hover:bg-amber-100 transition-colors"
-        >
-          <LogIn size={13} /> Like / Comment කරන්න Sign In විය යුතුයි — Sign In →
-        </a>
-      )}
+      <SignInPrompt open={needSignin} onClose={() => setNeedSignin(false)} />
 
       {/* comments list */}
       {(item.comments?.length ?? 0) > 0 && (
