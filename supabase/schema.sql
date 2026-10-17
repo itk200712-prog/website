@@ -814,3 +814,88 @@ create policy live_chat_events_admin_read on public.live_chat_events for select 
 
 -- Live Chat contact requests යන email ලිපිනය (හිස් = contact_email_1)
 insert into public.system_settings (key, value) values ('live_chat_email', '') on conflict (key) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- §21. LIVE CHAT 2-WAY — visitor klaw  admin real conversation
+-- ---------------------------------------------------------------------------
+create table if not exists public.chat_sessions (
+  id uuid primary key default gen_random_uuid(),
+  session_key text unique not null,
+  visitor_name text default '',
+  visitor_phone text default '',
+  status text not null default 'open',            -- open | joined | closed
+  agent_id uuid,
+  agent_name text default '',
+  last_message text default '',
+  last_at timestamptz default now(),
+  unread_admin int not null default 0,
+  unread_visitor int not null default 0,
+  page text default '',
+  created_at timestamptz default now()
+);
+create index if not exists chat_sessions_last_idx on public.chat_sessions (last_at desc, created_at desc);
+
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  session_key text not null,
+  sender text not null default 'visitor',          -- visitor | agent | system
+  sender_name text default '',
+  body text not null default '',
+  seen boolean not null default false,
+  created_at timestamptz default now()
+);
+create index if not exists chat_messages_session_idx on public.chat_messages (session_key, created_at);
+
+alter table public.chat_sessions enable row level security;
+alter table public.chat_messages enable row level security;
+
+-- admin ta siyalla (read / update / delete)
+drop policy if exists chat_sessions_admin on public.chat_sessions;
+create policy chat_sessions_admin on public.chat_sessions for all using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists chat_messages_admin on public.chat_messages;
+create policy chat_messages_admin on public.chat_messages for all using (public.is_admin()) with check (public.is_admin());
+
+-- visitors: table access nodirectly - only via the functions below
+-- (session_key is an unguessable UUID)
+
+create or replace function public.chat_start(p_session text)
+returns void language sql security definer set search_path = public as $$
+  insert into public.chat_sessions (session_key) values (p_session)
+  on conflict (session_key) do nothing;
+$$;
+grant execute on function public.chat_start(text) to anon, authenticated;
+
+create or replace function public.chat_send(p_session text, p_body text, p_name text default '')
+returns void language sql security definer set search_path = public as $$
+  insert into public.chat_messages (session_key, sender, sender_name, body)
+  values (p_session, 'visitor', coalesce(nullif(p_name, ''), 'Visitor'), left(p_body, 4000));
+
+  update public.chat_sessions
+     set visitor_name = coalesce(nullif(p_name, ''), visitor_name),
+         last_message = left(p_body, 160),
+         last_at     = now(),
+         unread_admin = unread_admin + 1,
+         status = case when status = 'closed' then 'open' else status end
+   where session_key = p_session;
+$$;
+grant execute on function public.chat_send(text, text, text) to anon, authenticated;
+
+create or replace function public.chat_sync(p_session text, p_after timestamptz default '1970-01-01')
+returns jsonb language sql security definer set search_path = public as $$
+  select jsonb_build_object(
+    'status', coalesce((select status from public.chat_sessions where session_key = p_session), 'open'),
+    'agent',  coalesce((select agent_name from public.chat_sessions where session_key = p_session), ''),
+    'messages', coalesce((
+      select jsonb_agg(to_jsonb(m) order by m.created_at)
+      from (
+        select id, sender, sender_name, body, created_at
+          from public.chat_messages
+         where session_key = p_session and created_at > p_after
+         order by created_at
+         limit 200
+      ) m
+    ), '[]'::jsonb)
+  );
+$$;
+grant execute on function public.chat_sync(text, timestamptz) to anon, authenticated;

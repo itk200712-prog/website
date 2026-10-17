@@ -33,6 +33,8 @@ type MemberRow = {
 
 type CardType = "members" | "apply" | "waiting";
 
+type LiveMsg = { id: string; sender: "visitor" | "agent" | "system"; sender_name: string; body: string; created_at: string };
+
 type Msg = {
   id: number;
   from: "bot" | "me";
@@ -54,6 +56,7 @@ const ACTIONS = [
   { key: "office", en: "Office Phones", si: "කාර්යාල දුරකථන", icon: PhoneCall },
   { key: "mphone", en: "Managers Phones", si: "කළමනාකරු දුරකථන", icon: Phone },
   { key: "contact", en: "Contact Live Chat", si: "සජීවී සම්බන්ධය", icon: MessageCircle },
+  { key: "live", en: "Live Agent", si: "සජීවී නිලධාරි", icon: UserRound },
 ] as const;
 
 type ActionKey = (typeof ACTIONS)[number]["key"];
@@ -77,7 +80,7 @@ export function LiveChat() {
   const si = lang === "si";
 
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"chat" | "form">("chat");
+  const [tab, setTab] = useState<"chat" | "live" | "form">("chat");
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [typing, setTyping] = useState(false);
   const [input, setInput] = useState("");
@@ -95,6 +98,18 @@ export function LiveChat() {
   // legacy message form
   const [sending, setSending] = useState(false);
   const [sentOk, setSentOk] = useState(false);
+
+  // ── live agent (2-way) ──
+  const [sessionKey, setSessionKey] = useState("");
+  const [liveMsgs, setLiveMsgs] = useState<LiveMsg[]>([]);
+  const [liveStatus, setLiveStatus] = useState<"open" | "joined" | "closed">("open");
+  const [agentName, setAgentName] = useState("");
+  const [liveText, setLiveText] = useState("");
+  const [visitorName, setVisitorName] = useState("");
+  const [liveBusy, setLiveBusy] = useState(false);
+  const [liveErr, setLiveErr] = useState("");
+  const liveBoxRef = useRef<HTMLDivElement>(null);
+  const lastTs = useRef("1970-01-01T00:00:00Z");
 
   const boxRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(1);
@@ -122,6 +137,22 @@ export function LiveChat() {
     });
   }, [si]);
 
+  // visitor session key (localStorage — reload කළත් එකම chat එක)
+  useEffect(() => {
+    try {
+      let k = localStorage.getItem("mpcs_chat_key");
+      if (!k) {
+        k = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `k${Date.now()}${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem("mpcs_chat_key", k);
+      }
+      setSessionKey(k);
+      const n = localStorage.getItem("mpcs_chat_name");
+      if (n) setVisitorName(n);
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
   useEffect(() => {
     if (open) {
       setUnread(0);
@@ -146,6 +177,12 @@ export function LiveChat() {
   //  ACTIONS
   // ─────────────────────────────────────────────────────────────────────────
   async function runAction(key: ActionKey) {
+    if (key === "live") {
+      setTab("live");
+      setPanel(null);
+      void logEvent("live_agent", "", 0, sessionRef.current);
+      return;
+    }
     const my = ++flowRef.current;          // පරණ flow එක නවත්වයි
     setTab("chat");
     setTerm("");
@@ -432,6 +469,86 @@ export function LiveChat() {
     setTimeout(() => setCSent(false), 8000);
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  //  LIVE AGENT (2-way with admin)
+  // ─────────────────────────────────────────────────────────────────────────
+  async function pull(reset = false) {
+    if (!sessionKey) return;
+    try {
+      const sb = createAnonClient();
+      const { data, error } = await sb.rpc("chat_sync", {
+        p_session: sessionKey,
+        p_after: reset ? "1970-01-01T00:00:00Z" : lastTs.current,
+      });
+      if (error || !data) return;
+      const d = data as { status?: string; agent?: string; messages?: LiveMsg[] };
+      setLiveStatus((d.status as "open" | "joined" | "closed") ?? "open");
+      setAgentName(d.agent ?? "");
+      const list = d.messages ?? [];
+      if (reset) {
+        setLiveMsgs(list);
+        lastTs.current = list.length ? list[list.length - 1].created_at : "1970-01-01T00:00:00Z";
+      } else if (list.length) {
+        setLiveMsgs((xs) => {
+          const seen = new Set(xs.map((m) => m.id));
+          return [...xs, ...list.filter((m) => !seen.has(m.id))];
+        });
+        lastTs.current = list[list.length - 1].created_at;
+        if (tab !== "live") setUnread((u) => u + list.filter((m) => m.sender === "agent").length);
+      }
+      setLiveErr("");
+    } catch {
+      /* tables not created yet — silently ignore */
+    }
+  }
+
+  useEffect(() => {
+    if (tab !== "live" || !sessionKey) return;
+    let alive = true;
+    (async () => {
+      try {
+        const sb = createAnonClient();
+        await sb.rpc("chat_start", { p_session: sessionKey });
+        if (alive) await pull(true);
+      } catch {
+        /* ignore */
+      }
+    })();
+    const t = setInterval(() => {
+      if (alive) void pull();
+    }, 2500);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, sessionKey]);
+
+  useEffect(() => {
+    liveBoxRef.current?.scrollTo({ top: liveBoxRef.current.scrollHeight, behavior: "smooth" });
+  }, [liveMsgs, liveStatus]);
+
+  async function sendLive() {
+    const body = liveText.trim();
+    if (!body || !sessionKey || liveBusy) return;
+    setLiveText("");
+    setLiveBusy(true);
+    try {
+      if (visitorName.trim()) localStorage.setItem("mpcs_chat_name", visitorName.trim());
+      const sb = createAnonClient();
+      const { error } = await sb.rpc("chat_send", {
+        p_session: sessionKey,
+        p_body: body,
+        p_name: visitorName.trim(),
+      });
+      if (error) throw new Error(error.message);
+      await pull();
+    } catch {
+      setLiveErr(si ? "⚠ යැවීමට බැරි විය — නැවත උත්සාහ කරන්න" : "⚠ Could not send — please try again");
+    }
+    setLiveBusy(false);
+  }
+
   // ── "Do you want to contact an officer?" — Yes / No ──
   function askOfficer() {
     setTab("chat");
@@ -684,12 +801,18 @@ export function LiveChat() {
             </div>
 
             {/* tabs */}
-            <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-white/15 p-1">
-              <button onClick={() => setTab("chat")} className={`rounded-lg py-1.5 text-[11.5px] font-bold transition ${tab === "chat" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
-                <Sparkles size={12} className="inline mr-1" /> {si ? "සහායක" : "Assistant"}
+            <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-white/15 p-1">
+              <button onClick={() => setTab("chat")} className={`rounded-lg py-1.5 text-[10.5px] font-bold transition ${tab === "chat" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
+                <Sparkles size={11} className="inline mr-0.5" /> {si ? "සහායක" : "Assistant"}
               </button>
-              <button onClick={() => setTab("form")} className={`rounded-lg py-1.5 text-[11.5px] font-bold transition ${tab === "form" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
-                <Send size={12} className="inline mr-1" /> {si ? "පණිවිඩයක්" : "Message"}
+              <button onClick={() => setTab("live")} className={`relative rounded-lg py-1.5 text-[10.5px] font-bold transition ${tab === "live" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
+                <span className="inline-flex items-center gap-0.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${liveStatus === "joined" ? "bg-emerald-400" : "bg-amber-300"}`} />
+                  {si ? "සජීවී" : "Live Agent"}
+                </span>
+              </button>
+              <button onClick={() => setTab("form")} className={`rounded-lg py-1.5 text-[10.5px] font-bold transition ${tab === "form" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
+                <Send size={11} className="inline mr-0.5" /> {si ? "පණිවිඩය" : "Message"}
               </button>
             </div>
           </div>
@@ -704,9 +827,11 @@ export function LiveChat() {
                       key={a.key}
                       onClick={() => void runAction(a.key)}
                       className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10.5px] font-bold transition ${
-                        a.key === "contact"
-                          ? "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100"
-                          : "border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                        a.key === "live"
+                          ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          : a.key === "contact"
+                            ? "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100"
+                            : "border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
                       }`}
                     >
                       <a.icon size={12} />
@@ -948,6 +1073,107 @@ export function LiveChat() {
                 </div>
               )}
             </>
+          ) : tab === "live" ? (
+            <div className="flex-1 flex flex-col min-h-0">
+              {/* connection status */}
+              <div
+                className={`shrink-0 px-3.5 py-2 text-[10.5px] font-bold flex items-center gap-1.5 border-b ${
+                  liveStatus === "joined"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                    : liveStatus === "closed"
+                      ? "bg-slate-100 text-slate-600 border-slate-200"
+                      : "bg-amber-50 text-amber-700 border-amber-100"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    liveStatus === "joined" ? "bg-emerald-500" : liveStatus === "closed" ? "bg-slate-400" : "bg-amber-500 animate-pulse"
+                  }`}
+                />
+                {liveStatus === "joined"
+                  ? si
+                    ? `🟢 ${agentName || "නිලධාරියෙක්"} සම්බන්ධ වී ඇත`
+                    : `🟢 ${agentName || "An officer"} is connected`
+                  : liveStatus === "closed"
+                    ? si
+                      ? "chat එක අවසන් — නැවත ලිවිය හැක"
+                      : "Chat closed — you can write again"
+                    : si
+                      ? "⏳ නිලධාරියෙක් සම්බන්ධ වෙනතුරු රැඳී සිටින්න"
+                      : "⏳ Waiting for an officer to join"}
+              </div>
+
+              <div ref={liveBoxRef} className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2 bg-slate-50 min-h-[160px]">
+                {liveMsgs.length === 0 && (
+                  <div className="max-w-[88%] rounded-2xl rounded-bl-md bg-white border border-slate-200 px-3.5 py-2.5 text-[12px] text-slate-600 shadow-sm">
+                    {si
+                      ? "ආයුබෝවන් 👋 ඔබේ ප්‍රශ්නය ලියන්න — නිලධාරියෙක් ඉක්මනින් පිළිතුරු දෙනවා. විනාඩි කීපයක් ඇතුළත කෙනෙක් නොඑන්නේ නම් “Contact Live Chat” බොත්තමෙන් කෙලින්ම අමතන්න."
+                      : "Hello 👋 Type your question — an officer will reply shortly. If no one joins within a few minutes, use “Contact Live Chat” to request a call."}
+                  </div>
+                )}
+                {liveMsgs.map((m) =>
+                  m.sender === "system" ? (
+                    <div key={m.id} className="text-center">
+                      <span className="inline-block rounded-full bg-slate-200/70 px-2.5 py-1 text-[9.5px] font-semibold text-slate-500">{m.body}</span>
+                    </div>
+                  ) : (
+                    <div key={m.id} className={`flex ${m.sender === "visitor" ? "justify-end" : "justify-start"}`}>
+                      <div className="max-w-[85%]">
+                        <div className={`mb-0.5 px-1 text-[9px] text-slate-400 ${m.sender === "visitor" ? "text-right" : ""}`}>
+                          {m.sender === "visitor" ? (si ? "ඔබ" : "You") : m.sender_name || (si ? "නිලධාරියා" : "Officer")}
+                        </div>
+                        <div
+                          className={`rounded-2xl px-3.5 py-2.5 text-[12.5px] leading-relaxed whitespace-pre-line ${
+                            m.sender === "visitor"
+                              ? "bg-indigo-600 text-white rounded-br-md"
+                              : "bg-white text-slate-700 border border-slate-200 rounded-bl-md shadow-sm"
+                          }`}
+                        >
+                          {m.body}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {liveErr && <div className="shrink-0 border-t border-rose-100 bg-rose-50 px-3 py-1.5 text-[10.5px] font-bold text-rose-700">{liveErr}</div>}
+
+              <div className="shrink-0 border-t border-slate-200 bg-white p-2.5">
+                {!visitorName.trim() && (
+                  <input
+                    value={visitorName}
+                    onChange={(e) => setVisitorName(e.target.value)}
+                    placeholder={si ? "ඔබේ නම (අවශ්‍ය නම්)" : "Your name (optional)"}
+                    className="mb-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11.5px] outline-none focus:border-indigo-400 focus:bg-white"
+                  />
+                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    value={liveText}
+                    onChange={(e) => setLiveText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void sendLive();
+                      }
+                    }}
+                    placeholder={si ? "ඔබේ පණිවිඩය ලියන්න…" : "Write your message…"}
+                    className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
+                  />
+                  <button
+                    onClick={() => void sendLive()}
+                    disabled={!liveText.trim() || liveBusy}
+                    className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center disabled:opacity-40 hover:bg-indigo-700 transition"
+                  >
+                    {liveBusy ? <Loader2 size={15} className="animate-spin" /> : <Send size={16} />}
+                  </button>
+                </div>
+                <div className="mt-1 text-center text-[9px] text-slate-400">
+                  {si ? "නිලධාරියෙක් සම්බන්ධ වූ පසු පිළිතුරු මෙතනම පේනවා" : "Officer replies appear right here"}
+                </div>
+              </div>
+            </div>
           ) : (
             <form onSubmit={submitMessage} className="flex-1 overflow-y-auto bg-slate-50 p-3.5 space-y-2.5">
               <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-[11px] text-indigo-800 font-semibold">

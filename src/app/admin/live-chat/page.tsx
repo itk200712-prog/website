@@ -13,6 +13,7 @@ import {
   RefreshCw, Save, Search, Send, TrendingUp, UserRound, X as XIcon,
 } from "lucide-react";
 import { AdminStatCard, AdminTopbar, dbUpdate, dbUpsert, useNotice } from "@/components/admin";
+import { AdminLiveChats } from "@/components/admin-live-chats";
 import { authedClient } from "@/lib/supabase/client";
 
 type Event = { id: string; event_type: string; query: string; matched: number; session_id: string; created_at: string };
@@ -45,6 +46,7 @@ export default function AdminLiveChatPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [requests, setRequests] = useState<Msg[]>([]);
   const [tablesMissing, setTablesMissing] = useState(false);
+  const [view, setView] = useState<"overview" | "chats">("overview");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -154,10 +156,39 @@ export default function AdminLiveChatPage() {
 
   const recent = events.slice(0, 25);
 
+  const tabs = (
+    <div className="mb-5 inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+      <button
+        onClick={() => setView("overview")}
+        className={`rounded-lg px-3.5 py-1.5 text-[11.5px] font-extrabold transition ${view === "overview" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}
+      >
+        📊 Overview
+      </button>
+      <button
+        onClick={() => setView("chats")}
+        className={`rounded-lg px-3.5 py-1.5 text-[11.5px] font-extrabold transition ${view === "chats" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}
+      >
+        💬 Live Chats
+      </button>
+    </div>
+  );
+
+  if (view === "chats") {
+    return (
+      <div>
+        {node}
+        <AdminTopbar title="Live Chat" sub="Visitor chats — කෙලින්ම කතා කරන්න" />
+        {tabs}
+        <AdminLiveChats />
+      </div>
+    );
+  }
+
   return (
     <div>
       {node}
       <AdminTopbar title="Live Chat" sub="Chat settings · usage analytics · contact requests" />
+      {tabs}
 
       {tablesMissing && (
         <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
