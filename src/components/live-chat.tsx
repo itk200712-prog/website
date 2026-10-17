@@ -646,12 +646,12 @@ export function LiveChat() {
             <>
               {/* ── action bar ── */}
               <div className="shrink-0 border-b border-slate-200 bg-white px-2 py-2">
-                <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                <div className="flex flex-wrap gap-1.5">
                   {ACTIONS.map((a) => (
                     <button
                       key={a.key}
                       onClick={() => void runAction(a.key)}
-                      className={`shrink-0 flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10.5px] font-bold transition ${
+                      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10.5px] font-bold transition ${
                         a.key === "contact"
                           ? "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100"
                           : "border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
