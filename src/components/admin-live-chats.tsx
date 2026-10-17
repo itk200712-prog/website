@@ -134,6 +134,11 @@ export function AdminLiveChats() {
     setNotice("");
     try {
       const sb = await authedClient();
+      // ✅ closed chat එකක් නම් නැවත join වෙන්නේ නෑ — history + Delete chat විතරයි
+      if (s.status === "closed") {
+        void loadMsgs(s.session_key);
+        return;
+      }
       // join වෙනවා (status joined + agent නම + system message)
       if (s.status !== "joined" || s.agent_id !== me.id) {
         await sb
