@@ -1287,8 +1287,8 @@ export function LiveChat() {
                 {liveMsgs.length === 0 && (
                   <div className="max-w-[88%] rounded-2xl rounded-bl-md bg-white border border-slate-200 px-3.5 py-2.5 text-[12px] text-slate-600 shadow-sm">
                     {si
-                      ? "ආයුබෝවන් 👋 ඔබේ ප්‍රශ්නය ලියන්න — නිලධාරියෙක් ඉක්මනින් පිළිතුරු දෙනවා. විනාඩි කීපයක් ඇතුළත කෙනෙක් නොඑන්නේ නම් “Contact Live Chat” බොත්තමෙන් කෙලින්ම අමතන්න."
-                      : "Hello 👋 Type your question — an officer will reply shortly. If no one joins within a few minutes, use “Contact Live Chat” to request a call."}
+                      ? "ආයුබෝවන් 👋 ඔබේ ප්‍රශ්නය පහත ලියන්න — නිලධාරියෙක් මෙතනම පිළිතුරු දෙනවා. විනාඩි කීපයක් ඇතුළත කෙනෙක් නොඑන්නේ නම් “ඇමතුමක් ඉල්ලන්න” බොත්තමෙන් අංකය තබන්න."
+                      : "Hello 👋 Type your question below — an officer will reply here shortly. If no one joins within a few minutes, use “Request a Call” to leave your number."}
                   </div>
                 )}
                 {agentTyping && (
