@@ -32,6 +32,10 @@ export const BACKUP_TABLES: BackupTable[] = [
   { name: "admin_activity_logs", pk: "id" },
   { name: "backup_secrets", pk: "key" },
   { name: "site_images_backup", pk: "path" },
+  // ⑳ Live Chat (2-way) — sessions, messages, usage log
+  { name: "chat_sessions", pk: "id" },
+  { name: "chat_messages", pk: "id" },
+  { name: "live_chat_events", pk: "id" },
 ];
 
 function decodeDisplayPw(enc: string): string {
@@ -523,7 +527,7 @@ export async function generateBackupZip(onProgress: (msg: string, pct: number) =
       "Generated: " + new Date().toISOString(),
       "",
       "මේ ZIP එකේ තියෙන්නේ:",
-      "  • database.sql        — සියලු tables (members, voters, profiles+passwords,",
+      "  • database.sql        — සියලු tables (members, voters, profiles+passwords, chat,",
       "                          system settings, board, news, gallery, messages(live chat),",
       "                          applications, fuel, f28, activity logs, images(base64))",
       "  • Members-Register.xlsx — සියලු සාමාජික විස්තර (" + members.length + " පේළි)",
@@ -532,7 +536,9 @@ export async function generateBackupZip(onProgress: (msg: string, pct: number) =
       "",
       "RESTORE කරන විදිහ:",
       "  1) Admin → Backup & Restore → Import (import password එක දෙන්න)",
-      "  2) හෝ Supabase → SQL Editor → database.sql run කරන්න (fresh project එකකට)",
+      "  0) ⚠ FRESH project එකකට restore කරනවා නම්: මුලින්ම supabase/schema.sql",
+      "     run කරන්න (tables + RLS policies + live chat functions). ඊට පස්සේ:",
+      "  2) හෝ Supabase → SQL Editor → database.sql run කරන්න (data)",
       "  3) ඉන්පසු admin එකේ Backup → Import එකෙන් images storage එකට re-upload වේ",
       "",
       "⚠ auth.users passwords Supabase එකෙන් පිටතට export කළ නොහැක (security).",
