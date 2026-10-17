@@ -9,12 +9,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity, ArrowUpRight, CheckCircle2, Clock, Mail, MessageCircle, Phone,
-  RefreshCw, Save, Search, Send, TrendingUp, UserRound, X as XIcon,
+  Activity, ArrowUpRight, Bot, CheckCircle2, Clock, Mail, MessageCircle, Phone,
+  RefreshCw, Save, Search, Send, TrendingUp, Upload, UserRound, X as XIcon,
 } from "lucide-react";
 import { AdminStatCard, AdminTopbar, dbUpdate, dbUpsert, useNotice } from "@/components/admin";
 import { AdminLiveChats } from "@/components/admin-live-chats";
 import { authedClient } from "@/lib/supabase/client";
+import { uploadSiteImage } from "@/lib/supabase/storage";
 
 type Event = { id: string; event_type: string; query: string; matched: number; session_id: string; created_at: string };
 type Msg = {
@@ -42,6 +43,11 @@ export default function AdminLiveChatPage() {
   const [email, setEmail] = useState("");
   const [fallbackEmail, setFallbackEmail] = useState("");
   const [saving, setSaving] = useState(false);
+  // ✅ Chat bot (Baymax) — නම + avatar
+  const [botName, setBotName] = useState("Baymax");
+  const [botAvatar, setBotAvatar] = useState("");
+  const [savingBot, setSavingBot] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [requests, setRequests] = useState<Msg[]>([]);
@@ -53,10 +59,12 @@ export default function AdminLiveChatPage() {
     setLoading(true);
     try {
       const sb = await authedClient();
-      const { data: st } = await sb.from("system_settings").select("key,value").in("key", ["live_chat_email", "contact_email_1"]);
+      const { data: st } = await sb.from("system_settings").select("key,value").in("key", ["live_chat_email", "contact_email_1", "chat_bot_name", "chat_bot_avatar"]);
       const map = new Map(((st ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
       setEmail(map.get("live_chat_email") ?? "");
       setFallbackEmail(map.get("contact_email_1") ?? "");
+      setBotName((map.get("chat_bot_name") || "Baymax").trim() || "Baymax");
+      setBotAvatar((map.get("chat_bot_avatar") || "").trim());
 
       const { data: ev, error: evErr } = await sb
         .from("live_chat_events")
@@ -98,6 +106,39 @@ export default function AdminLiveChatPage() {
     setSaving(false);
     if (err) return show(`⚠ ${err}`);
     show("✅ Live Chat email සුරැකුණා");
+  }
+
+  async function onBotImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUploading(true);
+    // ✅ 512px WebP ට auto කුඩා කර upload (quality තියාගෙන)
+    const r = await uploadSiteImage(f, "chat", { maxSize: 512, quality: 0.92 });
+    setUploading(false);
+    e.target.value = "";
+    if (r.url) {
+      setBotAvatar(r.url);
+      show("✅ පින්තූරය upload වුණා — Save ඔබන්න");
+    } else {
+      show(`⚠ ${r.error ?? "upload failed"}`);
+    }
+  }
+
+  async function saveBot() {
+    setSavingBot(true);
+    const name = botName.trim() || "Baymax";
+    const sb = await authedClient();
+    const { error } = await sb.from("system_settings").upsert(
+      [
+        { key: "chat_bot_name", value: name },
+        { key: "chat_bot_avatar", value: botAvatar.trim() },
+      ],
+      { onConflict: "key" }
+    );
+    setSavingBot(false);
+    if (error) return show(`⚠ ${error.message}`);
+    setBotName(name);
+    show("✅ Chat bot settings saved — Live Chat එකේ වහාම පේනවා");
   }
 
   async function markHandled(m: Msg) {
@@ -225,6 +266,58 @@ export default function AdminLiveChatPage() {
           </p>
         </div>
       )}
+
+      {/* ── chat bot (Baymax) settings ── */}
+      <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-[13px] font-extrabold text-slate-900">
+              <Bot size={15} className="text-indigo-600" /> Chat bot — නම සහ පින්තූරය
+            </div>
+            <p className="mt-0.5 text-[11.5px] text-slate-500">
+              Site එකේ Live Chat widget එකේ පේන bot නම සහ avatar එක. Upload කරන පින්තූරය auto කුඩා කරලා (512px · WebP) storage එකට යනවා — quality එක එහෙමම.
+            </p>
+          </div>
+          <span className="rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black px-2 py-1">LIVE CHAT</span>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400">
+            {botAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={botAvatar} alt="bot avatar" className="h-full w-full object-cover" />
+            ) : (
+              <Bot size={26} />
+            )}
+          </div>
+
+          <div className="flex flex-col items-start gap-1.5">
+            <label className={`btn btn-outline !py-2 !px-3 !text-[11.5px] cursor-pointer ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
+              <Upload size={13} /> {uploading ? "Uploading…" : "Avatar upload"}
+              <input type="file" accept="image/*" className="hidden" onChange={onBotImage} disabled={uploading} />
+            </label>
+            {botAvatar && (
+              <button type="button" onClick={() => setBotAvatar("")} className="text-[11px] font-bold text-rose-600 hover:underline">
+                පින්තූරය ඉවත් කරන්න
+              </button>
+            )}
+          </div>
+
+          <div className="min-w-[200px] flex-1">
+            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Bot නම</label>
+            <input
+              value={botName}
+              onChange={(e) => setBotName(e.target.value)}
+              placeholder="Baymax"
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
+            />
+          </div>
+
+          <button onClick={() => void saveBot()} disabled={savingBot} className="btn btn-primary !py-2.5 !px-4 !text-[12px]">
+            <Save size={13} /> {savingBot ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
 
       {/* ── stats ── */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3.5 mb-5">

@@ -825,6 +825,12 @@ create policy live_chat_events_admin_read on public.live_chat_events for select 
 -- Live Chat contact requests යන email ලිපිනය (හිස් = contact_email_1)
 insert into public.system_settings (key, value) values ('live_chat_email', '') on conflict (key) do nothing;
 
+-- ✅ Chat bot identity (Baymax) — admin → Live Chat → Chat bot card එකෙන් වෙනස් කරන්න
+insert into public.system_settings (key, value) values
+('chat_bot_name', 'Baymax'),
+('chat_bot_avatar', '')
+on conflict (key) do nothing;
+
 -- ---------------------------------------------------------------------------
 -- §21. LIVE CHAT 2-WAY — visitor klaw  admin real conversation
 -- ---------------------------------------------------------------------------

@@ -6,13 +6,15 @@
 // ============================================================================
 
 import { authedClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { resizeImage, type ResizeOpts } from "@/lib/image-resize";
 
 export const SITE_BUCKET = "site-images";
 
 /** image file එකක් Supabase Storage එකට upload කර public URL එක දෙයි */
 export async function uploadSiteImage(
   file: File,
-  folder = "hero"
+  folder = "hero",
+  opts?: ResizeOpts
 ): Promise<{ url?: string; error?: string }> {
   if (!isSupabaseConfigured()) {
     return {
@@ -26,11 +28,13 @@ export async function uploadSiteImage(
     return { error: "උපරිම ප්‍රමාණය 10MB" };
   }
   try {
+    // ✅ upload කරන්න කලින් කුඩා කරයි — quality එක තියාගෙන (bot: 512px · අනිත්: 1600px)
+    const cleaned = await resizeImage(file, opts ?? { maxSize: 1600, quality: 0.9 });
     const sb = await authedClient();
-    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || "image.jpg";
+    const safe = cleaned.name.replace(/[^a-zA-Z0-9._-]/g, "_") || "image.jpg";
     const path = `${folder}/${Date.now()}-${safe}`;
-    const { error } = await sb.storage.from(SITE_BUCKET).upload(path, file, {
-      contentType: file.type || "image/jpeg",
+    const { error } = await sb.storage.from(SITE_BUCKET).upload(path, cleaned, {
+      contentType: cleaned.type || "image/jpeg",
       upsert: false,
     });
     if (error) return { error: error.message };

@@ -105,6 +105,9 @@ export function LiveChat() {
 
   // ── live agent (2-way) ──
   const [sessionKey, setSessionKey] = useState("");
+  // ✅ Bot identity — admin Settings එකෙන් වෙනස් කළ හැකි නම + පින්තූරය
+  const [botName, setBotName] = useState("Baymax");
+  const [botAvatar, setBotAvatar] = useState("");
   const [liveMsgs, setLiveMsgs] = useState<LiveMsg[]>([]);
   const [liveStatus, setLiveStatus] = useState<"open" | "joined" | "closed">("open");
   const [agentName, setAgentName] = useState("");
@@ -132,22 +135,51 @@ export function LiveChat() {
 
   const push = (m: Omit<Msg, "id">) => setMsgs((xs) => [...xs, { ...m, id: idRef.current++ }].slice(-80));
 
+  // ── bot නම + avatar (system_settings → public read) ──
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const sb = createAnonClient();
+        const { data } = await sb
+          .from("system_settings")
+          .select("key,value")
+          .in("key", ["chat_bot_name", "chat_bot_avatar"]);
+        const map = new Map(((data ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
+        if (!alive) return;
+        const n = (map.get("chat_bot_name") || "").trim();
+        if (n) setBotName(n);
+        setBotAvatar((map.get("chat_bot_avatar") || "").trim());
+      } catch {
+        /* default Baymax */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // ── session + පළමු පණිවිඩය ──
   useEffect(() => {
-    if (started.current) return;
+    const welcome = si
+      ? `මම ${botName} — ${SITE.short_si} සජීවී සහායකයා.\nපහත බොත්තමක් තෝරන්න — මම වහාම උදව් කරන්නම්.`
+      : `I'm ${botName} — the ${SITE.short_en} live assistant.\nChoose an option below and I'll help you right away.`;
+    if (started.current) {
+      // bot නම පසුව load වුණා නම් පළමු පණිවිඩයේ නම refresh කරයි
+      setMsgs((xs) => xs.map((m) => (m.id === 0 ? { ...m, text: welcome } : m)));
+      return;
+    }
     started.current = true;
     sessionRef.current = Math.random().toString(36).slice(2, 10);
     push({
       from: "bot",
       bold: si ? "👋 ආයුබෝවන්!" : "👋 Welcome!",
-      text: si
-        ? `${SITE.short_si} සජීවී සහායකයා.\nපහත බොත්තමක් තෝරන්න — මම වහාම උදව් කරන්නම්.`
-        : `This is the ${SITE.short_en} live assistant.\nChoose an option below and I'll help you right away.`,
+      text: welcome,
       chips: si
         ? ["සාමාජික සොයන්න", "ව්‍යාපාර කළමනාකරුවන්", "කාර්යාල දුරකථන", "සජීවී සම්බන්ධය"]
         : ["Find Member", "Business Managers", "Office Phones", "Contact Live Chat"],
     });
-  }, [si]);
+  }, [si, botName]);
 
   // visitor session key (localStorage — reload කළත් එකම chat එක)
   useEffect(() => {
@@ -990,7 +1022,14 @@ export function LiveChat() {
         className="fixed bottom-[72px] right-4 sm:bottom-20 sm:right-6 z-[90] h-14 w-14 rounded-full bg-gradient-to-br from-indigo-600 to-fuchsia-600 text-white shadow-2xl shadow-indigo-900/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform no-print"
         aria-label="Live chat"
       >
-        {open ? <X size={22} /> : <MessageCircle size={24} />}
+        {open ? (
+          <X size={22} />
+        ) : botAvatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={botAvatar} alt={botName} className="h-full w-full rounded-full object-cover" />
+        ) : (
+          <MessageCircle size={24} />
+        )}
         {unread > 0 && (
           <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center">{unread}</span>
         )}
@@ -1029,12 +1068,17 @@ export function LiveChat() {
           {/* ── header ── */}
           <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-fuchsia-600 px-4 pt-3.5 pb-3 text-white shrink-0">
             <div className="flex items-center gap-3">
-              <div className="relative w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center ring-2 ring-white/30">
-                <Bot size={20} />
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-indigo-700" />
+              <div className="relative w-10 h-10 rounded-full bg-white/20 backdrop-blur flex items-center justify-center ring-2 ring-white/30 overflow-hidden">
+                {botAvatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={botAvatar} alt={botName} className="h-full w-full object-cover" />
+                ) : (
+                  <Bot size={20} />
+                )}
+                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-indigo-700" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-extrabold text-[14px] leading-tight truncate">{si ? "MPCS සජීවී සහායක" : "MPCS Live Assistant"}</div>
+                <div className="font-extrabold text-[14px] leading-tight truncate">{botName}</div>
                 <div className="text-[10.5px] text-indigo-100 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-300" /> {si ? "සබැඳි · ක්ෂණික පිළිතුරු" : "Online · instant answers"}
                 </div>
@@ -1068,7 +1112,7 @@ export function LiveChat() {
             {/* tabs */}
             <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-white/15 p-1">
               <button onClick={() => setTab("chat")} className={`rounded-lg py-1.5 text-[10.5px] font-bold transition ${tab === "chat" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
-                <Sparkles size={11} className="inline mr-0.5" /> {si ? "සහායක" : "Assistant"}
+                <Sparkles size={11} className="inline mr-0.5" /> {botName}
               </button>
               <button onClick={() => setTab("live")} className={`relative rounded-lg py-1.5 text-[10.5px] font-bold transition ${tab === "live" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
                 <span className="inline-flex items-center gap-0.5">
@@ -1136,8 +1180,13 @@ export function LiveChat() {
                     <div className={`max-w-[88%] ${m.from === "me" ? "order-1" : ""}`}>
                       <div className="flex items-end gap-1.5">
                         {m.from === "bot" && (
-                          <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mb-0.5">
-                            <Bot size={13} />
+                          <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mb-0.5 overflow-hidden">
+                            {botAvatar ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={botAvatar} alt={botName} className="h-full w-full object-cover" />
+                            ) : (
+                              <Bot size={13} />
+                            )}
                           </div>
                         )}
                         <div
@@ -1269,8 +1318,13 @@ export function LiveChat() {
 
                 {typing && (
                   <div className="flex items-end gap-1.5">
-                    <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                      <Bot size={13} />
+                    <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center overflow-hidden">
+                      {botAvatar ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={botAvatar} alt={botName} className="h-full w-full object-cover" />
+                      ) : (
+                        <Bot size={13} />
+                      )}
                     </div>
                     <div className="rounded-2xl rounded-bl-md bg-white border border-slate-200 px-3.5 py-3 flex gap-1">
                       {[0, 150, 300].map((d) => (
