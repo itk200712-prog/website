@@ -788,3 +788,29 @@ create policy "site_images_auth_delete"
 --   where schemaname='storage' and tablename='objects'
 --     and (coalesce(qual,'') like '%site-images%' or coalesce(with_check,'') like '%site-images%');
 -- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- §20. LIVE CHAT (⑳) — usage log + chat contact email setting
+-- ---------------------------------------------------------------------------
+create table if not exists public.live_chat_events (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null default 'open',   -- open | search | member_no | managers | office | mphone | contact | message
+  query text default '',
+  matched int default 0,
+  session_id text default '',
+  created_at timestamptz default now()
+);
+create index if not exists live_chat_events_created_idx on public.live_chat_events (created_at desc);
+
+alter table public.live_chat_events enable row level security;
+
+-- visitor ලාට log කරන්න විතරයි (insert)
+drop policy if exists live_chat_events_insert on public.live_chat_events;
+create policy live_chat_events_insert on public.live_chat_events for insert with check (true);
+
+-- කියවන්න admin ට විතරයි
+drop policy if exists live_chat_events_admin_read on public.live_chat_events;
+create policy live_chat_events_admin_read on public.live_chat_events for select using (public.is_admin());
+
+-- Live Chat contact requests යන email ලිපිනය (හිස් = contact_email_1)
+insert into public.system_settings (key, value) values ('live_chat_email', '') on conflict (key) do nothing;
