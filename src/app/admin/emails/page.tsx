@@ -60,9 +60,21 @@ export default function AdminEmailsPage() {
     setBusy("");
     if (err) return show(`⚠ ${err}`);
     clearNotifyCache();
+    const added = email.trim();
     setLabel("");
     setEmail("");
-    show("✅ ලිපිනය එකතු වුණා — දැන් Activate කරන්න");
+    void load();
+    // ✅ add කරන ගමන්ම activation mail එක auto යැවේ
+    show("⏳ ලිපිනය එකතු වුණා — activation mail යවමින්…");
+    const ok = await sendActivation(added);
+    const sb = await authedClient();
+    const { data: row } = await sb.from("notify_emails").select("id").eq("email", added).maybeSingle();
+    if (row) {
+      await dbUpdate("notify_emails", { id: (row as { id: string }).id }, ok
+        ? { verification: "activated", verified_at: new Date().toISOString() }
+        : { verification: "failed" });
+    }
+    show(ok ? "✅ Activation mail යැවුණා — inbox එකේ confirm කරන්න" : "⚠ Activation mail යැවීමට බැරි විය");
     void load();
   }
 
