@@ -187,9 +187,12 @@ export function DirectoryTable({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
       {/* ═══════════════ premium header ═══════════════ */}
-      <div className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 shadow-[0_24px_60px_-24px_rgba(49,46,129,0.55)]">
-        <div className="absolute inset-0 opacity-[0.16]" style={{ backgroundImage: "radial-gradient(circle at 82% 18%, rgba(255,255,255,0.55) 0%, transparent 46%), radial-gradient(circle at 12% 88%, rgba(16,185,129,0.5) 0%, transparent 42%)" }} />
-        <div className="absolute top-0 right-0 w-80 h-80 -translate-y-40 translate-x-40 rounded-full bg-emerald-400/15 blur-3xl" />
+      <div className="relative rounded-[26px] bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 shadow-[0_24px_60px_-24px_rgba(49,46,129,0.55)]">
+        {/* ✅ decorative glows විතරක් clip වෙනවා — dropdown එකට බාධාවක් නෑ */}
+        <div className="absolute inset-0 overflow-hidden rounded-[26px] pointer-events-none">
+          <div className="absolute inset-0 opacity-[0.16]" style={{ backgroundImage: "radial-gradient(circle at 82% 18%, rgba(255,255,255,0.55) 0%, transparent 46%), radial-gradient(circle at 12% 88%, rgba(16,185,129,0.5) 0%, transparent 42%)" }} />
+          <div className="absolute top-0 right-0 w-80 h-80 -translate-y-40 translate-x-40 rounded-full bg-emerald-400/15 blur-3xl" />
+        </div>
         <div className="relative p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div className="flex items-start gap-4">
@@ -240,7 +243,7 @@ export function DirectoryTable({
               {fileOpen && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setFileOpen(false)} />
-                  <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-white border border-slate-200 p-2 z-40 shadow-2xl">
+                  <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-white border border-slate-200 p-2 z-[60] shadow-[0_24px_50px_-12px_rgba(15,23,42,0.35)]">
                     <div className="relative">
                       <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
@@ -254,7 +257,7 @@ export function DirectoryTable({
                         }
                       />
                     </div>
-                    <div className="max-h-64 overflow-y-auto mt-1">
+                    <div className="max-h-72 overflow-y-auto mt-1">
                       <button
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-[12.5px] font-semibold ${file === "all" ? "bg-indigo-50 text-indigo-700" : "hover:bg-slate-50 text-slate-700"}`}
                         onClick={() => {
