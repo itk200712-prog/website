@@ -6,6 +6,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { logout } from "@/lib/auth";
 import { SiteLogoBadge } from "@/components/site-logo";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck, Lock, LogOut, ChevronDown as ChevDown } from "lucide-react";
@@ -69,6 +70,18 @@ export function SiteHeader() {
     })();
     return () => { alive = false; };
   }, []);
+
+  // ✅ වෙනත් tab එකකින් (admin panel වගේ) logout වුණාම මේ tab එකත් auto logout
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== "mpcs_logged_out_at") return;
+      setMe(null);
+      setF28(false);
+      if (/^\/(en|si)?\/?(admin|dashboard)/.test(pathname)) window.location.href = "/";
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [pathname]);
 
   const publicBusinesses = BUSINESSES.filter((b) => b.active);
 
@@ -268,9 +281,7 @@ export function SiteHeader() {
                     <button
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-rose-50 text-[12.5px] font-bold text-rose-600"
                       onClick={async () => {
-                        const sb = await authedClient();
-                        await sb.auth.signOut();
-                        window.location.href = L("/");
+                        await logout(L("/"));
                       }}
                     >
                       <LogOut size={14} /> Log Out
@@ -369,9 +380,7 @@ export function SiteHeader() {
                   <button
                     className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-rose-500/20 text-rose-300 flex items-center gap-2.5"
                     onClick={async () => {
-                      const sb = await authedClient();
-                      await sb.auth.signOut();
-                      window.location.href = L("/");
+                      await logout(L("/"));
                     }}
                   >
                     <LogOut size={15} /> Log Out

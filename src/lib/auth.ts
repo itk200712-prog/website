@@ -133,12 +133,25 @@ export async function loginWithNic(
   return { error: null, role };
 }
 
-export async function logout(): Promise<void> {
-  if (!isSupabaseConfigured()) return;
+/**
+ * ✅ සම්පූර්ණ logout — Supabase session + localStorage tokens එකම වරට ඉවත් කර
+ * අනිත් open tabs වලටත් signal එකක් යවයි. Admin panel / site / dashboard
+ * හැම තැනකින්ම මේකම භාවිතා කරන්න.
+ */
+export async function logout(redirectTo?: string): Promise<void> {
   try {
-    await createClient().auth.signOut();
+    if (isSupabaseConfigured()) await createClient().auth.signOut();
   } catch {
     /* ignore */
   }
   clearTokens();
+  if (typeof window !== "undefined") {
+    try {
+      // storage event → වෙනත් tabs වල header එකත් logged-out වේ
+      localStorage.setItem("mpcs_logged_out_at", String(Date.now()));
+    } catch {
+      /* ignore */
+    }
+    if (redirectTo !== undefined) window.location.href = redirectTo;
+  }
 }

@@ -11,6 +11,7 @@ import {
   BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut,
   AtSign, Mail, Megaphone, MessageCircle, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X, Save, Activity } from "lucide-react";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { logout } from "@/lib/auth";
 import { SiteLogoBadge } from "@/components/site-logo";
 import { logActivity } from "@/lib/activity";
 
@@ -186,7 +187,10 @@ export function AdminTopbar({ title, sub }: { title: string; sub: string }) {
           </div>
         </a>
         <button
-          onClick={() => (window.location.href = "/")}
+          onClick={async () => {
+            // ✅ admin panel logout → site/dashboard session එකත් එකම වරට ඉවත්
+            await logout("/");
+          }}
           className="btn btn-outline !py-2 !px-3.5 !text-[12px] !text-red-600 !border-red-200 hover:!bg-red-50"
         >
           <LogOut size={14} /> Log Out

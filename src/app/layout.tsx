@@ -3,6 +3,7 @@ import { Abhaya_Libre, Inter, Noto_Sans_Sinhala } from "next/font/google";
 import { FloatingLang } from "@/components/floating-lang";
 import { OnlinePresence } from "@/components/online-presence";
 import { LiveChat } from "@/components/live-chat";
+import { SessionGuard } from "@/components/session-guard";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
@@ -42,6 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <FloatingLang />
           <OnlinePresence />
           <LiveChat />
+          <SessionGuard />
         </LanguageProvider>
       </body>
     </html>

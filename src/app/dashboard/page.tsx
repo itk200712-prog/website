@@ -9,7 +9,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Camera, Eye, EyeOff, FileSpreadsheet, Home, KeyRound, Lock, LogOut, Save, UserRound } from "lucide-react";
-import { authedClient, clearTokens } from "@/lib/supabase/client";
+import { authedClient } from "@/lib/supabase/client";
+import { logout } from "@/lib/auth";
 import { decodePw, encodePw } from "@/lib/auth";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -173,10 +174,7 @@ export default function DashboardPage() {
             <button
               className="btn btn-outline !text-white/90 !border-white/30 hover:!bg-white/10"
               onClick={async () => {
-                const sb = await authedClient();
-                await sb.auth.signOut();
-                clearTokens();
-                window.location.href = "/";
+                await logout("/");
               }}
             >
               <LogOut size={15} /> Log Out
