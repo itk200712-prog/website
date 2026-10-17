@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCheck, Circle, Loader2, MessageCircle, Phone, Send, UserRound, X } from "lucide-react";
+import { CheckCheck, Circle, Loader2, MessageCircle, Phone, Send, Trash2, UserRound, X } from "lucide-react";
 import { authedClient } from "@/lib/supabase/client";
 
 type Session = {
@@ -211,6 +211,34 @@ export function AdminLiveChats() {
     }
   }
 
+  // ✅ close වුණු චැට් එක සහ session/chat option එක සම්පූර්ණයෙන්ම delete
+  async function deleteChat() {
+    if (!active) return;
+    if (!window.confirm(
+      `මේ චැට් එක සහ ${active.visitor_name || "visitor"} ගේ chat option එක සම්පූර්ණයෙන්ම delete කරන්නද? මේක ආපසු හරවන්න බෑ.`
+    )) return;
+    try {
+      const sb = await authedClient();
+      const key = active.session_key;
+      const { error } = await sb.rpc("chat_delete", { p_session: key });
+      if (error) {
+        // RPC එක තවම නැත්නම් — RLS admin policy එකෙන් කෙලින්ම delete
+        await sb.from("chat_messages").delete().eq("session_key", key);
+        const d2 = await sb.from("chat_sessions").delete().eq("session_key", key);
+        if (d2.error) throw d2.error;
+      }
+      setSessions((prev) => prev.filter((x) => x.session_key !== active.session_key));
+      setMsgs([]);
+      setActive(null);
+      setNotice("චැට් එක delete කළා ✓");
+      setTimeout(() => setNotice(""), 3000);
+      void loadSessions();
+    } catch {
+      setNotice("Delete කරන්න බැරි වුණා — SQL block එක run කරලද?");
+      setTimeout(() => setNotice(""), 5000);
+    }
+  }
+
   const totalUnread = sessions.reduce((a, s) => a + (s.unread_admin ?? 0), 0);
   const liveCount = sessions.filter((s) => s.status !== "closed").length;
 
@@ -303,9 +331,19 @@ export function AdminLiveChats() {
                   <Phone size={12} />
                 </a>
               )}
-              <button onClick={() => void closeChat()} className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center hover:bg-rose-50 hover:text-rose-600" title="Close chat">
-                <X size={13} />
-              </button>
+              {current?.status === "closed" ? (
+                <button
+                  onClick={() => void deleteChat()}
+                  className="flex h-7 items-center gap-1 rounded-lg bg-rose-600 px-2.5 text-[10px] font-bold text-white hover:bg-rose-700"
+                  title="Delete chat completely"
+                >
+                  <Trash2 size={12} /> Delete chat
+                </button>
+              ) : (
+                <button onClick={() => void closeChat()} className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center hover:bg-rose-50 hover:text-rose-600" title="Close chat">
+                  <X size={13} />
+                </button>
+              )}
             </div>
 
             {/* messages */}

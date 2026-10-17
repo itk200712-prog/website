@@ -982,6 +982,44 @@ grant execute on function public.chat_close(text, text) to anon, authenticated;
 notify pgrst, 'reload schema';
 
 -- ---------------------------------------------------------------------------
+-- §26. LIVE CHAT v2 — callback request → session · identify · delete chat
+-- ---------------------------------------------------------------------------
+create or replace function public.chat_identify(
+  p_session text, p_name text default '', p_phone text default '', p_note text default ''
+)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.chat_sessions (session_key, visitor_name, visitor_phone, last_message, last_at)
+  values (p_session, coalesce(p_name, ''), coalesce(p_phone, ''), left(coalesce(p_note, ''), 160), now())
+  on conflict (session_key) do update
+     set visitor_name  = coalesce(nullif(excluded.visitor_name, ''), chat_sessions.visitor_name),
+         visitor_phone = coalesce(nullif(excluded.visitor_phone, ''), chat_sessions.visitor_phone),
+         last_message  = coalesce(nullif(excluded.last_message, ''), chat_sessions.last_message),
+         last_at       = now(),
+         unread_admin  = chat_sessions.unread_admin + 1,
+         status        = case when chat_sessions.status = 'closed' then 'open' else chat_sessions.status end;
+
+  if coalesce(p_note, '') <> '' then
+    insert into public.chat_messages (session_key, sender, sender_name, body)
+    values (p_session, 'system', coalesce(nullif(p_name, ''), 'Visitor'), left(p_note, 500));
+  end if;
+end $$;
+grant execute on function public.chat_identify(text, text, text, text) to anon, authenticated;
+
+create or replace function public.chat_delete(p_session text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not allowed';
+  end if;
+  delete from public.chat_messages where session_key = p_session;
+  delete from public.chat_sessions where session_key = p_session;
+end $$;
+grant execute on function public.chat_delete(text) to authenticated;
+
+notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
 -- §23. NOTIFICATION EMAILS (⑳) — applications/inquiries යන email ලැයිස්තුව
 -- ---------------------------------------------------------------------------
 create table if not exists public.notify_emails (

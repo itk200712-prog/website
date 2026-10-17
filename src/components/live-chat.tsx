@@ -12,10 +12,7 @@
 // ============================================================================
 
 import { useEffect, useRef, useState } from "react";
-import {
-  ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Loader2, MessageCircle,
-  Minus, Phone, PhoneCall, Search, Send, Sparkles, UserRound, X,
-} from "lucide-react";
+import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Loader2, MessageCircle, Minus, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { tokens } from "@/lib/search";
@@ -119,6 +116,9 @@ export function LiveChat() {
   const [soundOn, setSoundOn] = useState(true);
   const [agentTyping, setAgentTyping] = useState(false);
   const [liveUsed, setLiveUsed] = useState(false);
+  // ✅ callback request කළාම session එකක් තියෙනවා → admin join වුණාම notify කරන්න poll කරයි
+  const [sessionActive, setSessionActive] = useState(false);
+  const [officerJoined, setOfficerJoined] = useState(false);
   const audioRef = useRef<AudioContext | null>(null);
   const soundRef = useRef(true);
   const typingAt = useRef(0);
@@ -584,6 +584,23 @@ export function LiveChat() {
     }
     void logEvent("contact", `${name} · ${nic}`, 0, sessionRef.current);
 
+    // ✅ admin ට Live Chats ලැයිස්තුවේ පේන්න session එකක් හදනවා (නම · දුරකථන · reference)
+    const cbNote = `📞 Callback request · ${ref} · NIC ${nic} · ${phone}`;
+    try {
+      const sb = createAnonClient();
+      const key = sessionKey || sessionRef.current;
+      const { error } = await sb.rpc("chat_identify", { p_session: key, p_name: name, p_phone: phone, p_note: cbNote });
+      // SQL block එක තවම run කරලා නැත්නම් — session එක හදලා note එක යවන පරණ ක්‍රමයට වැටෙනවා
+      if (error) {
+        await sb.rpc("chat_start", { p_session: key });
+        await sb.rpc("chat_send", { p_session: key, p_body: cbNote, p_name: name });
+      }
+      setSessionActive(true);
+      try { localStorage.setItem("mpcs_chat_request", "1"); } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
+
     setBusy(false);
     setCName("");
     setCNic("");
@@ -663,8 +680,17 @@ export function LiveChat() {
       });
       if (error || !data) return;
       const d = data as { status?: string; agent?: string; typing?: boolean; messages?: LiveMsg[] };
-      setLiveStatus((d.status as "open" | "joined" | "closed") ?? "open");
+      const nextStatus = (d.status as "open" | "joined" | "closed") ?? "open";
+      const prevStatus = liveStatus;
+      setLiveStatus(nextStatus);
       setAgentName(d.agent ?? "");
+      // ✅ admin join වුණා → "Live Chat" callout එක පෙන්නන්න (tab එකේ නැත්නම්)
+      if (nextStatus === "joined" && prevStatus !== "joined") {
+        setOfficerJoined(true);
+        ping();
+        if (tab !== "live" || !open) setUnread((u) => u + 1);
+      }
+      if (nextStatus === "closed") setOfficerJoined(false);
       setAgentTyping(Boolean(d.typing));
       const list = d.messages ?? [];
       if (reset) {
@@ -691,7 +717,7 @@ export function LiveChat() {
   }
 
   useEffect(() => {
-    if (!sessionKey || !liveUsed) return;
+    if (!sessionKey || (!liveUsed && !sessionActive)) return;
     let alive = true;
     (async () => {
       try {
@@ -702,19 +728,34 @@ export function LiveChat() {
         /* ignore */
       }
     })();
+    // live tab එකේ නම් 2.5s · callback request එකක් විතරක් තියෙනවා නම් 6s (admin join වුණාම දැනගන්න)
+    const every = liveUsed ? 2500 : 6000;
     const t = setInterval(() => {
       if (alive) void pull();
-    }, 2500);
+    }, every);
     return () => {
       alive = false;
       clearInterval(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, sessionKey, liveUsed]);
+  }, [tab, sessionKey, liveUsed, sessionActive]);
 
   useEffect(() => {
     liveBoxRef.current?.scrollTo({ top: liveBoxRef.current.scrollHeight, behavior: "smooth" });
   }, [liveMsgs, liveStatus]);
+
+  useEffect(() => {
+    if (tab === "live" && open) setOfficerJoined(false);
+  }, [tab, open]);
+
+  // ✅ page reload වුණත් callback request එක තියෙනවා නම් officer join වීම දිගටම බලනවා
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("mpcs_chat_request") === "1") setSessionActive(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   function onLiveType(v: string) {
     setLiveText(v);
@@ -738,6 +779,7 @@ export function LiveChat() {
       localStorage.setItem("mpcs_chat_open", "0");
       localStorage.setItem("mpcs_chat_min", "0");
       localStorage.setItem("mpcs_chat_used", "0");
+      localStorage.removeItem("mpcs_chat_request");
     } catch {
       /* ignore */
     }
@@ -1008,6 +1050,11 @@ export function LiveChat() {
         className="fixed bottom-[72px] right-4 sm:bottom-20 sm:right-6 z-[90] h-14 w-14 rounded-full bg-gradient-to-br from-indigo-600 to-fuchsia-600 text-white shadow-2xl shadow-indigo-900/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform no-print"
         aria-label="Live chat"
       >
+        {officerJoined && !open && (
+          <span className="absolute -left-2 -top-2 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[8.5px] font-black text-white shadow">
+            LIVE
+          </span>
+        )}
         {open ? (
           <X size={22} />
         ) : botAvatar ? (
@@ -1111,6 +1158,34 @@ export function LiveChat() {
               </button>
             </div>
           </div>
+
+          {/* ✅ admin චැට් එකට join වුණා — Live Chat tab එකට යන්න කැඳවීම */}
+          {officerJoined && tab !== "live" && (
+            <button
+              onClick={() => {
+                setTab("live");
+                setOfficerJoined(false);
+                setUnread(0);
+              }}
+              className="relative shrink-0 flex w-full items-center gap-2.5 border-b border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-left transition hover:bg-emerald-100"
+            >
+              <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white">
+                <MessageCircle size={16} />
+                <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12px] font-extrabold text-emerald-900">
+                  {si
+                    ? `🟢 ${agentName || "නිලධාරියෙක්"} සජීවී චැට් එකට සම්බන්ධ වුණා`
+                    : `🟢 ${agentName || "An officer"} joined the live chat`}
+                </span>
+                <span className="block text-[10.5px] font-semibold text-emerald-700">
+                  {si ? "කතා කරන්න Live Chat ඔබන්න →" : "Click to open Live Chat and reply →"}
+                </span>
+              </span>
+              <ArrowRight size={15} className="shrink-0 text-emerald-700" />
+            </button>
+          )}
 
           {tab === "chat" ? (
             <>
@@ -1515,6 +1590,23 @@ export function LiveChat() {
                 )}
               </div>
 
+              {/* ✅ චැට් එක close වුණාම — යූසර්ට chat clear option එක */}
+              {liveStatus === "closed" && (
+                <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2.5 text-center">
+                  <div className="text-[10.5px] font-semibold text-slate-500">
+                    {si ? "මේ චැට් එක අවසන් කර ඇත. ඔබේ chat history ඉවත් කරගන්න පුළුවන්." : "This chat has ended. You can clear your chat history."}
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm(si ? "ඔබේ chat එක සහ history ඉවත් කරන්නද?" : "Clear this chat and your history?")) void endChat();
+                    }}
+                    className="mt-1.5 inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3.5 py-1.5 text-[11px] font-extrabold text-white hover:bg-slate-900"
+                  >
+                    <Trash2 size={12} /> {si ? "Chat clear කරන්න" : "Clear chat"}
+                  </button>
+                </div>
+              )}
+
               {liveErr && <div className="shrink-0 border-t border-rose-100 bg-rose-50 px-3 py-1.5 text-[10.5px] font-bold text-rose-700">{liveErr}</div>}
 
               <div className="shrink-0 border-t border-slate-200 bg-white p-2.5">
@@ -1527,7 +1619,7 @@ export function LiveChat() {
                     className="flex items-center gap-1 rounded-lg bg-rose-50 px-2 py-1 text-[9.5px] font-extrabold text-rose-600 hover:bg-rose-100"
                     title={si ? "chat එක අවසන් කරන්න" : "End chat"}
                   >
-                    <X size={10} /> {si ? "අවසන් කරන්න" : "End & clear"}
+                    <X size={10} /> {si ? "Chat clear" : "Clear chat"}
                   </button>
                 </div>
                 {!visitorName.trim() && (
