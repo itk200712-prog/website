@@ -58,7 +58,7 @@ export default function AdminLiveChatPage() {
         .order("created_at", { ascending: false })
         .limit(400);
       if (evErr) {
-        if (/does not exist|relation|42P01/i.test(evErr.message)) setTablesMissing(true);
+        if (/does not exist|relation|42P01|could not find the table|PGRST205|schema cache/i.test(evErr.message)) setTablesMissing(true);
         setEvents([]);
       } else {
         setTablesMissing(false);
