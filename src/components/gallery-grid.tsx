@@ -16,7 +16,7 @@ const ASPECT: Record<string, string> = {
   "3:2": "3 / 2",
 };
 
-export type Me = { id: string; name: string; role?: string } | null;
+export type Me = { id: string; name: string; role?: string; avatar?: string } | null;
 
 export function useMe(): Me {
   const [me, setMe] = useState<Me>(null);
@@ -27,8 +27,21 @@ export function useMe(): Me {
         const sb = await authedClient();
         const { data: u } = await sb.auth.getUser();
         if (!u?.user) return;
-        const { data: prof } = await sb.from("profiles").select("full_name, role").eq("id", u.user.id).maybeSingle();
-        if (alive) setMe({ id: u.user.id, name: prof?.full_name || u.user.email || "Member", role: prof?.role });
+        let prof = (await sb.from("profiles").select("full_name, role, avatar_url").eq("id", u.user.id).maybeSingle()).data as
+          | { full_name?: string; role?: string; avatar_url?: string }
+          | null;
+        if (!prof)
+          prof = (await sb.from("profiles").select("full_name, role").eq("id", u.user.id).maybeSingle()).data as {
+            full_name?: string;
+            role?: string;
+          } | null;
+        if (alive)
+          setMe({
+            id: u.user.id,
+            name: prof?.full_name || u.user.email || "Member",
+            role: prof?.role,
+            avatar: prof?.avatar_url || "",
+          });
       } catch {
         /* not logged in */
       }

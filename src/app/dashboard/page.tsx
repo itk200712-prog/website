@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, FileSpreadsheet, Home, KeyRound, Lock, LogOut, Save, UserRound } from "lucide-react";
+import { Camera, Eye, EyeOff, FileSpreadsheet, Home, KeyRound, Lock, LogOut, Save, UserRound } from "lucide-react";
 import { authedClient, clearTokens } from "@/lib/supabase/client";
 import { decodePw, encodePw } from "@/lib/auth";
 import { SiteHeader } from "@/components/site-header";
@@ -21,6 +21,7 @@ interface Me {
   role: string;
   phone: string;
   f28: boolean;
+  avatar: string;
 }
 
 export default function DashboardPage() {
@@ -34,6 +35,8 @@ export default function DashboardPage() {
   const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [avatarMsg, setAvatarMsg] = useState("");
+  const [avatarBusy, setAvatarBusy] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -52,12 +55,61 @@ export default function DashboardPage() {
         role: (prof?.role as string) || "member",
         phone: (prof?.phone as string) || "",
         f28: f28?.status === "active",
+        avatar: (prof?.avatar_url as string) || "",
       });
       setCurrentPw(decodePw(prof?.password_display ?? ""));
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ✅ profile photo upload — storage එකට දාලා profiles.avatar_url save කරනවා
+  async function uploadAvatar(file: File) {
+    if (!me) return;
+    if (!file.type.startsWith("image/")) {
+      setAvatarMsg("⚠ Image file එකක් තෝරන්න (jpg / png)");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarMsg("⚠ 5MB ට වඩා පොඩි image එකක් තෝරන්න");
+      return;
+    }
+    setAvatarBusy(true);
+    setAvatarMsg("");
+    try {
+      const sb = await authedClient();
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const path = `avatars/${me.id}-${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from("site-images").upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) throw upErr;
+      const url = sb.storage.from("site-images").getPublicUrl(path).data.publicUrl;
+      const { error: dbErr } = await sb.from("profiles").update({ avatar_url: url }).eq("id", me.id);
+      if (dbErr) {
+        setAvatarMsg("⚠ SQL §18 (avatar_url column) run කරලා නෑ — Supabase SQL Editor එකේ run කරන්න");
+        setAvatarBusy(false);
+        return;
+      }
+      setMe({ ...me, avatar: url });
+      setAvatarMsg("✅ Profile photo එක update විය!");
+    } catch {
+      setAvatarMsg("⚠ Photo upload කරන්න බැරි විය — නැවත උත්සාහ කරන්න");
+    }
+    setAvatarBusy(false);
+  }
+
+  async function removeAvatar() {
+    if (!me) return;
+    setAvatarBusy(true);
+    try {
+      const sb = await authedClient();
+      await sb.from("profiles").update({ avatar_url: "" }).eq("id", me.id);
+      setMe({ ...me, avatar: "" });
+      setAvatarMsg("✅ Photo එක ඉවත් කළා");
+    } catch {
+      setAvatarMsg("⚠ ඉවත් කරන්න බැරි විය");
+    }
+    setAvatarBusy(false);
+  }
 
   async function changePassword() {
     if (!me) return;
@@ -136,10 +188,65 @@ export default function DashboardPage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <div className="card p-6">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center"><UserRound size={20} /></div>
-            <h3 className="mt-3 font-extrabold text-slate-900">My Profile</h3>
-            <p className="mt-1 text-slate-500 text-[12.5px]">{me?.full_name} · {me?.nic}</p>
-            <p className="text-slate-500 text-[12.5px]">{me?.phone}</p>
+            <div className="flex items-center gap-4">
+              {/* ✅ avatar ball — photo එක පොඩිවට */}
+              <div className="relative shrink-0">
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-indigo-500 to-fuchsia-600 text-white flex items-center justify-center text-xl font-black ring-4 ring-white shadow-lg">
+                  {me?.avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={me.avatar} alt={me.full_name} className="w-full h-full object-cover" />
+                  ) : (
+                    (me?.full_name || "M").trim().charAt(0).toUpperCase()
+                  )}
+                </div>
+                <label className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center cursor-pointer shadow-md transition-colors" title="Photo එකක් දාන්න">
+                  <Camera size={13} />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={avatarBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) uploadAvatar(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-slate-900">My Profile</h3>
+                <p className="mt-0.5 text-slate-500 text-[12.5px] truncate">{me?.full_name} · {me?.nic}</p>
+                <p className="text-slate-500 text-[12.5px]">{me?.phone}</p>
+              </div>
+            </div>
+            {avatarBusy && <div className="mt-3 text-[11.5px] font-semibold text-indigo-600">Uploading…</div>}
+            {!avatarBusy && avatarMsg && (
+              <div className={`mt-3 rounded-xl px-3 py-2 text-[11.5px] font-semibold ${avatarMsg.startsWith("✅") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600"}`}>
+                {avatarMsg}
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <label className="btn btn-outline !py-1.5 !px-3 !text-[11.5px] cursor-pointer">
+                <Camera size={13} /> {me?.avatar ? "Photo එක වෙනස් කරන්න" : "Photo එකක් දාන්න"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={avatarBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadAvatar(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {me?.avatar && (
+                <button className="btn btn-outline !py-1.5 !px-3 !text-[11.5px] !text-rose-600 !border-rose-200 hover:!bg-rose-50" disabled={avatarBusy} onClick={removeAvatar}>
+                  ඉවත් කරන්න
+                </button>
+              )}
+            </div>
           </div>
           <div className="card p-6">
             <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center"><FileSpreadsheet size={20} /></div>

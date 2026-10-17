@@ -18,7 +18,7 @@ export function SiteHeader() {
   const [open, setOpen] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
   const [f28, setF28] = useState(false);
-  const [me, setMe] = useState<{ name: string } | null>(null);
+  const [me, setMe] = useState<{ name: string; avatar?: string } | null>(null);
   const [meOpen, setMeOpen] = useState(false);
   const [bizOpen, setBizOpen] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,8 +48,16 @@ export function SiteHeader() {
         const sb = await authedClient();
         const { data: u } = await sb.auth.getUser();
         if (!u?.user) return;
-        const { data: prof } = await sb.from("profiles").select("full_name").eq("id", u.user.id).maybeSingle();
-        if (alive) setMe({ name: prof?.full_name || u.user.email || "Profile" });
+        // ✅ avatar_url column එක තවම නැත්නම් (SQL §18 run කරමින් නැත්නම්) fallback
+        let prof = (await sb.from("profiles").select("full_name, avatar_url").eq("id", u.user.id).maybeSingle()).data as
+          | { full_name?: string; avatar_url?: string }
+          | null;
+        if (!prof) prof = (await sb.from("profiles").select("full_name").eq("id", u.user.id).maybeSingle()).data as { full_name?: string } | null;
+        if (alive)
+          setMe({
+            name: prof?.full_name || u.user.email || "Profile",
+            avatar: prof?.avatar_url || "",
+          });
         const { data } = await sb.from("f28_members").select("status").eq("user_id", u.user.id).maybeSingle();
         if (alive && data && data.status === "active") setF28(true);
       } catch { /* not logged in */ }
@@ -226,8 +234,14 @@ export function SiteHeader() {
                   className="inline-flex items-center gap-2.5 !py-1.5 !px-2.5 !text-[12px] rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-lg shadow-black/20 backdrop-blur transition-all hover:shadow-white/10"
                   onClick={() => setMeOpen(!meOpen)}
                 >
-                  <span className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 via-orange-400 to-fuchsia-500 text-white flex items-center justify-center text-[12px] font-black ring-2 ring-white/40 shadow-md">
-                    {me.name.trim().charAt(0).toUpperCase()}
+                  {/* ✅ profile photo එක බෝලය ඇතුළේ පොඩිවට — නැත්නම් මුල් අකුරු */}
+                  <span className="w-8 h-8 rounded-full overflow-hidden bg-gradient-to-br from-amber-400 via-orange-400 to-fuchsia-500 text-white flex items-center justify-center text-[12px] font-black ring-2 ring-white/40 shadow-md shrink-0">
+                    {me.avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={me.avatar} alt={me.name} className="w-full h-full object-cover" />
+                    ) : (
+                      me.name.trim().charAt(0).toUpperCase()
+                    )}
                   </span>
                   <span className="hidden sm:flex flex-col items-start leading-tight">
                     <span className="max-w-[110px] truncate font-bold text-white">{me.name}</span>

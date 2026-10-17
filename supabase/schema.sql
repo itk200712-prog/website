@@ -720,3 +720,9 @@ create policy "gallery_items_member_like" on public.gallery_items for update
 drop policy if exists "gallery_comments_member_insert" on public.gallery_comments;
 create policy "gallery_comments_member_insert" on public.gallery_comments for insert
   with check (auth.role() = 'authenticated');
+
+
+-- ---------------------------------------------------------------------------
+-- §18. PROFILE AVATAR (user profile picture — header ball එකේ පේනවා)
+-- ---------------------------------------------------------------------------
+alter table public.profiles add column if not exists avatar_url text not null default '';
