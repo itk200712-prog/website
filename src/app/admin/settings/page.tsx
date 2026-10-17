@@ -15,8 +15,6 @@ export default function AdminSettingsPage() {
   const { show, node } = useNotice();
   const [wa, setWa] = useState(SETTINGS.whatsapp_number);
   const [years, setYears] = useState(String(SETTINGS.years_of_service));
-  const [email1, setEmail1] = useState(SETTINGS.contact_email_1);
-  const [email2, setEmail2] = useState(SETTINGS.contact_email_2);
   const [heroImages, setHeroImages] = useState<string[]>([...SETTINGS.hero_images]);
   const [newImg, setNewImg] = useState("");
   const [membersTotal, setMembersTotal] = useState(String(SETTINGS.members_total));
@@ -39,8 +37,6 @@ export default function AdminSettingsPage() {
         const g = (k: string) => map.get(k);
         if (g("whatsapp_number") != null) setWa(g("whatsapp_number")!);
         if (g("years_of_service") != null) setYears(g("years_of_service")!);
-        if (g("contact_email_1") != null) setEmail1(g("contact_email_1")!);
-        if (g("contact_email_2") != null) setEmail2(g("contact_email_2")!);
         if (g("members_total") != null) setMembersTotal(g("members_total")!);
         if (g("voters_total") != null) setVotersTotal(g("voters_total")!);
         if (g("social_whatsapp") != null) setSocialWa(g("social_whatsapp")!);
@@ -309,68 +305,21 @@ export default function AdminSettingsPage() {
           </div>
         </section>
 
-        {/* FormSubmit */}
+        {/* Email notifications → Admin → Emails (㉕ එකම තැන) */}
         <section className="border-t border-slate-100 pt-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2.5">
-              <Mail size={20} className="text-indigo-700" /> Contact Form Submission Emails
+              <Mail size={20} className="text-indigo-700" /> Email Notifications
             </h2>
-            <span className="badge-green rounded-full px-3.5 py-1.5 text-[11px] font-bold">
-              FormSubmit Active (Automatic Delivery)
-            </span>
+            <span className="badge-green rounded-full px-3.5 py-1.5 text-[11px] font-bold">Admin → Emails</span>
           </div>
           <p className="text-slate-500 text-[12px] mt-1.5 leading-relaxed">
-            Inquiries submitted through the website contact form are automatically delivered to the email addresses specified
-            below via FormSubmit (https://formsubmit.co). No SMTP or complex server setup required.
+            හැම email notification එකක්ම (Membership Applications, Contact / Inquiry, Live Chat, Business Inquiries) දැන්
+            එකම තැනකින් පාලනය වේ — එක් කාරනාවකට ලිපින 1–4ක් දාන්න පුළුවන්; හැම ලිපිනයකටම email යයි.
           </p>
-          <div className="grid gap-4 sm:grid-cols-2 mt-4">
-            <div>
-              <label className="field-label">Primary Destination Email (Email 1)</label>
-              <input value={email1} onChange={(e) => setEmail1(e.target.value)} className="field" placeholder="name@gmail.com" />
-            </div>
-            <div>
-              <label className="field-label">Secondary Destination Email (Email 2 - Optional)</label>
-              <input value={email2} onChange={(e) => setEmail2(e.target.value)} className="field" placeholder="e.g. manager@panduwasnuwara.lk" />
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-indigo-50 border border-indigo-100 p-5 mt-5 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-indigo-900 font-bold text-[12.5px]">
-                <Check size={15} /> FormSubmit Activation &amp; Testing
-              </div>
-              <p className="text-indigo-800/80 text-[11px] mt-1 max-w-lg leading-relaxed">
-                When using an email for the first time with FormSubmit, you will receive an &quot;Activate Form&quot; verification
-                link in your inbox. Click it once to activate.
-              </p>
-            </div>
-            <button className="btn btn-primary shrink-0" onClick={() => show(`Test message sent to ${email1} (activation link එක inbox එකට)`)}>
-              Send Test / Activate
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 p-5 mt-5">
-            <div className="text-[12px] font-bold text-slate-700">
-              Current Delivery Configuration:{" "}
-              <span className="text-slate-900">
-                Delivering to {email2 ? "two addresses" : "single address"}: {email1}
-                {email2 ? `, ${email2}` : ""}
-              </span>
-            </div>
-            <pre className="mt-3 rounded-xl bg-slate-900 text-slate-200 px-4 py-3.5 text-[11px] leading-relaxed overflow-x-auto">
-{`Standard Message Format Delivered to Inbox:
-
-Name: Induwara Thathsara
-
-Phone Number: 076 424 7716
-
-Email: induwara@gmail.com
-
-Department: General Society Inquiries
-
-Message: Customer inquiry text...`}
-            </pre>
-          </div>
+          <a href="/admin/emails" className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-[12px] font-extrabold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700">
+            <Mail size={14} /> Emails settings අරින්න →
+          </a>
         </section>
 
         {/* ============ Social Media Links ============ */}
@@ -411,8 +360,6 @@ Message: Customer inquiry text...`}
               const rows = [
                 { key: "whatsapp_number", value: wa },
                 { key: "years_of_service", value: years },
-                { key: "contact_email_1", value: email1 },
-                { key: "contact_email_2", value: email2 },
                 { key: "members_total", value: membersTotal },
                 { key: "voters_total", value: votersTotal },
                 { key: "hero_images", value: JSON.stringify(heroImages) },

@@ -553,21 +553,17 @@ export function LiveChat() {
     const ref = `LC-${Date.now().toString(36).toUpperCase().slice(-6)}`;
     push({ from: "me", text: `${name} · ${nic} · ${phone}` });
     try {
-      const { getLiveChatEmail } = await import("@/lib/contact-email");
-      const to = (await getLiveChatEmail()).trim();
-      if (to) await fetch(`https://formsubmit.co/ajax/${to}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          _subject: `🔔 Live Chat contact request — ${name} (${ref})`,
-          _template: "table",
-          Source: "Website Live Chat — Contact Request",
-          Reference: ref,
-          Name: name,
-          NIC: nic,
-          Phone: phone,
-          Message: "A visitor requested an officer to contact them via the live chat widget.",
-        }),
+      // ✅ ㉕ Admin → Emails → "Live Chat Requests & Callbacks" route එකේ හැම ලිපිනයකටම
+      const { sendToRoute } = await import("@/lib/mail-routes");
+      await sendToRoute("livechat", {
+        _subject: `🔔 Live Chat contact request — ${name} (${ref})`,
+        _template: "table",
+        Source: "Website Live Chat — Contact Request",
+        Reference: ref,
+        Name: name,
+        NIC: nic,
+        Phone: phone,
+        Message: "A visitor requested an officer to contact them via the live chat widget.",
       });
     } catch {
       /* offline — DB එකට යනවා */
@@ -972,13 +968,8 @@ export function LiveChat() {
       Message: String(fd.get("message") || ""),
     };
     try {
-      const { getLiveChatEmail } = await import("@/lib/contact-email");
-      const to = (await getLiveChatEmail()).trim();
-      if (to) await fetch(`https://formsubmit.co/ajax/${to}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const { sendToRoute } = await import("@/lib/mail-routes");
+      await sendToRoute("livechat", payload);
     } catch {
       /* offline */
     }

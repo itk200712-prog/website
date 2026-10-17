@@ -62,23 +62,9 @@ export function ApplyForm() {
         "Certified Form": photoUrl || fileName || "—",
         Source: "Website — Membership Application",
       };
-      // ✅ Admin → Emails එකේ add කරපු හැම ලිපිනයකටම යවනවා (2, 3, ...)
-      const { getNotifyEmails, sendToAllEmails } = await import("@/lib/notify-emails");
-      const list = await getNotifyEmails();
-      if (list.length) {
-        await sendToAllEmails(payload);
-      } else {
-        // ලැයිස්තුවක් නැත්නම් පරණ ක්‍රමයට contact email එකට
-        const { getContactEmail } = await import("@/lib/contact-email");
-        const to = (fd.get("_to") as string) || (await getContactEmail());
-        if (to) {
-          await fetch(`https://formsubmit.co/ajax/${to}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify(payload),
-          });
-        }
-      }
+      // ✅ ㉕ Admin → Emails → "Membership Applications" route එකේ හැම ලිපිනයකටම යවයි
+      const { sendToRoute } = await import("@/lib/mail-routes");
+      await sendToRoute("membership", payload);
     } catch {
       /* demo mode */
     }

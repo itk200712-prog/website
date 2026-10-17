@@ -12,7 +12,7 @@ import {
   Activity, ArrowUpRight, Bot, CheckCircle2, Clock, Mail, MessageCircle, Phone,
   RefreshCw, Save, Search, Send, TrendingUp, Upload, UserRound, X as XIcon,
 } from "lucide-react";
-import { AdminStatCard, AdminTopbar, dbUpdate, dbUpsert, useNotice } from "@/components/admin";
+import { AdminStatCard, AdminTopbar, dbUpdate, useNotice } from "@/components/admin";
 import { AdminLiveChats } from "@/components/admin-live-chats";
 import { authedClient } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
@@ -40,9 +40,6 @@ const TYPE_META: Record<string, { label: string; tone: string; icon: typeof Acti
 
 export default function AdminLiveChatPage() {
   const { show, node } = useNotice();
-  const [email, setEmail] = useState("");
-  const [fallbackEmail, setFallbackEmail] = useState("");
-  const [saving, setSaving] = useState(false);
   // ✅ Chat bot (Baymax) — නම + avatar
   const [botName, setBotName] = useState("Baymax");
   const [botAvatar, setBotAvatar] = useState("");
@@ -59,10 +56,8 @@ export default function AdminLiveChatPage() {
     setLoading(true);
     try {
       const sb = await authedClient();
-      const { data: st } = await sb.from("system_settings").select("key,value").in("key", ["live_chat_email", "contact_email_1", "chat_bot_name", "chat_bot_avatar"]);
+      const { data: st } = await sb.from("system_settings").select("key,value").in("key", ["chat_bot_name", "chat_bot_avatar"]);
       const map = new Map(((st ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
-      setEmail(map.get("live_chat_email") ?? "");
-      setFallbackEmail(map.get("contact_email_1") ?? "");
       setBotName((map.get("chat_bot_name") || "Baymax").trim() || "Baymax");
       setBotAvatar((map.get("chat_bot_avatar") || "").trim());
 
@@ -99,14 +94,6 @@ export default function AdminLiveChatPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  async function saveEmail() {
-    setSaving(true);
-    const err = await dbUpsert("system_settings", { key: "live_chat_email", value: email.trim() }, "key");
-    setSaving(false);
-    if (err) return show(`⚠ ${err}`);
-    show("✅ Live Chat email සුරැකුණා");
-  }
 
   async function onBotImage(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -328,44 +315,22 @@ export default function AdminLiveChatPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 mb-5">
-        {/* ── email setting ── */}
+        {/* ── email routing → Admin → Emails ── */}
         <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-[13px] font-extrabold text-slate-900">
-                <Mail size={15} className="text-indigo-600" /> Live Chat contact email
-              </div>
-              <p className="mt-0.5 text-[11.5px] text-slate-500">Contact Live Chat ඉල්ලීම් (නම · NIC · දුරකථන) යවන ලිපිනය. මේක වෙනස් කළොත් chat එකට වහාම බලපායි.</p>
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
+              <Mail size={18} />
             </div>
-            <button onClick={() => void load()} className="btn btn-outline !py-1.5 !px-2.5 !text-[11px]" disabled={loading}>
-              <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Refresh
-            </button>
-          </div>
-
-          <div className="mt-3 flex flex-col sm:flex-row gap-2">
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={fallbackEmail || "office@example.com"}
-              className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
-            />
-            <button onClick={() => void saveEmail()} disabled={saving} className="btn btn-primary !py-2.5 !px-4 !text-[12px]">
-              <Save size={13} /> {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[10.5px]">
-            <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-600">
-              Fallback: {fallbackEmail || "contact_email_1 (හිස්)"}
-            </span>
-            {!email.trim() && <span className="rounded-full bg-amber-50 px-2 py-1 font-bold text-amber-700">හිස් — fallback ලිපිනය භාවිත වේ</span>}
-            <a href={`mailto:${email.trim() || fallbackEmail}`} className="ml-auto text-indigo-600 font-bold hover:underline">
-              මේ ලිපිනයට test mail එකක් යවන්න →
-            </a>
-          </div>
-
-          <div className="mt-3 rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-[11px] text-indigo-800">
-            <b>FormSubmit</b> හරහා FREE යැවේ — mail එකේ Name / NIC / Phone / Reference අංකය එනවා. පළමු වතාවට FormSubmit එකෙන් activation mail එකක් එයි; එය confirm කරන්න.
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-extrabold text-slate-900">Live Chat ඉල්ලීම් යන ලිපින</div>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-slate-500">
+                “Contact Live Chat” සහ “Request a Call” ඉල්ලීම් යන email ලිපින දැන් එකම තැනකින් — <b>Admin → Emails → Live Chat
+                Requests &amp; Callbacks</b>. එහි ලිපින 2ක් දැම්මොත් දෙකටම යයි.
+              </p>
+              <a href="/admin/emails" className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11.5px] font-extrabold text-white hover:bg-indigo-700">
+                Emails settings අරින්න →
+              </a>
+            </div>
           </div>
         </div>
 

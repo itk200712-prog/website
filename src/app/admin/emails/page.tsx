@@ -1,46 +1,79 @@
 "use client";
 
 // ============================================================================
-// Admin → Emails (⑳)
-//  · නම + email add / edit / delete
-//  · activation mail එකක් යැවීම (FormSubmit එකට confirm කරන්න ඕන)
-//  · Membership applications මේ හැම ලිපිනයකටම යැවේ
+// Admin → Emails — ㉕  (හැම email notification එකක්ම එකම තැනක)
+//  එක් එක් "කාරනාව" (route) එකට ලිපින 1–4ක් — හැම ලිපිනයකටම email යයි.
+//  · Membership Applications  · Contact / Inquiry Form
+//  · Live Chat Requests        · Business Unit Inquiries
 // ============================================================================
 
-import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Mail, Plus, RefreshCw, Save, Send, Trash2, X } from "lucide-react";
-import { AdminTopbar, dbInsert, dbDelete, dbUpdate, useNotice } from "@/components/admin";
-import { clearNotifyCache, getNotifyEmails, sendActivation } from "@/lib/notify-emails";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle, Briefcase, CheckCircle2, Info, Mail, MessageCircle, Plus, RefreshCw,
+  Save, Send, Sparkles, Trash2, UserPlus, X,
+} from "lucide-react";
+import { AdminTopbar, useNotice } from "@/components/admin";
+import {
+  DEFAULT_SLOTS, MAIL_ROUTES, MAIL_SLOTS, clearMailRouteCache, isEmail, mailKey, sendActivationMail,
+  sendToRoute, type MailRouteKey,
+} from "@/lib/mail-routes";
 import { authedClient } from "@/lib/supabase/client";
 
-type Row = { id: string; label: string; email: string; active: boolean; verification: string; verified_at: string | null; created_at: string };
+type Draft = Record<MailRouteKey, string[]>;
 
-const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+const ICONS: Record<MailRouteKey, typeof Mail> = {
+  membership: UserPlus,
+  inquiry: Mail,
+  livechat: MessageCircle,
+  business: Briefcase,
+};
+
+const TONES: Record<MailRouteKey, string> = {
+  membership: "from-indigo-500 to-indigo-700 shadow-indigo-200",
+  inquiry: "from-sky-500 to-cyan-600 shadow-sky-200",
+  livechat: "from-fuchsia-500 to-purple-600 shadow-fuchsia-200",
+  business: "from-amber-500 to-orange-600 shadow-amber-200",
+};
+
+function emptyDraft(): Draft {
+  const d = {} as Draft;
+  for (const r of MAIL_ROUTES) d[r.key] = Array.from({ length: DEFAULT_SLOTS }, () => "");
+  return d;
+}
 
 export default function AdminEmailsPage() {
   const { show, node } = useNotice();
-  const [rows, setRows] = useState<Row[]>([]);
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [fallback, setFallback] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
-  const [missing, setMissing] = useState(false);
-  const [label, setLabel] = useState("");
-  const [email, setEmail] = useState("");
+  const [saving, setSaving] = useState<MailRouteKey | "">("");
   const [busy, setBusy] = useState("");
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editLabel, setEditLabel] = useState("");
-  const [editEmail, setEditEmail] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const sb = await authedClient();
-      const { data, error } = await sb.from("notify_emails").select("*").order("created_at");
-      if (error) {
-        if (/does not exist|PGRST205|schema cache|relation/i.test(error.message)) setMissing(true);
-        setRows([]);
-      } else {
-        setMissing(false);
-        setRows((data ?? []) as Row[]);
+      const { data } = await sb.from("system_settings").select("key,value");
+      const map = new Map(((data ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
+
+      const next = emptyDraft();
+      for (const r of MAIL_ROUTES) {
+        const vals: string[] = [];
+        for (let n = 1; n <= MAIL_SLOTS; n++) vals.push((map.get(mailKey(r.key, n)) || "").trim());
+        // පළමු හිස් slot දෙක විතරක් පෙන්නන්න (දත්ත තියෙන ගණනට අනුව)
+        while (vals.length > DEFAULT_SLOTS && !vals[vals.length - 1]) vals.pop();
+        next[r.key] = vals;
       }
+      setDraft(next);
+
+      // fallback (පරණ settings) — route එකක් හිස් නම් ඒවා යනවා
+      const fb: Record<string, string[]> = {};
+      const pick = (keys: string[]) => keys.map((k) => (map.get(k) || "").trim()).filter(Boolean);
+      fb.membership = pick(["contact_email_1", "contact_email_2"]);
+      fb.inquiry = pick(["contact_email_1", "contact_email_2"]);
+      fb.livechat = pick(["live_chat_email", "contact_email_1"]);
+      fb.business = pick(["contact_email_1", "contact_email_2"]);
+      setFallback(fb);
     } catch {
       /* ignore */
     }
@@ -51,196 +84,202 @@ export default function AdminEmailsPage() {
     void load();
   }, [load]);
 
-  async function add() {
-    if (!label.trim()) return show("⚠ නම ඇතුළත් කරන්න");
-    if (!isEmail(email)) return show("⚠ වලංගු email ලිපිනයක් ඇතුළත් කරන්න");
-    if (rows.some((r) => r.email.toLowerCase() === email.trim().toLowerCase())) return show("⚠ මේ ලිපිනය දැනටමත් ඇත");
-    setBusy("add");
-    const err = await dbInsert("notify_emails", { label: label.trim(), email: email.trim(), active: true, verification: "pending" });
-    setBusy("");
-    if (err) return show(`⚠ ${err}`);
-    clearNotifyCache();
-    const added = email.trim();
-    setLabel("");
-    setEmail("");
-    void load();
-    // ✅ add කරන ගමන්ම activation mail එක auto යැවේ
-    show("⏳ ලිපිනය එකතු වුණා — activation mail යවමින්…");
-    const ok = await sendActivation(added);
-    const sb = await authedClient();
-    const { data: row } = await sb.from("notify_emails").select("id").eq("email", added).maybeSingle();
-    if (row) {
-      await dbUpdate("notify_emails", { id: (row as { id: string }).id }, ok
-        ? { verification: "activated", verified_at: new Date().toISOString() }
-        : { verification: "failed" });
+  const activeCount = useMemo(
+    () => MAIL_ROUTES.reduce((a, r) => a + draft[r.key].filter((v) => isEmail(v)).length, 0),
+    [draft]
+  );
+
+  function setSlot(route: MailRouteKey, idx: number, val: string) {
+    setDraft((d) => ({ ...d, [route]: d[route].map((v, i) => (i === idx ? val : v)) }));
+  }
+
+  function addSlot(route: MailRouteKey) {
+    setDraft((d) => ({ ...d, [route]: [...d[route], ""].slice(0, MAIL_SLOTS) }));
+  }
+
+  function removeSlot(route: MailRouteKey, idx: number) {
+    setDraft((d) => {
+      const arr = d[route].filter((_, i) => i !== idx);
+      while (arr.length < DEFAULT_SLOTS) arr.push("");
+      return { ...d, [route]: arr };
+    });
+  }
+
+  async function saveRoute(route: MailRouteKey) {
+    const emails = draft[route].map((v) => v.trim());
+    const bad = emails.find((v) => v && !isEmail(v));
+    if (bad) return show(`⚠ වලංගු නොවන ලිපිනයක්: ${bad}`);
+    const filled = emails.filter(Boolean);
+    if (new Set(filled.map((e) => e.toLowerCase())).size !== filled.length) return show("⚠ එකම ලිපිනය දෙපාරක් ඇත");
+
+    setSaving(route);
+    try {
+      const sb = await authedClient();
+      const rows = Array.from({ length: MAIL_SLOTS }, (_, i) => ({
+        key: mailKey(route, i + 1),
+        value: (emails[i] || "").trim(),
+      }));
+      const { error } = await sb.from("system_settings").upsert(rows, { onConflict: "key" });
+      if (error) throw new Error(error.message);
+      clearMailRouteCache();
+      show(`✅ ${MAIL_ROUTES.find((r) => r.key === route)?.title_si} — සුරැකුණා (${filled.length} ලිපිනය${filled.length === 1 ? "" : "ක"})`);
+    } catch (e) {
+      show(`⚠ ${e instanceof Error ? e.message : "save failed"}`);
     }
-    show(ok ? "✅ Activation mail යැවුණා — inbox එකේ confirm කරන්න" : "⚠ Activation mail යැවීමට බැරි විය");
-    void load();
+    setSaving("");
   }
 
-  async function activate(r: Row) {
-    setBusy(r.id);
-    const ok = await sendActivation(r.email);
-    if (ok) {
-      await dbUpdate("notify_emails", { id: r.id }, { verification: "activated", verified_at: new Date().toISOString() });
-      show("✅ Activation mail යැවුණා — inbox එකේ confirm කරන්න");
-    } else {
-      await dbUpdate("notify_emails", { id: r.id }, { verification: "failed" });
-      show("⚠ Activation mail යැවීමට බැරි විය — ලිපිනය පරීක්ෂා කරන්න");
-    }
+  async function activate(route: MailRouteKey, email: string) {
+    if (!isEmail(email)) return show("⚠ වලංගු ලිපිනයක් ඇතුළත් කරන්න");
+    setBusy(`${route}:${email}`);
+    const ok = await sendActivationMail(email.trim());
     setBusy("");
-    void load();
+    show(ok ? `✅ Activation mail යැවුණා → ${email}` : `⚠ Activation mail යැවීමට බැරි විය → ${email}`);
   }
 
-  async function toggle(r: Row) {
-    const err = await dbUpdate("notify_emails", { id: r.id }, { active: !r.active });
-    if (err) return show(`⚠ ${err}`);
-    clearNotifyCache();
-    setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, active: !x.active } : x)));
-  }
-
-  async function saveEdit(r: Row) {
-    if (!isEmail(editEmail)) return show("⚠ වලංගු email ලිපිනයක් ඇතුළත් කරන්න");
-    const err = await dbUpdate("notify_emails", { id: r.id }, { label: editLabel.trim(), email: editEmail.trim() });
-    if (err) return show(`⚠ ${err}`);
-    clearNotifyCache();
-    setEditId(null);
-    show("✅ සුරැකුණා");
-    void load();
-  }
-
-  async function remove(r: Row) {
-    if (!confirm(`"${r.label}" (${r.email}) ඉවත් කරන්නද?`)) return;
-    const err = await dbDelete("notify_emails", { id: r.id });
-    if (err) return show(`⚠ ${err}`);
-    clearNotifyCache();
-    show("✅ ඉවත් කළා");
-    void load();
+  async function testRoute(route: MailRouteKey) {
+    setBusy(`test:${route}`);
+    const n = await sendToRoute(route, {
+      _subject: "MPCS — Test email from Admin → Emails",
+      Name: "Panduwasnuwara MPCS",
+      Message: "මෙය පරීක්ෂණ email එකකි. දැන් මේ ලිපිනයට සැබෑ notifications එනවා. / This is a test message.",
+      Source: "Admin → Emails (test)",
+    });
+    setBusy("");
+    show(n > 0 ? `✅ ලිපින ${n}කට test email යැවුණා` : "⚠ test email යැවීමට බැරි විය — ලිපින පරීක්ෂා කරන්න");
   }
 
   return (
     <div>
       {node}
-      <AdminTopbar title="Emails" sub="Membership application / inquiry notifications යන ලිපින" />
+      <AdminTopbar
+        title="Emails"
+        sub="හැම email notification එකක්ම එකම තැනකින් — කාරනාව අනුව ලිපින 1–4ක්"
+      />
 
-      {missing && (
-        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="text-[12.5px] font-extrabold text-amber-800">⚠ notify_emails table එක තවම හදලා නෑ</div>
-          <p className="mt-1 text-[11.5px] text-amber-700">supabase/schema.sql එකේ අන්තිම &quot;§23. NOTIFICATION EMAILS&quot; block එක Supabase → SQL Editor එකේ run කරන්න.</p>
-        </div>
-      )}
-
-      <div className="grid lg:grid-cols-[1fr_340px] gap-4">
-        {/* list */}
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-            <div className="flex items-center gap-2 text-[13px] font-extrabold text-slate-900">
-              <Mail size={15} className="text-indigo-600" /> Notification emails
-              <span className="rounded-full bg-indigo-50 text-indigo-700 text-[9.5px] font-black px-1.5 py-0.5">{rows.filter((r) => r.active).length} active</span>
-            </div>
-            <button onClick={() => void load()} className="btn btn-outline !py-1.5 !px-2.5 !text-[11px]" disabled={loading}>
-              <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Refresh
-            </button>
+      {/* summary strip */}
+      <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-fuchsia-50 px-4 py-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-sm">
+          <Sparkles size={16} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12.5px] font-extrabold text-slate-900">
+            {activeCount} active ලිපින · {MAIL_ROUTES.length} කාරනා
           </div>
+          <div className="text-[11px] text-slate-600">
+            එක් කාරනාවකට ලිපින 2ක් දැම්මොත් <b>දෙකටම</b> email යයි. FormSubmit එකෙන් පළමු වතාවට activation mail එකක් එයි — confirm කරන්න.
+          </div>
+        </div>
+        <button onClick={() => void load()} disabled={loading} className="btn btn-outline !py-1.5 !px-3 !text-[11px]">
+          <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
 
-          {rows.length === 0 && !loading && (
-            <div className="px-4 py-10 text-center text-[11.5px] text-slate-400">
-              තවම ලිපින නෑ — දකුණු පැත්තෙන් එකතු කරන්න
-            </div>
-          )}
+      <div className="grid gap-4 xl:grid-cols-2">
+        {MAIL_ROUTES.map((r) => {
+          const Icon = ICONS[r.key];
+          const values = draft[r.key];
+          const fb = fallback[r.key] ?? [];
+          const filled = values.filter((v) => v.trim());
+          return (
+            <div key={r.key} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-start gap-3 px-4 pt-4">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${TONES[r.key]} text-white shadow-lg`}>
+                  <Icon size={19} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13.5px] font-extrabold text-slate-900">{r.title_si}</div>
+                  <div className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">{r.title_en}</div>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-slate-500">{r.desc_si}</p>
+                </div>
+              </div>
 
-          <div className="divide-y divide-slate-100">
-            {rows.map((r) => (
-              <div key={r.id} className="px-4 py-3">
-                {editId === r.id ? (
-                  <div className="space-y-2">
-                    <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} placeholder="නම" className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-indigo-400" />
-                    <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="email" className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12px] outline-none focus:border-indigo-400" />
-                    <div className="flex gap-1.5">
-                      <button onClick={() => void saveEdit(r)} className="btn btn-primary !py-1.5 !px-3 !text-[11px]"><Save size={11} /> Save</button>
-                      <button onClick={() => setEditId(null)} className="btn btn-outline !py-1.5 !px-3 !text-[11px]"><X size={11} /> Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[12.5px] font-extrabold text-slate-900 truncate">{r.label || "—"}</span>
-                        {r.active ? (
-                          <span className="rounded-full bg-emerald-50 text-emerald-700 text-[8.5px] font-black px-1.5 py-0.5">ACTIVE</span>
-                        ) : (
-                          <span className="rounded-full bg-slate-100 text-slate-500 text-[8.5px] font-black px-1.5 py-0.5">OFF</span>
-                        )}
-                        {r.verification === "activated" ? (
-                          <span className="rounded-full bg-sky-50 text-sky-700 text-[8.5px] font-black px-1.5 py-0.5">✔ VERIFIED</span>
-                        ) : r.verification === "failed" ? (
-                          <span className="rounded-full bg-rose-50 text-rose-700 text-[8.5px] font-black px-1.5 py-0.5">FAILED</span>
-                        ) : (
-                          <span className="rounded-full bg-amber-50 text-amber-700 text-[8.5px] font-black px-1.5 py-0.5">NOT ACTIVATED</span>
-                        )}
+              <div className="px-4 pb-4 pt-3">
+                <div className="space-y-2">
+                  {values.map((v, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <div className="relative flex-1">
+                        <Mail size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          value={v}
+                          onChange={(e) => setSlot(r.key, i, e.target.value)}
+                          placeholder={`Email ${i + 1}`}
+                          type="email"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-8 pr-3 text-[12px] outline-none focus:border-indigo-400 focus:bg-white"
+                        />
                       </div>
-                      <div className="text-[11px] text-slate-500 truncate">{r.email}</div>
+                      <button
+                        onClick={() => void activate(r.key, v)}
+                        disabled={!isEmail(v) || busy === `${r.key}:${v}`}
+                        title="Activation mail යවන්න"
+                        className="shrink-0 rounded-lg bg-indigo-50 px-2.5 py-2 text-[10px] font-extrabold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-40"
+                      >
+                        {busy === `${r.key}:${v}` ? "…" : "Activate"}
+                      </button>
+                      {values.length > 1 && (
+                        <button
+                          onClick={() => removeSlot(r.key, i)}
+                          className="shrink-0 rounded-lg bg-slate-50 p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                          title="ඉවත් කරන්න"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button onClick={() => void activate(r)} disabled={busy === r.id} className="rounded-lg bg-indigo-50 px-2 py-1 text-[9.5px] font-extrabold text-indigo-700 hover:bg-indigo-100" title="Activation mail යවන්න">
-                        {busy === r.id ? "…" : "Activate"}
-                      </button>
-                      <button onClick={() => void toggle(r)} className="rounded-lg bg-slate-100 px-2 py-1 text-[9.5px] font-extrabold text-slate-600 hover:bg-slate-200">
-                        {r.active ? "Off" : "On"}
-                      </button>
-                      <button onClick={() => { setEditId(r.id); setEditLabel(r.label); setEditEmail(r.email); }} className="rounded-lg bg-slate-100 px-2 py-1 text-[9.5px] font-extrabold text-slate-600 hover:bg-slate-200">
-                        Edit
-                      </button>
-                      <button onClick={() => void remove(r)} className="rounded-lg bg-rose-50 p-1 text-rose-600 hover:bg-rose-100">
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {values.length < MAIL_SLOTS && (
+                    <button onClick={() => addSlot(r.key)} className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 px-2.5 py-1.5 text-[10.5px] font-bold text-slate-500 hover:border-indigo-400 hover:text-indigo-600">
+                      <Plus size={11} /> තවත් ලිපිනයක්
+                    </button>
+                  )}
+                  <button
+                    onClick={() => void saveRoute(r.key)}
+                    disabled={saving === r.key}
+                    className="ml-auto btn btn-primary !py-2 !px-3.5 !text-[11.5px]"
+                  >
+                    <Save size={12} /> {saving === r.key ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    onClick={() => void testRoute(r.key)}
+                    disabled={busy === `test:${r.key}` || filled.length === 0}
+                    className="btn btn-outline !py-2 !px-3 !text-[11.5px]"
+                  >
+                    <Send size={12} /> {busy === `test:${r.key}` ? "…" : "Test"}
+                  </button>
+                </div>
+
+                {filled.length === 0 && fb.length > 0 && (
+                  <div className="mt-3 flex items-start gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10.5px] text-amber-800">
+                    <Info size={12} className="mt-0.5 shrink-0" />
+                    <span>
+                      තවම ලිපින දාලා නෑ — දැනට <b>{fb.join(", ")}</b> ට යනවා (පරණ setting). ඉහත දාලා Save කරන්න.
+                    </span>
+                  </div>
+                )}
+
+                {filled.length > 0 && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[10.5px] font-semibold text-emerald-700">
+                    <CheckCircle2 size={12} /> දැන් {filled.length} ලිපිනයකට යනවා: {filled.join(", ")}
                   </div>
                 )}
               </div>
-            ))}
-          </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center gap-2 text-[12px] font-extrabold text-slate-800">
+          <AlertTriangle size={13} className="text-amber-600" /> වැදගත්
         </div>
-
-        {/* add / help */}
-        <div className="space-y-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-[13px] font-extrabold text-slate-900 flex items-center gap-1.5">
-              <Plus size={14} className="text-indigo-600" /> අලුත් ලිපිනයක්
-            </div>
-            <div className="mt-2.5 space-y-2">
-              <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="නම (උදා: ලේකම් කාර්යාලය)" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] outline-none focus:border-indigo-400 focus:bg-white" />
-              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" type="email" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] outline-none focus:border-indigo-400 focus:bg-white" />
-              <button onClick={() => void add()} disabled={busy === "add"} className="btn btn-primary w-full !py-2 !text-[12px]">
-                <Plus size={13} /> {busy === "add" ? "Adding…" : "Add email"}
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
-            <div className="flex items-center gap-1.5 text-[12px] font-extrabold text-indigo-800">
-              <Send size={13} /> කොහොමද වැඩ කරන්නේ
-            </div>
-            <ol className="mt-2 space-y-1.5 text-[11px] text-indigo-900/80 list-decimal pl-4">
-              <li>ලිපිනය add කරන්න (නම සමඟ)</li>
-              <li><b>Activate</b> ඔබන්න — ඒ ලිපිනයට FormSubmit confirmation mail එකක් යයි</li>
-              <li>ඒ inbox එකේ ලින්ක් එක confirm කරන්න</li>
-              <li>දැන් සාමාජික අයදුම්පතක් submit වෙද්දී <b>හැම active ලිපිනයකටම</b> mail යයි ✅</li>
-            </ol>
-          </div>
-
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <div className="flex items-center gap-1.5 text-[12px] font-extrabold text-amber-800">
-              <AlertTriangle size={13} /> සටහන
-            </div>
-            <p className="mt-1.5 text-[11px] text-amber-800">
-              FormSubmit එකට එක් ලිපිනයකට <b>එක වරක්</b> confirm කිරීම ප්‍රමාණවත්. Confirm නොකළ ලිපිනයකට mail යැවෙන්නේ නෑ.
-            </p>
-            <div className="mt-2 flex items-center gap-1.5 text-[10.5px] font-semibold text-amber-700">
-              <CheckCircle2 size={11} /> දැනට active: {rows.filter((r) => r.active).length}
-            </div>
-          </div>
-        </div>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-[11px] text-slate-600">
+          <li>FormSubmit එකට එක් ලිපිනයකට <b>එක වරක්</b> confirm කිරීම ප්‍රමාණවත් — <b>Activate</b> ඔබලා inbox එකේ ලින්ක් එක ඔබන්න.</li>
+          <li>Confirm නොකළ ලිපිනයකට email යැවෙන්නේ නෑ (FormSubmit එකේ නියමය).</li>
+          <li>admin panel එකේ වෙනත් තැන්වල තිබුණු email settings ඉවත් කරලා එකම තැනට ගෙනාවා — දැන් මෙතනින් විතරයි.</li>
+        </ul>
       </div>
     </div>
   );

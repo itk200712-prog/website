@@ -179,21 +179,22 @@ export function InquiryForm({ department, compact }: { department?: string; comp
     setBusy(true);
     const form = e.currentTarget;
     const fd = new FormData(form);
-    // FormSubmit delivery (admin settings email එකට) — client-side සිට direct POST
+    // ✅ ㉕ Admin → Emails එකේ "Contact / Inquiry Form" route එකේ හැම ලිපිනයකටම යවයි
     try {
-      const { getContactEmail } = await import("@/lib/contact-email");
-      const to = (fd.get("_to") as string) || (await getContactEmail());
-      await fetch(`https://formsubmit.co/ajax/${to}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          Name: fd.get("name"),
-          "Phone Number": fd.get("phone"),
-          Email: fd.get("email") || "—",
-          Department: fd.get("department"),
-          Message: fd.get("message"),
-        }),
-      });
+      const { sendToRoute } = await import("@/lib/mail-routes");
+      const dept = String(fd.get("department") || "");
+      // ව්‍යාපාරික අංශයකින් ආවොත් business route එකට, නැත්නම් inquiry route එකට
+      const body = {
+        Name: fd.get("name"),
+        "Phone Number": fd.get("phone"),
+        Email: fd.get("email") || "—",
+        Department: dept,
+        Message: fd.get("message"),
+      };
+      await sendToRoute("inquiry", body);
+      if (dept && /division|section|agency|bank|supermarket|depot|service|station/i.test(dept)) {
+        await sendToRoute("business", body);
+      }
     } catch {
       /* offline / demo — form UI එක ක්‍රියා කරයි */
     }

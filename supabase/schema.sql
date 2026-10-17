@@ -825,6 +825,19 @@ create policy live_chat_events_admin_read on public.live_chat_events for select 
 -- Live Chat contact requests යන email ලිපිනය (හිස් = contact_email_1)
 insert into public.system_settings (key, value) values ('live_chat_email', '') on conflict (key) do nothing;
 
+-- ✅ ㉕ Central email routing — Admin → Emails (කාරනාව අනුව ලිපින 1–4)
+--    membership · inquiry · livechat · business   (හිස් නම් පරණ contact_email_1 / live_chat_email fallback)
+insert into public.system_settings (key, value) values
+('mail_route_membership_1', ''),
+('mail_route_membership_2', ''),
+('mail_route_inquiry_1', ''),
+('mail_route_inquiry_2', ''),
+('mail_route_livechat_1', ''),
+('mail_route_livechat_2', ''),
+('mail_route_business_1', ''),
+('mail_route_business_2', '')
+on conflict (key) do nothing;
+
 -- ✅ Chat bot identity (Baymax) — admin → Live Chat → Chat bot card එකෙන් වෙනස් කරන්න
 insert into public.system_settings (key, value) values
 ('chat_bot_name', 'Baymax'),
