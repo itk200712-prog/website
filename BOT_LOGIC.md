@@ -109,12 +109,14 @@ karaganna ona` · `Please connect me to someone at the office`.
 
 ## ✨ Gemini AI fallback — පොදු දැනුම් ප්‍රශ්න
 
-Site brain එකට සහ පැරණි intent වලට උත්තරයක් නැති **පොදු දැනුම් ප්‍රශ්නවලට
-විතරක්** (උදා: `සමූපකාරයක් යනු කුමක්ද?`) Baymax දැන් Gemini AI එකෙන් —
-Google Search grounding එකත් එක්ක — උත්තර දෙන්න පුළුවන්. පිළිතුරු භාෂාව
-ප්‍රශ්නයේ භාෂාවමයි: සිංහල/Singlish ඇහුවොත් සිංහල අකුරෙන්, English ඇහුවොත්
-English වලින්. සමිතියට අදාළ ඇත්ත තොරතුරු (නම්, දුරකථන, මිල, සාමාජික වාර්තා)
-AI එක හදලා කියන්නේ නෑ — ඒවා site brain/officer flow එකෙන්මයි.
+සමිතියට අදාළ නැති **නිදහස් ප්‍රශ්නවලට** (උදා: `සමූපකාරයක් යනු කුමක්ද?`,
+`සීගිරිය කොහෙද තියෙන්නේ?`) Baymax සාමාන්‍ය AI chat bot එකක් වගේ Gemini AI
+එකෙන් — Google Search grounding එකත් එක්ක — උත්තර දෙනවා. කලින් කතා කරපු දේත්
+(AI වට 8ක් දක්වා) යවන නිසා `ඒක කොහෙද තියෙන්නේ?` වගේ follow-up ප්‍රශ්නත්
+තේරෙනවා. පිළිතුරු භාෂාව ප්‍රශ්නයේ භාෂාවමයි: සිංහල/Singlish ඇහුවොත් සිංහල
+අකුරෙන්, English ඇහුවොත් English වලින්. සමිතියට අදාළ ඇත්ත තොරතුරු (නම්,
+දුරකථන, මිල, සාමාජික වාර්තා) AI එක හදලා කියන්නේ නෑ — ඒවා site
+brain/officer flow එකෙන්මයි. Keyword විතරක් තියෙන කෙටි ඒවාත් site brain එකටමයි.
 
 - **Settings:** Admin → Live Chat → “Baymax AI — Gemini” card එකෙන් on/off,
   model එක සහ API key එක save කරන්න පුළුවන් (superadmin විතරයි key එක).
@@ -161,7 +163,7 @@ Logic එක `src/lib/chatbot.ts` හි `getLiveChatHoursStatus()` එකේ �
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 246 tests — smalltalk + Sinhala officer intent + Gemini AI fallback + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
+npx -y tsx scripts/test.mts   # 249 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing) + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
 npm run build                 # production build
 ```
 

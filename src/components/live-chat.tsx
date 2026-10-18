@@ -46,7 +46,7 @@ import {
   type IndexedKnowledgeEntry,
   type KnowledgeSourceData,
 } from "@/lib/knowledge";
-import { isAiEnabledValue, isGeneralKnowledgeQuestion } from "@/lib/baymax-ai";
+import { isAiEnabledValue, shouldAskAiFirst, type AiHistoryTurn } from "@/lib/baymax-ai";
 import type {
   BoardMember,
   BusinessBranch,
@@ -191,6 +191,8 @@ export function LiveChat() {
   const flowRef = useRef(0);          // flow එකක් අතරමැදි වීම වළක්වයි
   // ✅ bot "මතකය" — කතාව අතරේ දැනගන්නා දෑ (නම, අන්තිමට ඇසූ දේ) මතක තබා ගැනීම
   const convoRef = useRef<BaymaxMemory>({});
+  // ✨ AI කතාවේ මතකය — follow-up ප්‍රශ්න තේරෙන්න (සාමාජික විස්තර වගේ සංවේදී දේ මෙතැන නෑ)
+  const aiHistoryRef = useRef<AiHistoryTurn[]>([]);
   const knowledgeIndexRef = useRef<IndexedKnowledgeEntry[] | null>(null);
   const knowledgeLoadRef = useRef<Promise<IndexedKnowledgeEntry[]> | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -224,6 +226,7 @@ export function LiveChat() {
     idRef.current = 1;
     started.current = true;
     convoRef.current = resetBaymaxMemory(convoRef.current);
+    aiHistoryRef.current = [];
     setMsgs([makeWelcomeMessage()]);
     setInput("");
     setPanel(null);
@@ -1595,7 +1598,7 @@ export function LiveChat() {
       const res = await fetch("/api/baymax-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q, language: rsi ? "si" : "en" }),
+        body: JSON.stringify({ question: q, language: rsi ? "si" : "en", history: aiHistoryRef.current }),
         signal: controller.signal,
       });
       const data = (await res.json().catch(() => null)) as { ok?: boolean; answer?: string; reason?: string } | null;
@@ -1627,6 +1630,11 @@ export function LiveChat() {
         text: answer,
         chips: [...(rsi ? MENU_CHIPS_SI : MENU_CHIPS_EN), rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
       });
+      aiHistoryRef.current = [
+        ...aiHistoryRef.current,
+        { role: "user" as const, text: q },
+        { role: "model" as const, text: answer },
+      ].slice(-8);
       convoRef.current.lastIntent = "ai";
       void logEvent("ai_answer", q, 0, sessionRef.current);
       return true;
@@ -1887,9 +1895,10 @@ export function LiveChat() {
       return;
     }
 
-    // ✨ පැහැදිලි පොදු දැනුම් ප්‍රශ්න ("සමූපකාරයක් යනු කුමක්ද?" වගේ) — site brain
-    // එක අනුමානයක් දෙන්න කලින් AI එකෙන් අහනවා. AI off/fail නම් site brain එකටම යනවා.
-    if (isGeneralKnowledgeQuestion(q) && (await answerFromAI(q, rsi))) return;
+    // ✨ සාමාන්‍ය AI chat bot එකක් වගේ: සමිතියට අදාළ නැති නිදහස් ප්‍රශ්න/වාක්‍ය සහ
+    // follow-up ("ඒක කොහෙද තියෙන්නේ?") site brain එක අනුමාන කරන්න කලින් AI එකෙන්
+    // (Google Search + කතා ඉතිහාසය එක්ක) අහනවා. AI off/fail නම් site brain එකටම යනවා.
+    if (shouldAskAiFirst(q, aiHistoryRef.current.length > 0) && (await answerFromAI(q, rsi))) return;
 
     // 🧠 Site brain — ඕනෑම නිදහස් ප්‍රශ්නයකට අඩවියේම තහවුරු කළ තොරතුරු වලින් පිළිතුරු දෙයි
     if (await answerFromKnowledge(q, rsi)) return;
@@ -2601,14 +2610,14 @@ export function LiveChat() {
                           send();
                         }
                       }}
-                      placeholder={si ? "සමිතිය ගැන ඕනෑම දෙයක් අහන්න…" : "Ask anything about our society…"}
+                      placeholder={aiEnabled ? (si ? "ඕනෑම දෙයක් අහන්න…" : "Ask me anything…") : si ? "සමිතිය ගැන ඕනෑම දෙයක් අහන්න…" : "Ask anything about our society…"}
                       className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
                     />
                     <button onClick={() => send()} disabled={!input.trim()} className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center disabled:opacity-40 hover:bg-indigo-700 transition">
                       <Send size={16} />
                     </button>
                   </div>
-                  <div className="mt-1.5 text-center text-[9.5px] text-slate-400">{si ? "අඩවියේ තහවුරු කළ තොරතුරු වලින් උත්තර දෙයි · 24/7" : "Answers from verified website information · 24/7"}</div>
+                  <div className="mt-1.5 text-center text-[9.5px] text-slate-400">{aiEnabled ? (si ? "අඩවියේ තොරතුරු + AI සෙවුමෙන් උත්තර දෙයි · 24/7" : "Site answers + AI search · 24/7") : si ? "අඩවියේ තහවුරු කළ තොරතුරු වලින් උත්තර දෙයි · 24/7" : "Answers from verified website information · 24/7"}</div>
                 </div>
               )}
             </>

@@ -386,6 +386,26 @@ ok("ai: general-knowledge detector (general → AI, society facts → site brain
   baymaxAi.isGeneralKnowledgeQuestion("සභාපති කවුද?") === false &&
   baymaxAi.isGeneralKnowledgeQuestion("What is F28?") === false &&
   baymaxAi.isGeneralKnowledgeQuestion("How do I become a member?") === false);
+ok("ai: normal-chat routing (free questions + follow-ups → AI, society keywords → site)",
+  baymaxAi.shouldAskAiFirst("sigiriya koheda thiyenne") === true &&
+  baymaxAi.shouldAskAiFirst("ඒක කොහෙද තියෙන්නේ?", true) === true &&
+  baymaxAi.shouldAskAiFirst("එතකොට ඒක ලොකුද", true) === true &&
+  baymaxAi.shouldAskAiFirst("එතකොට ඒක ලොකුද", false) === false &&
+  baymaxAi.shouldAskAiFirst("Maliban") === false &&
+  baymaxAi.shouldAskAiFirst("Maliban eka koheda thiyenne") === false &&
+  baymaxAi.shouldAskAiFirst("සභාපතිගේ දුරකථන අංකය කීයද?") === false &&
+  baymaxAi.shouldAskAiFirst("mata aluth deyak igena ganna asai kiyala hithuna") === true);
+ok("ai: history is sanitized (roles mapped, capped)",
+  JSON.stringify(baymaxAi.normalizeAiHistory([
+    { role: "assistant", text: "  ආයුබෝවන්   ලෝකය " },
+    { role: "weird", text: "කොහොමද" },
+    { role: "user", text: "x" },
+    { role: "model", text: "y".repeat(400) },
+  ])) === JSON.stringify([
+    { role: "model", text: "ආයුබෝවන් ලෝකය" },
+    { role: "user", text: "කොහොමද" },
+    { role: "model", text: "y".repeat(320) },
+  ]));
 ok("ai: enabled only for explicit on values", baymaxAi.isAiEnabledValue("1") === true && baymaxAi.isAiEnabledValue("true") === true && baymaxAi.isAiEnabledValue("0") === false && baymaxAi.isAiEnabledValue("") === false);
 ok("ai: secret mask never reveals the full key", baymaxAi.maskSecret("prod-secret-123456abcd") === "prod…abcd" && baymaxAi.maskSecret("short") === "••••••••" && baymaxAi.maskSecret("") === "");
 ok("ai: question is trimmed/collapsed and capped", baymaxAi.normalizeAiQuestion("  hello\n\n world  ") === "hello world" && baymaxAi.normalizeAiQuestion("x".repeat(900)).length === 600);
@@ -393,6 +413,15 @@ const siInstruction = baymaxAi.baymaxAiSystemInstruction("si");
 ok("ai: Sinhala instruction + no invented society facts", siInstruction.includes("Sinhala script") && siInstruction.includes("Never invent facts") && siInstruction.includes("Google Search") && siInstruction.includes("Do not add an unrelated society"));
 const groundedReq = baymaxAi.buildGeminiRequest("සමූපකාරයක් යනු කුමක්ද?", "si", true) as { tools?: unknown; contents: { parts: { text: string }[] }[] };
 ok("ai: Gemini request uses Google Search grounding", JSON.stringify(groundedReq.tools) === JSON.stringify([{ google_search: {} }]) && groundedReq.contents[0].parts[0].text.includes("සමූපකාරයක්"));
+const historyReq = baymaxAi.buildGeminiRequest("ඒක කොහෙද තියෙන්නේ?", "si", true, [
+  { role: "user", text: "සීගිරිය ගැන කියන්න" },
+  { role: "model", text: "සීගිරිය යනු පැරණි බලකොටුවකි." },
+]) as { contents: { role: string; parts: { text: string }[] }[] };
+ok("ai: Gemini request carries conversation history for follow-ups",
+  historyReq.contents.length === 3 &&
+  historyReq.contents[0].role === "user" &&
+  historyReq.contents[1].role === "model" &&
+  historyReq.contents[2].parts[0].text.includes("කොහෙද"));
 const plainReq = baymaxAi.buildGeminiRequest("hello", "en", false) as { tools?: unknown };
 ok("ai: Gemini request can retry without search tool", plainReq.tools === undefined);
 ok("ai: Gemini response text extraction", baymaxAi.extractGeminiText({ candidates: [{ content: { parts: [{ text: "ආයුබෝවන්" }, { text: "world" }] } }] }) === "ආයුබෝවන්\nworld" && baymaxAi.extractGeminiText({}) === "");
@@ -419,13 +448,15 @@ ok("ai: server route reads secret with service role + sends x-goog-api-key",
   baymaxAiRouteSrc.includes("server_not_configured") &&
   baymaxAiRouteSrc.includes("modelFallbackChain") &&
   baymaxAiRouteSrc.includes("quota_exceeded") &&
+  baymaxAiRouteSrc.includes("normalizeAiHistory") &&
   baymaxAiRouteSrc.includes("result.status !== 400 && result.status !== 429"));
-ok("ai: widget sends clear general questions to AI first + keeps final AI fallback",
-  liveChatSrc.indexOf("isGeneralKnowledgeQuestion(q)") > -1 &&
-  liveChatSrc.indexOf("isGeneralKnowledgeQuestion(q)") < liveChatSrc.indexOf("answerFromKnowledge(q, rsi)") &&
+ok("ai: widget sends free questions to AI first (with history) + keeps final AI fallback",
+  liveChatSrc.indexOf("shouldAskAiFirst(q") > -1 &&
+  liveChatSrc.indexOf("shouldAskAiFirst(q") < liveChatSrc.indexOf("answerFromKnowledge(q, rsi)") &&
   liveChatSrc.lastIndexOf("answerFromAI(q, rsi)") > liveChatSrc.indexOf("answerFromKnowledge(q, rsi)") &&
   liveChatSrc.lastIndexOf("answerFromAI(q, rsi)") < liveChatSrc.indexOf('logEvent("unmatched"') &&
   liveChatSrc.includes('fetch("/api/baymax-ai", { cache: "no-store" })') &&
+  liveChatSrc.includes("history: aiHistoryRef.current") &&
   liveChatSrc.includes("ai_quota"));
 ok("ai: schema has private key slot + public defaults",
   schema.includes("('gemini_api_key','')") && schema.includes("('chat_ai_enabled', '0')") && schema.includes("('chat_ai_model', 'gemini-3.8-flash')"));

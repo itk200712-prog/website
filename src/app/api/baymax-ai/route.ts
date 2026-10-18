@@ -15,8 +15,10 @@ import {
   extractGeminiText,
   isAiEnabledValue,
   modelFallbackChain,
+  normalizeAiHistory,
   normalizeAiQuestion,
   normalizeGeminiModel,
+  type AiHistoryTurn,
   type BaymaxAiLanguage,
 } from "@/lib/baymax-ai";
 
@@ -128,7 +130,8 @@ async function callGemini(
   model: string,
   question: string,
   language: BaymaxAiLanguage,
-  useSearch: boolean
+  useSearch: boolean,
+  history: AiHistoryTurn[]
 ): Promise<GeminiResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25_000);
@@ -138,7 +141,7 @@ async function callGemini(
       {
         method: "POST",
         headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify(buildGeminiRequest(question, language, useSearch)),
+        body: JSON.stringify(buildGeminiRequest(question, language, useSearch, history)),
         signal: controller.signal,
         cache: "no-store",
       }
@@ -171,17 +174,18 @@ async function callGeminiWithFallbacks(
   apiKey: string,
   selectedModel: string,
   question: string,
-  language: BaymaxAiLanguage
+  language: BaymaxAiLanguage,
+  history: AiHistoryTurn[]
 ): Promise<GeminiAnswer> {
   const chain = modelFallbackChain(selectedModel);
   let lastStatus = 0;
 
   for (let i = 0; i < chain.length; i++) {
     const model = chain[i];
-    // පළමු (තෝරපු) model එකට search එක්ක; fallback ඒවාට search නැතිව (ලාභදායකයි/ඉක්මන්)
-    const attempts = i === 0 ? [true, false] : [false];
+    // හැම model එකකින්ම මුලින් Google Search එක්ක; ඒකට 400/429 ආවොත් විතරක් search නැතිව
+    const attempts = [true, false];
     for (const useSearch of attempts) {
-      const result = await callGemini(apiKey, model, question, language, useSearch);
+      const result = await callGemini(apiKey, model, question, language, useSearch, history);
       if (result.ok) return { ok: true, answer: result.answer, model };
       lastStatus = result.status;
       // search එක්ක ගැටලුවක් නම් විතරක් search නැති උත්සාහයට යනවා
@@ -198,7 +202,7 @@ export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return json({ ok: false, reason: "forbidden" }, 403);
   if (rateLimited(req)) return json({ ok: false, reason: "rate_limited" }, 429);
 
-  let body: { question?: unknown; language?: unknown } = {};
+  let body: { question?: unknown; language?: unknown; history?: unknown } = {};
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -207,13 +211,14 @@ export async function POST(req: NextRequest) {
   const question = normalizeAiQuestion(body.question);
   if (question.length < 2) return json({ ok: false, reason: "empty_question" }, 400);
   const language: BaymaxAiLanguage = body.language === "en" ? "en" : "si";
+  const history = normalizeAiHistory(body.history);
 
   const c = await loadConfig();
   if (!c.enabled) return json({ ok: false, reason: "disabled" });
   if (!c.serverConfigured) return json({ ok: false, reason: "server_not_configured" });
   if (!c.apiKey) return json({ ok: false, reason: "not_configured" });
 
-  const result = await callGeminiWithFallbacks(c.apiKey, c.model, question, language);
+  const result = await callGeminiWithFallbacks(c.apiKey, c.model, question, language, history);
   if (result.ok) return json({ ok: true, answer: result.answer, model: result.model });
   return json({
     ok: false,

@@ -70,21 +70,65 @@ export function normalizeAiQuestion(raw: unknown): string {
   return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, 600);
 }
 
+export type AiHistoryTurn = { role: "user" | "model"; text: string };
+
+/**
+ * Browser එකෙන් එන කතා ඉතිහාසය පිරිසිදු කරනවා — අන්තිම වට 8යි, එකකට අකුරු 320යි.
+ * "ඒක කොහෙද තියෙන්නේ?" වගේ follow-up ප්‍රශ්න තේරෙන්නයි මේක යවන්නේ.
+ */
+export function normalizeAiHistory(raw: unknown): AiHistoryTurn[] {
+  if (!Array.isArray(raw)) return [];
+  const turns: AiHistoryTurn[] = [];
+  for (const item of raw.slice(-16)) {
+    const obj = item as { role?: unknown; text?: unknown } | null;
+    const text = String(obj?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 320);
+    if (text.length < 2) continue;
+    const role = obj?.role === "model" || obj?.role === "assistant" || obj?.role === "bot" ? "model" : "user";
+    turns.push({ role, text });
+  }
+  return turns.slice(-8);
+}
+
+/** සමිතියට අදාළ සලකුණක් තියේද? තිබුණොත් AI එක නෙවෙයි — verified site brain/officer flow එකමයි. */
+export function isSiteSpecificQuestion(raw: unknown): boolean {
+  const q = normalizeAiQuestion(raw).toLowerCase();
+  const siteSpecific =
+    /(panduwasnuwara|mpcs|f28|member|membership|voter|join the|become a member|nic|chairman|manager|phone|telephone|price|petrol|diesel|kerosene|fuel|branch|rural bank|loan|savings account|gold loan|pawning|apply|application|office hours|head office|our office|live chat|our society|this society|maliban|hemas|ristbury|tiara|nature'?s secrets|coop ?city|samithiye|samitiye|samithiyage|samithiyata|samithiyen|ape samithi|oyalage|samajika|sabapathi|niladhari|niladari|karyala|gramiya|bankuwa|bankuwe|දුරකථන|දුරකතන|සාමාජික|ඡන්ද|සභාපති|සබාපති|අධ්‍යක්ෂ|කළමනාකර|කලමනාකර|අංකය|මිල|ගාස්තුව|ශාඛා|අයදුම්|ලියාපදිංචි|ඉන්ධන|පෙට්‍රල්|ඩීසල්|භූමිතෙල්|රන් උකස්|උකස්|ග්‍රාමීය බැංකු|අපේ සමිති|මේ සමිති|සමිතියේ|සමිතියට|ඔයාල|ප්‍රධාන කාර්යාල|අපේ කාර්යාල|පඬුවස්නුවර)/;
+  return siteSpecific.test(q);
+}
+
 /**
  * "සමූපකාරයක් යනු කුමක්ද?" වගේ පැහැදිලි **පොදු දැනුම්** ප්‍රශ්නයක්ද?
- * එහෙම ඒවා site brain එක අනුමානයක් දෙන්න කලින් AI එකෙන් අහනවා.
- * සමිතියට අදාළ ඕනෑම සලකුණක් (සාමාජික, සභාපති, මිල, දුරකථන...) තිබුණොත්
- * මෙය false — ඒවා හැමවිටම verified site brain/officer flow එකෙන්මයි.
+ * සමිතියට අදාළ ඕනෑම සලකුණක් තිබුණොත් මෙය false.
  */
 export function isGeneralKnowledgeQuestion(raw: unknown): boolean {
   const q = normalizeAiQuestion(raw).toLowerCase();
   if (q.length < 4) return false;
-  const siteSpecific =
-    /(panduwasnuwara|mpcs|f28|member|membership|voter|join the|become a member|nic|chairman|manager|phone|telephone|price|petrol|diesel|kerosene|fuel|branch|loan|savings account|gold loan|pawning|apply|application|office hours|our society|this society|samithiye|samitiye|samithiyage|ape samithi|oyalage|samajika|sabapathi|karyala|දුරකථන|දුරකතන|සාමාජික|ඡන්ද|සභාපති|සබාපති|අධ්‍යක්ෂ|කළමනාකර|කලමනාකර|අංකය|මිල|ගාස්තුව|ශාඛා|අයදුම්|ලියාපදිංචි|ඉන්ධන|පෙට්‍රල්|ඩීසල්|භූමිතෙල්|රන් උකස්|උකස්|ග්‍රාමීය බැංකු|අපේ සමිති|මේ සමිති|සමිතියේ|සමිතියට|ඔයාල|පඬුවස්නුවර)/;
-  if (siteSpecific.test(q)) return false;
+  if (isSiteSpecificQuestion(q)) return false;
   const general =
     /(යනු කුමක්ද|යන්නේ කුමක්ද|යනු මොකක්ද|කියන්නේ මොකක්ද|අර්ථය|තේරුම|වෙනස කුමක්ද|ඇයි |ඇයි\?|කවදාද|කොහෙද|කීයද|කොච්චරද|ආලෝකයේ වේගය|අගනුවර|විශ්වය|පෘථිවිය|සූර්යයා|චන්ද්‍රයා|ග්‍රහලෝක|විද්‍යාව|ගණිතය|භූගෝල|yanu kumakda|yanne mokakda|kiyanna mokakda|arthaya|theruma|wenasa|kawadada|koheda|kiyada|kochcharada|^what is\b|^what are\b|^who is\b|^when did\b|^where is\b|^why\b|^how does\b|^how do\b|^how many\b|^how much\b|define\b|meaning of\b|difference between\b|capital of\b|speed of light\b|science\b|geography\b|planet\b|earth\b|universe\b)/;
   return general.test(q);
+}
+
+/**
+ * සාමාන්‍ය AI chat bot එකක් වගේ හැසිරීම: සමිතියට අදාළ නැති නිදහස් ප්‍රශ්නයක්/
+ * වාක්‍යයක් නම් site brain එක අනුමාන කරන්න කලින් AI එකෙන් (Search එක්ක) අහනවා.
+ * Keyword විතරක් තියෙන කෙටි ඒවා ("Maliban", "පොහොර") site brain එකටමයි.
+ * hasContext = කලින් කතාවක් තිබුණා නම් "ඒක කොහෙද තියෙන්නේ?" වගේ follow-up ද AI එකට.
+ */
+export function shouldAskAiFirst(raw: unknown, hasContext = false): boolean {
+  const q = normalizeAiQuestion(raw).toLowerCase();
+  if (q.length < 3) return false;
+  if (isSiteSpecificQuestion(q)) return false;
+  if (isGeneralKnowledgeQuestion(q)) return true;
+  const questionLike =
+    /(කොහෙද|කොහේද|තියෙන්නේ|තියෙනවද|කවුද|මොකක්ද|මොනවද|කුමක්ද|කොහොමද|ඇයි|කවදාද|කීයද|කීයක්|කොච්චර|කොයි|පුළුවන්ද|දන්නවද|කියන්න|විස්තර|පැහැදිලි|හදන්නේ|වෙන්නේ|ලැබෙන්නේ|koheda|kohenda|thiyenne|thiyenawada|kawuda|mokakda|monawada|kumakda|kohomada|kawada|kiyada|kiyak|kochchara|puluwanda|dannawada|kiyanna|visthara|pahadili|hadanne|wenne|labenne|\bwho\b|\bwhat\b|\bwhen\b|\bwhere\b|\bwhy\b|\bhow\b|\bwhich\b|can you|could you|tell me|explain|describe|give me|list of|difference|meaning|define)/;
+  if (questionLike.test(q) || q.endsWith("?")) return true;
+  const followUp =
+    /(ඒක|ඒකෙ|එය|එයා|එයාගේ|එතන|එහේ|එතකොට|ඊට පස්සේ|තව විස්තර|එහෙනම්|eeka|eke|eyage|ethana|ethakota|ehenam|thawa visthara|\bthat\b|\bthere\b|\bthen\b|more details)/;
+  if (hasContext && followUp.test(q)) return true;
+  // නිදහස් වාක්‍යයක් (keyword එකක් නෙවෙයි) නම් සාමාන්‍ය chat bot එකක් වගේ AI එකෙන් අහනවා
+  return q.split(/\s+/).filter(Boolean).length >= 5;
 }
 
 export function baymaxAiSystemInstruction(language: BaymaxAiLanguage): string {
@@ -95,7 +139,7 @@ export function baymaxAiSystemInstruction(language: BaymaxAiLanguage): string {
   return [
     "You are Baymax, the friendly assistant on the Panduwasnuwara New MPCS co-operative society website (Sri Lanka).",
     languageLine,
-    "The website's own verified information is the source for society-specific facts; answer this question as general knowledge. Use Google Search when current or external facts may matter.",
+    "The website's own verified information is the source for society-specific facts; answer this question as general knowledge. For who/what/where/when questions about the outside world, use Google Search first and ground the answer in what you find; use the conversation history to understand follow-ups like 'where is it?' or 'who is he?'.",
     "Never invent facts that are specific to this society: officeholders' names, phone numbers, prices, stock, member/voter records, personal data, or whether a service is available today. If the visitor asks for such a specific fact, say the website information does not show it and suggest contacting an officer through this chat.",
     "Answer the question directly and do not introduce yourself in every reply. Do not add an unrelated society or officer suggestion at the end of a general answer. If you must mention the society in Sinhala, write its name exactly as: පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය.",
     "Keep the answer concise and friendly — about 140 words or fewer unless the visitor asks for details. Plain text only; no markdown tables.",
@@ -103,10 +147,21 @@ export function baymaxAiSystemInstruction(language: BaymaxAiLanguage): string {
   ].join("\n");
 }
 
-export function buildGeminiRequest(question: string, language: BaymaxAiLanguage, useSearch = true) {
+export function buildGeminiRequest(
+  question: string,
+  language: BaymaxAiLanguage,
+  useSearch = true,
+  history: AiHistoryTurn[] = []
+) {
+  const prior = normalizeAiHistory(history).filter(
+    (turn, index, all) => !(index === all.length - 1 && turn.role === "user" && turn.text === question.trim())
+  );
   return {
     systemInstruction: { parts: [{ text: baymaxAiSystemInstruction(language) }] },
-    contents: [{ role: "user", parts: [{ text: question }] }],
+    contents: [
+      ...prior.map((turn) => ({ role: turn.role, parts: [{ text: turn.text }] })),
+      { role: "user", parts: [{ text: question }] },
+    ],
     ...(useSearch ? { tools: [{ google_search: {} }] } : {}),
     generationConfig: { temperature: 0.4, maxOutputTokens: 640 },
   };
