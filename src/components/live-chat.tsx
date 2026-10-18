@@ -1702,21 +1702,6 @@ export function LiveChat() {
 
           {tab === "chat" ? (
             <>
-              {/* ── live chat entry (පැහැදිලිවම පේනවා) ── */}
-              <button
-                onClick={() => {
-                  unlockAudio();
-                  void runAction("live");
-                }}
-                className="shrink-0 w-full border-b border-emerald-100 bg-emerald-50 py-1.5 text-[10.5px] font-extrabold text-emerald-700 hover:bg-emerald-100 transition flex items-center justify-center gap-1.5"
-              >
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                </span>
-                {si ? "නිලධාරියෙක් සමඟ සජීවීව කතා කරන්න →" : "Chat live with an officer →"}
-              </button>
-
               {/* ── action bar ── */}
               <div className="shrink-0 border-b border-slate-200 bg-white px-2 py-2">
                 <div className="flex flex-wrap gap-1.5">
