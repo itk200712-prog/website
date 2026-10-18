@@ -6,6 +6,17 @@
 // ============================================================================
 
 import { createClient, authedClient } from "@/lib/supabase/client";
+import {
+  BACKUP_FORMAT_VERSION,
+  buildManifest,
+  buildRecoveryChecklist,
+  encryptBackupText,
+  sha256Hex,
+  type ParsedInsert,
+} from "@/lib/backup-utils";
+
+export { parseBackupSql } from "@/lib/backup-utils";
+export type { ParsedInsert };
 
 export type BackupTable = { name: string; pk: string };
 
@@ -259,12 +270,15 @@ END $$;`);
 }
 
 /* ------------------------------------------------------------- GENERATE -- */
-export async function generateBackupSql(onProgress: (msg: string, pct: number) => void): Promise<string> {
+export async function generateBackupSql(
+  onProgress: (msg: string, pct: number) => void
+): Promise<{ sql: string; tableCounts: Record<string, number>; imageCount: number }> {
   const sb = await authedClient();
   const lines: string[] = [];
 
   lines.push(`-- ============================================================`);
   lines.push(`-- Panduwasnuwara New MPCS — FULL SITE BACKUP`);
+  lines.push(`-- Backup-Format: ${BACKUP_FORMAT_VERSION}`);
   lines.push(`-- Generated: ${new Date().toISOString()}`);
   lines.push(`-- Same-site restore: Admin → Backup & Restore → Import (ZIP එකම තෝරන්න).`);
   lines.push(`-- Fresh Supabase restore: 1) ZIP එකේ schema.sql run කරන්න`);
@@ -355,84 +369,21 @@ export async function generateBackupSql(onProgress: (msg: string, pct: number) =
   }
 
   onProgress("Backup ready ✅", 100);
-  return lines.join("\n");
+  // manifest එකට — table එකින් එක row ගණන (site_images_backup = ඇත්තටම file එකේ තියන images ගණන)
+  const tableCounts: Record<string, number> = {};
+  for (const g of gathered) tableCounts[g.name] = g.rows.length;
+  tableCounts["site_images_backup"] = imgRows.length;
+  return { sql: lines.join("\n"), tableCounts, imageCount: imgRows.length };
 }
 
 /* --------------------------------------------------------------- PARSE --- */
-export type ParsedInsert = { table: string; cols: string[]; values: unknown[] };
-
-function parseValueTuple(s: string): unknown[] {
-  const out: unknown[] = [];
-  let i = 0;
-  while (i < s.length) {
-    while (i < s.length && /[\s,]/.test(s[i])) i++;
-    if (i >= s.length) break;
-    if (s[i] === "'") {
-      let v = "";
-      i++;
-      while (i < s.length) {
-        if (s[i] === "'" && s[i + 1] === "'") { v += "'"; i += 2; continue; }
-        if (s[i] === "'") { i++; break; }
-        v += s[i++];
-      }
-      out.push(v);
-    } else if (s.slice(i, i + 4).toUpperCase() === "NULL" && !/[\w]/.test(s[i + 4] ?? " ")) {
-      out.push(null);
-      i += 4;
-    } else if (s.slice(i, i + 4).toUpperCase() === "TRUE" && !/[\w]/.test(s[i + 4] ?? " ")) {
-      out.push(true);
-      i += 4;
-    } else if (s.slice(i, i + 5).toUpperCase() === "FALSE" && !/[\w]/.test(s[i + 5] ?? " ")) {
-      out.push(false);
-      i += 5;
-    } else {
-      let j = i;
-      while (j < s.length && !/[\s,)]/.test(s[j])) j++;
-      const n = Number(s.slice(i, j));
-      out.push(Number.isFinite(n) ? n : s.slice(i, j));
-      i = j;
-    }
-    while (i < s.length && /[\s,]/.test(s[i])) i++;
-  }
-  return out;
-}
-
-export function parseBackupSql(sql: string): ParsedInsert[] {
-  const out: ParsedInsert[] = [];
-  const re = /INSERT\s+INTO\s+(?:public\.)?([a-zA-Z0-9_]+)\s*\(([^)]*)\)\s*VALUES\s*\(/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(sql))) {
-    const table = m[1];
-    const cols = m[2].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-    // find matching close paren of VALUES tuple
-    let i = re.lastIndex;
-    let depth = 1;
-    let inStr = false;
-    while (i < sql.length && depth > 0) {
-      const ch = sql[i];
-      if (inStr) {
-        if (ch === "'") {
-          if (sql[i + 1] === "'") i++;
-          else inStr = false;
-        }
-      } else {
-        if (ch === "'") inStr = true;
-        else if (ch === "(") depth++;
-        else if (ch === ")") depth--;
-      }
-      i++;
-    }
-    const tuple = sql.slice(re.lastIndex, i - 1);
-    out.push({ table, cols, values: parseValueTuple(tuple) });
-    re.lastIndex = i;
-  }
-  return out;
-}
+// parseBackupSql + ParsedInsert දැන් @/lib/backup-utils.ts එකේ (මුලින්ම එතනින් re-export වේ)
 
 /* -------------------------------------------------------------- RESTORE -- */
 export async function restoreBackup(
   inserts: ParsedInsert[],
-  onProgress: (msg: string, pct: number) => void
+  onProgress: (msg: string, pct: number) => void,
+  opts?: { onlyTables?: string[] } // partial restore — තෝරගත් tables විතරක් (නැත්නම් සියල්ලම)
 ): Promise<{ restored: Record<string, number>; errors: string[] }> {
   const sb = await authedClient();
   const restored: Record<string, number> = {};
@@ -448,7 +399,8 @@ export async function restoreBackup(
 
   // 1) storage images first (URL rewrite එකට)
   onProgress("Restoring images to storage…", 5);
-  const imgRows = byTable.get("site_images_backup") ?? [];
+  const wantImages = !opts?.onlyTables || opts.onlyTables.includes("site_images_backup");
+  const imgRows = wantImages ? (byTable.get("site_images_backup") ?? []) : [];
   const urlMap = new Map<string, string>(); // old url -> new url
   const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
   for (let i = 0; i < imgRows.length; i++) {
@@ -508,7 +460,9 @@ export async function restoreBackup(
   }
 
   // 2) wipe + insert — wipe එක reverse පිළිවෙළේ (children → parents), insert එක forward (parents → children)
-  const ordered = BACKUP_TABLES.filter((t) => byTable.has(t.name));
+  const ordered = BACKUP_TABLES.filter((t) => byTable.has(t.name)).filter(
+    (t) => !opts?.onlyTables || opts.onlyTables.includes(t.name)
+  );
   // ⚠ profiles + backup_secrets සම්පූර්ණයෙන් wipe කරන්නේ නෑ: RLS policies profiles එකෙන්
   //    බලන නිසා ඒක හිස් කළොත් admin තමන්වම lock out වෙනවා. එම tables upsert එකෙන් update වේ.
   const NO_WIPE = new Set(["profiles", "backup_secrets"]);
@@ -543,7 +497,7 @@ export async function restoreBackup(
   const backupProfileIds = new Set(
     (byTable.get("profiles") ?? []).map((r) => String(r.id ?? "")).filter(Boolean)
   );
-  if (backupProfileIds.size) {
+  if (backupProfileIds.size && ordered.some((t) => t.name === "profiles")) {
     try {
       const { data: u } = await sb.auth.getUser();
       if (u?.user?.id) backupProfileIds.add(u.user.id);
@@ -591,26 +545,44 @@ export async function setBackupSecret(key: "backup_download_password" | "backup_
  *   · schema.sql   (tables + RLS + functions + live chat DB logic)
  *   · database.sql (tables 27ම data + images base64 + LOGIN accounts/passwords)
  *   · Members Register + Voters Register — XLSX + CSV
- *   · README.txt   (restore උපදෙස්)
- * Import: ZIP එකම තේරුවම data + settings + images සියල්ල restore වේ.
+ *   · manifest.json (version + row counts + SHA-256 hashes) · RECOVERY.txt · README.txt
+ *   · විකල්ප: database.sql එක password එකකින් encrypt කළ හැක (AES-GCM)
+ * Import: ZIP එකම තේරුවම preview → safety-backup → data + settings + images restore වේ.
  * ========================================================================== */
-export async function generateBackupZip(onProgress: (msg: string, pct: number) => void): Promise<Blob> {
+export async function generateBackupZip(
+  onProgress: (msg: string, pct: number) => void,
+  opts?: { encryptPassword?: string } // දීලා ඇත්නම් database.sql එක AES-GCM වලින් encrypt වේ
+): Promise<Blob> {
   const zipMod = await import("jszip");
   const JSZip = zipMod.default;
   const xlsxMod = await import("xlsx");
   const XLSX = xlsxMod.default ?? xlsxMod;
   const zip = new JSZip();
+  const generatedAt = new Date().toISOString();
+
+  // manifest එකට — ZIP එකට දාන හැම file එකකම SHA-256 hash + size
+  const files: Record<string, { sha256: string; size: number }> = {};
+  async function addFile(name: string, content: string | ArrayBuffer) {
+    zip.file(name, content);
+    files[name] = { sha256: await sha256Hex(content), size: new Blob([content]).size };
+  }
 
   // 1) database.sql (images base64 + login accounts සමඟ)
-  const sql = await generateBackupSql((msg, pct) => onProgress(msg, Math.round(pct * 0.75)));
-  zip.file("database.sql", sql);
+  const { sql, tableCounts, imageCount } = await generateBackupSql((msg, pct) => onProgress(msg, Math.round(pct * 0.72)));
+  const databasePlainSha256 = await sha256Hex(sql);
+  const dbContent = opts?.encryptPassword ? await encryptBackupText(sql, opts.encryptPassword) : sql;
+  await addFile("database.sql", dbContent);
 
   // 1b) schema.sql — canonical schema (tables + RLS + functions + live chat RPC logic).
   //     fresh Supabase project එකකට restore කරද්දී මුලින්ම run කළ යුත්තේ මෙයයි.
+  let schemaSha256 = "";
   try {
     const schemaMod = await import("../../supabase/schema.sql");
     const schemaText = (schemaMod as { default?: unknown }).default;
-    if (typeof schemaText === "string" && schemaText.length > 1000) zip.file("schema.sql", schemaText);
+    if (typeof schemaText === "string" && schemaText.length > 1000) {
+      schemaSha256 = await sha256Hex(schemaText);
+      await addFile("schema.sql", schemaText);
+    }
   } catch { /* schema embed බැරි වුණත් backup එක හැදේ */ }
 
   // 2) registers → XLSX
@@ -647,14 +619,14 @@ export async function generateBackupZip(onProgress: (msg: string, pct: number) =
   const mWb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(mWb, XLSX.utils.json_to_sheet(mSheet), "Members");
   const mBuf = XLSX.write(mWb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-  zip.file("Members-Register.xlsx", mBuf);
+  await addFile("Members-Register.xlsx", mBuf);
 
   onProgress("Exporting Voter Register (XLSX)…", 87);
   const voters = await allRows("voter_rows");
   const vWb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(vWb, XLSX.utils.json_to_sheet(sheet(voters, "voter_no")), "Voters");
   const vBuf = XLSX.write(vWb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-  zip.file("Voters-Register.xlsx", vBuf);
+  await addFile("Voters-Register.xlsx", vBuf);
 
   // 3) CSV (Excel/Numbers වලට backup එකක් විදිහට — UTF-8 BOM සමඟ Sinhala හරි)
   const csvOf = (rows: Record<string, string | number>[]) => {
@@ -662,15 +634,15 @@ export async function generateBackupZip(onProgress: (msg: string, pct: number) =
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     return "\ufeff" + [keys.map(esc).join(","), ...rows.map((r) => keys.map((k) => esc(r[k])).join(","))].join("\r\n");
   };
-  zip.file("Members-Register.csv", csvOf(mSheet as unknown as Record<string, string | number>[]));
-  zip.file("Voters-Register.csv", csvOf(sheet(voters, "voter_no") as unknown as Record<string, string | number>[]));
+  await addFile("Members-Register.csv", csvOf(mSheet as unknown as Record<string, string | number>[]));
+  await addFile("Voters-Register.csv", csvOf(sheet(voters, "voter_no") as unknown as Record<string, string | number>[]));
 
   // 4) README
-  zip.file(
+  await addFile(
     "README.txt",
     [
-      "Panduwasnuwara New MPCS — FULL SITE BACKUP",
-      "Generated: " + new Date().toISOString(),
+      "Panduwasnuwara New MPCS — FULL SITE BACKUP (Format v" + BACKUP_FORMAT_VERSION + ")",
+      "Generated: " + generatedAt,
       "",
       "මේ ZIP එකේ තියෙන්නේ (මුලු site එකම — එකක් නෑර):",
       "  • schema.sql            — database ව්‍යුහය: tables + RLS + functions (live chat logic ඇතුළුව)",
@@ -681,6 +653,11 @@ export async function generateBackupZip(onProgress: (msg: string, pct: number) =
       "  • Members-Register.xlsx — සියලු සාමාජික විස්තර (" + members.length + " පේළි)",
       "  • Voters-Register.xlsx  — සියලු ඡන්ද හිමි විස්තර (" + voters.length + " පේළි)",
       "  • Members-Register.csv / Voters-Register.csv — UTF-8 CSV",
+      "  • manifest.json         — backup දිනය/version, table row ගණන, file hashes (integrity පරීක්ෂාවට)",
+      "  • RECOVERY.txt          — හදිසි අවස්ථා checklist (site එක තියන තැන් + ගොඩගන්නා හැටි)",
+      opts?.encryptPassword
+        ? "  🔒 මේ backup එකේ database.sql එක ENCRYPT වී ඇත — Import කරද්දී ඒ password එකම අවශ්‍යයි."
+        : "  🔒 ඕන නම් ඊළඟ වතාවේ Download කරද්දී Encrypt option එකෙන් password ආරක්ෂාව දාන්න.",
       "",
       "RESTORE කරන විදිහ:",
       "  A) ඒම site එකේම restore කරනවා නම් (සාමාන්‍ය අවස්ථාව):",
@@ -696,6 +673,33 @@ export async function generateBackupZip(onProgress: (msg: string, pct: number) =
       "⚠ Website code එක (Baymax bot logic ඇතුළුව) ඇත්තේ GitHub repository එකේය; මේ ZIP එකට",
       "   code එක ඇතුළත් වෙන්නේ නෑ. Database එකේ functions/logic සියල්ල schema.sql එකේ ඇත.",
     ].join("\n")
+  );
+
+  // 5) RECOVERY checklist — හදිසි අවස්ථාවක site එක ගොඩගන්න ඕන හැම තොරතුරක්ම
+  await addFile(
+    "RECOVERY.txt",
+    buildRecoveryChecklist({ generatedAt, supabaseUrl: (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "") })
+  );
+
+  // 6) manifest.json — version + row counts + file hashes (මේ file එක තමන්වම hash කරන්නේ නෑ)
+  let supabaseHost = "";
+  try { supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").host; } catch { /* empty */ }
+  zip.file(
+    "manifest.json",
+    JSON.stringify(
+      buildManifest({
+        generatedAt,
+        tableCounts,
+        imageCount,
+        encrypted: !!opts?.encryptPassword,
+        supabaseHost,
+        schemaSha256,
+        databasePlainSha256,
+        files,
+      }),
+      null,
+      2
+    )
   );
 
   onProgress("Creating ZIP archive…", 93);

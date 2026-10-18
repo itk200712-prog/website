@@ -92,8 +92,9 @@ ok("Fuel Station: Priority Queue for Members", fuelSvc.includes("Priority Queue 
 console.log("\n── 10) SQL files (separate schema + seed) ──");
 const schema = readFileSync(join(root, "supabase/schema.sql"), "utf8");
 const seedSql = schema; // එකම SQL file එකේ schema + data + storage ඔක්කොම
-ok("supabase/ එකේ SQL file එකයි",
-  readdirSync(join(root, "supabase")).filter((f) => f.endsWith(".sql")).length === 1,
+ok("supabase/ එකේ SQL files: schema.sql + scheduled-backup.sql විතරයි (අනවශ්‍ය fragments නෑ)",
+  JSON.stringify(readdirSync(join(root, "supabase")).filter((f) => f.endsWith(".sql")).sort()) ===
+    JSON.stringify(["scheduled-backup.sql", "schema.sql"]),
   readdirSync(join(root, "supabase")).filter((f) => f.endsWith(".sql")).join(","));
 ok("SQL එකේ පැරණි සමිති දත්ත නැත", !schema.toLowerCase().includes("samrudhi"));
 ok("SQL එකේ image storage bucket", schema.includes("site-images") && schema.includes("storage.buckets"));
@@ -298,13 +299,41 @@ ok("backup: login accounts (auth.users+passwords) written BEFORE data rows (FK o
 ok("backup: login SQL uses crypt(pgcrypto) and creates auth.identities",
   backupSrc.includes("crypt(${sqlVal(plain)}, gen_salt('bf'))") && backupSrc.includes("INSERT INTO auth.identities") && backupSrc.includes("set search_path = public, extensions;"));
 ok("backup: ZIP embeds canonical schema.sql (live chat DB logic + RLS)",
-  backupSrc.includes('zip.file("schema.sql"') && backupSrc.includes("../../supabase/schema.sql"));
+  backupSrc.includes('addFile("schema.sql"') && backupSrc.includes("../../supabase/schema.sql"));
 ok("backup: image scan covers nested JSON (JSON.stringify) + recursive storage list",
   backupSrc.includes("scanImagePathsInRows") && backupSrc.includes("JSON.stringify(r)") && backupSrc.includes("listAllStorageFiles"));
 ok("restore: wipe uses not(pk,is,null) in reverse order; profiles never fully wiped (no RLS lockout)",
   backupSrc.includes('.not(t.pk, "is", null)') && backupSrc.includes("[...ordered].reverse()") && backupSrc.includes('new Set(["profiles", "backup_secrets"])'));
 ok("restore: URL rewrite handles nested JSON values",
   backupSrc.includes("rewriteStr") && backupSrc.includes("JSON.parse(out)"));
+
+console.log("\n── 15) Backup extras: manifest · encryption · preview · safety · partial · scheduled ──");
+const bu = await import("../src/lib/backup-utils.ts");
+ok("utils: sha256Hex('abc') known vector", (await bu.sha256Hex("abc")) === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+const encSample = await bu.encryptBackupText("SELECT 'ආයුබෝවන්';", "Test@123");
+ok("utils: encrypt → envelope detected", bu.isEncryptedBackupText(encSample) === true);
+ok("utils: decrypt round-trips (Sinhala safe)", (await bu.decryptBackupText(encSample, "Test@123")) === "SELECT 'ආයුබෝවන්';");
+let wrongPwThrew = false;
+try { await bu.decryptBackupText(encSample, "wrong-password"); } catch { wrongPwThrew = true; }
+ok("utils: wrong encryption password rejected", wrongPwThrew);
+const sampleSql = "INSERT INTO public.news (\"id\", \"t\") VALUES ('1', 'a''b');\nINSERT INTO public.news (\"id\", \"t\") VALUES ('2', NULL);\nINSERT INTO public.profiles (\"id\") VALUES ('9');\n";
+const parsedSample = bu.parseBackupSql(sampleSql);
+ok("utils: parseBackupSql 3 inserts + escaped quote + NULL", parsedSample.length === 3 && parsedSample[0].values[1] === "a'b" && parsedSample[1].values[1] === null);
+const sampleSummary = bu.summarizeInserts(parsedSample);
+ok("utils: summarizeInserts per-table counts", sampleSummary.totalRows === 3 && sampleSummary.tables.find((t) => t.name === "news")?.rows === 2);
+const sampleManifest = bu.buildManifest({ generatedAt: "2026-10-18T00:00:00Z", tableCounts: { a: 2, b: 3 }, imageCount: 4, encrypted: false, supabaseHost: "x.supabase.co", schemaSha256: "s", databasePlainSha256: "d", files: { "database.sql": { sha256: "h", size: 5 } } });
+ok("utils: manifest = format v2 + totalRows summed", sampleManifest.formatVersion === 2 && sampleManifest.totalRows === 5 && bu.BACKUP_FORMAT_VERSION === 2);
+const recText = bu.buildRecoveryChecklist({ generatedAt: "2026-10-18T00:00:00Z", supabaseUrl: "https://x.supabase.co" });
+ok("utils: recovery checklist (repo + env keys + test-restore drill)", recText.includes("github.com/itk200712-prog/website") && recText.includes("NEXT_PUBLIC_SUPABASE_ANON_KEY") && recText.includes("Test Restore"));
+ok("backup: ZIP writes manifest.json + RECOVERY.txt; encryption optional",
+  backupSrc.includes('"manifest.json"') && backupSrc.includes('"RECOVERY.txt"') && backupSrc.includes("encryptBackupText(sql"));
+ok("restore: partial restore (onlyTables) supported", backupSrc.includes("onlyTables") && backupSrc.includes("wantImages"));
+const adminBackupSrc = readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8");
+ok("admin backup: preview + type-to-confirm RESTORE + safety backup + last-backup reminder",
+  adminBackupSrc.includes("prepareImport") && adminBackupSrc.includes('confirmText !== "RESTORE"') && adminBackupSrc.includes("SAFETY-backup") && adminBackupSrc.includes("backup_interval_days"));
+ok("scheduled backup: Edge Function + pg_cron SQL in repo",
+  readFileSync(join(root, "supabase/functions/scheduled-backup/index.ts"), "utf8").includes("Deno.serve") &&
+  readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("cron.schedule"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

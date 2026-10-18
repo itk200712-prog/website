@@ -14,8 +14,12 @@ import {
 import { AdminTopbar, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
 import {
-  generateBackupZip, getBackupSecrets, parseBackupSql, restoreBackup, setBackupSecret,
+  BACKUP_TABLES, generateBackupZip, getBackupSecrets, parseBackupSql, restoreBackup, setBackupSecret,
 } from "@/lib/backup";
+import {
+  BACKUP_FORMAT_VERSION, decryptBackupText, isEncryptedBackupText, sha256Hex, summarizeInserts,
+  type BackupManifest, type ParsedInsert,
+} from "@/lib/backup-utils";
 import { logActivity } from "@/lib/activity";
 
 export default function AdminBackupPage() {
@@ -32,6 +36,23 @@ export default function AdminBackupPage() {
   const [newDl, setNewDl] = useState("");
   const [newIm, setNewIm] = useState("");
 
+  const [encryptDl, setEncryptDl] = useState(false); // 🔒 download password එකෙන්ම encrypt කරන්නද
+  const [encPw, setEncPw] = useState(""); // encrypted backup import එකට
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
+  const [intervalDays, setIntervalDays] = useState(7);
+  const [safetyFirst, setSafetyFirst] = useState(true); // 🛡 import එකට කලින් auto safety-backup
+  const [confirmText, setConfirmText] = useState("");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [preview, setPreview] = useState<{
+    fileName: string;
+    inserts: ParsedInsert[];
+    tables: { name: string; rows: number; known: boolean }[];
+    totalRows: number;
+    manifest: BackupManifest | null;
+    manifestMsg: string;
+    encrypted: boolean;
+  } | null>(null);
+
   useEffect(() => {
     (async () => {
       const sb = await authedClient();
@@ -42,6 +63,22 @@ export default function AdminBackupPage() {
       if (prof?.role === "superadmin") {
         const s = await getBackupSecrets();
         setSecrets(s);
+        // අවසාන backup දිනය + මතක් කිරීමේ කාල පරතරය
+        const { data: lb } = await sb
+          .from("admin_activity_logs")
+          .select("created_at")
+          .eq("action", "BACKUP_DOWNLOAD")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lb?.created_at) setLastBackup(lb.created_at as string);
+        const { data: ivRow } = await sb
+          .from("system_settings")
+          .select("value")
+          .eq("key", "backup_interval_days")
+          .maybeSingle();
+        const iv = parseInt(ivRow?.value ?? "", 10);
+        if (iv > 0) setIntervalDays(iv);
       }
     })();
   }, []);
@@ -52,14 +89,18 @@ export default function AdminBackupPage() {
     setBusy(true);
     setAnim({ pct: 0, msg: "Preparing backup…", done: false });
     try {
-      // ✅ සම්පූර්ණ ZIP: database.sql + Member/Voter XLSX + CSV + README
-      const blob = await generateBackupZip((msg, pct) => setAnim({ pct, msg, done: false }));
+      // ✅ සම්පූර්ණ ZIP: schema.sql + database.sql(+logins) + registers + manifest + RECOVERY
+      const blob = await generateBackupZip(
+        (msg, pct) => setAnim({ pct, msg, done: false }),
+        encryptDl ? { encryptPassword: dlPw } : undefined
+      );
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = `mpcs-full-backup-${new Date().toISOString().slice(0, 10)}.zip`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      void logActivity("BACKUP_DOWNLOAD", `Full ZIP backup (schema.sql + database.sql + logins + images + registers XLSX/CSV) — ${a.download}`);
+      setLastBackup(new Date().toISOString());
+      void logActivity("BACKUP_DOWNLOAD", `Full ZIP backup (schema.sql + database.sql + logins + images + registers + manifest${encryptDl ? " + ENCRYPTED" : ""}) — ${a.download}`);
       setAnim({ pct: 100, msg: "Backup downloaded ✅", done: true });
       setTimeout(() => setAnim(null), 1800);
     } catch (e) {
@@ -69,31 +110,121 @@ export default function AdminBackupPage() {
     setBusy(false);
   }
 
-  async function importBackup(file: File) {
+  // ① file එක කියවා Preview එක හදනවා (restore වෙන්නේ නෑ තාම) — verify + decrypt + summary
+  async function prepareImport(file: File) {
     if (!secrets) return show("⚠ backup_secrets table එක නෑ — පහත SQL block එක run කරන්න");
     if (imPw !== secrets.importPw) return show("⚠ Import password එක වැරදියි ❌");
     if (!/\.(sql|zip)$/i.test(file.name)) return show("⚠ .sql හෝ .zip backup file එකක් තෝරන්න");
-    if (!confirm("⚠ Import එක දැන් තියෙන දත්ත සම්පූර්ණයෙන් replace කරයි. ඉදිරියට යන්නද?")) return;
     setBusy(true);
     setAnim({ pct: 0, msg: "Reading backup file…", done: false });
     try {
-      let sql: string;
+      let rawSql: string;
+      let manifest: BackupManifest | null = null;
       if (/\.zip$/i.test(file.name)) {
-        // ✅ ZIP backup එකක් නම් ඇතුළේ database.sql එක ගන්නවා
         setAnim({ pct: 2, msg: "Opening ZIP…", done: false });
         const JSZip = (await import("jszip")).default;
         const zip = await JSZip.loadAsync(file);
         const entry = zip.file("database.sql") ?? zip.file(/database\.sql$/i)[0];
         if (!entry) throw new Error("ZIP එකේ database.sql නෑ");
-        sql = await entry.async("string");
+        rawSql = await entry.async("string");
+        const manEntry = zip.file("manifest.json") ?? zip.file(/manifest\.json$/i)[0];
+        if (manEntry) {
+          try { manifest = JSON.parse(await manEntry.async("string")) as BackupManifest; } catch { manifest = null; }
+        }
       } else {
-        sql = await file.text();
+        rawSql = await file.text();
       }
+
+      // manifest hash verify (file එක corrupt/වෙනස් වෙලාද?)
+      let manifestMsg = "";
+      if (manifest) {
+        const expected = manifest.files?.["database.sql"]?.sha256 ?? "";
+        const actual = await sha256Hex(rawSql);
+        manifestMsg = expected && expected === actual
+          ? `✅ Manifest verify හරි — ${manifest.generatedAt?.slice(0, 10) ?? "?"} backup එකක් (format v${manifest.formatVersion}, tables ${Object.keys(manifest.tableCounts ?? {}).length}, rows ${manifest.totalRows ?? "?"})`
+          : "⚠ Manifest hash එක ගැළපෙන්නේ නෑ — file එක වෙනස් වී/corrupt වී තියෙන්න පුළුවන්! පරිස්සමින්.";
+        if ((manifest.formatVersion ?? 1) > BACKUP_FORMAT_VERSION)
+          manifestMsg += ` (⚠ මේක අලුත් format v${manifest.formatVersion} එකක් — site එක update කරලා නම් වඩා හොඳයි)`;
+      } else {
+        manifestMsg = "ℹ️ manifest.json නෑ — පරණ (format v1) backup එකක් විය හැක. Import කළ හැක, නමුත් hash verify කරන්න බෑ.";
+      }
+
+      // encrypted නම් decrypt
+      const encrypted = isEncryptedBackupText(rawSql);
+      let sql = rawSql;
+      if (encrypted) {
+        if (!encPw) throw new Error("මේ backup එක encrypt වී ඇත 🔒 — Encryption password එක ඇතුළත් කර නැවත file එක තෝරන්න");
+        setAnim({ pct: 5, msg: "Decrypting backup…", done: false });
+        sql = await decryptBackupText(rawSql, encPw);
+        if (manifest?.databasePlainSha256) {
+          const okHash = (await sha256Hex(sql)) === manifest.databasePlainSha256;
+          manifestMsg += okHash ? " · 🔓 decrypt + hash හරි" : " · ⚠ decrypt වුණත් plain hash ගැළපෙන්නේ නෑ!";
+        }
+      }
+
       const inserts = parseBackupSql(sql);
       if (!inserts.length) throw new Error("backup file එකේ INSERT rows නෑ");
-      const { restored, errors } = await restoreBackup(inserts, (msg, pct) => setAnim({ pct, msg, done: false }));
+      const { tables: rawTables, totalRows } = summarizeInserts(inserts);
+      const knownOrder = BACKUP_TABLES.map((t) => t.name);
+      const tables = rawTables
+        .map((t) => ({ ...t, known: knownOrder.includes(t.name) }))
+        .sort((a, b) => {
+          const ia = knownOrder.indexOf(a.name); const ib = knownOrder.indexOf(b.name);
+          return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.name.localeCompare(b.name);
+        });
+      const sel: Record<string, boolean> = {};
+      for (const t of tables) sel[t.name] = t.known;
+      setSelected(sel);
+      setConfirmText("");
+      setPreview({ fileName: file.name, inserts, tables, totalRows, manifest, manifestMsg, encrypted });
+      setAnim(null);
+      show(`📋 Preview ලෑස්තියි — ${file.name}: tables ${tables.length}, rows ${totalRows}. පරීක්ෂා කර RESTORE කරන්න.`);
+    } catch (e) {
+      setAnim(null);
+      show(`⚠ ${(e as Error).message}`);
+    }
+    setBusy(false);
+  }
+
+  // ② Preview එක තහවුරු කළාම — safety backup (විකල්පය අනුව) → restore
+  async function confirmImport() {
+    if (!preview || !secrets) return;
+    if (imPw !== secrets.importPw) return show("⚠ Import password එක වැරදියි ❌");
+    if (confirmText !== "RESTORE") return show("⚠ තහවුරු කරන්න RESTORE කියා ලියන්න");
+    const chosen = preview.tables.filter((t) => t.known && selected[t.name]).map((t) => t.name);
+    if (!chosen.length) return show("⚠ restore කරන්න එක table එකක්වත් තෝරන්න");
+    setBusy(true);
+    try {
+      // 🛡 මුලින්ම දැන් තියන site එකේ safety backup එකක් auto-download
+      if (safetyFirst) {
+        setAnim({ pct: 0, msg: "🛡 Safety backup ගන්නවා (import එකට කලින්)…", done: false });
+        try {
+          const blob = await generateBackupZip((msg, pct) => setAnim({ pct: Math.round(pct * 0.5), msg: "🛡 Safety: " + msg, done: false }));
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `mpcs-SAFETY-backup-${new Date().toISOString().slice(0, 16).replace("T", "_").replace(":", "")}.zip`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+          setLastBackup(new Date().toISOString());
+          void logActivity("BACKUP_DOWNLOAD", `Auto SAFETY backup before import — ${a.download}`);
+        } catch (e) {
+          if (!confirm(`⚠ Safety backup එක ගන්න බැරි වුණා (${(e as Error).message}). Safety backup එකක් නැතිව restore කරන්නද?`)) {
+            setAnim(null);
+            setBusy(false);
+            return;
+          }
+        }
+      }
+      setAnim({ pct: 50, msg: "Restoring…", done: false });
+      const partial = chosen.length < preview.tables.filter((t) => t.known).length;
+      const { restored, errors } = await restoreBackup(
+        preview.inserts,
+        (msg, pct) => setAnim({ pct: 50 + Math.round(pct * 0.5), msg, done: false }),
+        { onlyTables: chosen }
+      );
       const total = Object.values(restored).reduce((a, b) => a + b, 0);
-      void logActivity("BACKUP_IMPORT", `${file.name} — restored ${Object.keys(restored).length} tables / ${total} rows`);
+      void logActivity("BACKUP_IMPORT", `${preview.fileName} — restored ${Object.keys(restored).length} tables / ${total} rows${partial ? " (partial)" : ""}`);
+      setPreview(null);
       setAnim({ pct: 100, msg: `Restored ${total} rows ✅`, done: true });
       setTimeout(() => setAnim(null), 2200);
       show(errors.length ? `⚠ Restored with ${errors.length} issue(s): ${errors[0]}` : `✅ සියල්ල restore කළා — ${Object.keys(restored).length} tables, ${total} rows`);
@@ -103,6 +234,8 @@ export default function AdminBackupPage() {
     }
     setBusy(false);
   }
+
+  const daysAgo = lastBackup ? Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000) : null;
 
   if (role && role !== "superadmin") {
     return (
@@ -121,6 +254,38 @@ export default function AdminBackupPage() {
     <div>
       <AdminTopbar title="Backup & Restore" sub="මුලු site එකම එක් ZIP එකක් ලෙස (data + schema + images + login passwords) හෝ backup එකකින් restore කරන්න" />
       {node}
+
+      {/* LAST BACKUP REMINDER */}
+      {role === "superadmin" && (
+        <div className={`card p-4 mb-6 border-l-4 ${daysAgo === null || daysAgo > intervalDays ? "border-rose-500" : "border-emerald-500"} flex flex-wrap items-center gap-3`}>
+          <div className="flex-1 min-w-[240px] text-[12.5px] text-slate-700">
+            {daysAgo === null ? (
+              <>🔴 <b>Backup එකක් download කර ඇති බවට සටහනක් නෑ!</b> අදම backup එකක් ගන්න.</>
+            ) : daysAgo > intervalDays ? (
+              <>🔴 <b>අවසාන backup එක දින {daysAgo}කට පෙර</b> ({lastBackup?.slice(0, 10)}) — අලුත් backup එකක් ගන්න වෙලාව!</>
+            ) : (
+              <>🟢 <b>අවසාන backup: දින {daysAgo}කට පෙර</b> ({lastBackup?.slice(0, 10)}) ✅</>
+            )}
+          </div>
+          <label className="flex items-center gap-2 text-[11.5px] text-slate-500">
+            මතක් කිරීමේ පරතරය:
+            <select
+              className="field !w-auto !py-1 !text-[12px]"
+              value={intervalDays}
+              onChange={async (e) => {
+                const v = parseInt(e.target.value, 10);
+                setIntervalDays(v);
+                const sb = await authedClient();
+                await sb.from("system_settings").upsert({ key: "backup_interval_days", value: String(v) }, { onConflict: "key" });
+              }}
+            >
+              {[3, 7, 14, 30].map((d) => (
+                <option key={d} value={d}>දින {d}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
 
       {!secrets && role === "superadmin" && (
         <div className="card p-5 mb-6 border-l-4 border-amber-500 text-[12.5px] text-slate-700">
@@ -151,6 +316,10 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             <input type={showPw ? "text" : "password"} className="field" value={dlPw} onChange={(e) => setDlPw(e.target.value)} placeholder="Download password එක ඇතුළත් කරන්න" />
             <button className="btn btn-outline !px-3" onClick={() => setShowPw(!showPw)}>{showPw ? <EyeOff size={15} /> : <Eye size={15} />}</button>
           </div>
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-[11.5px] text-slate-600">
+            <input type="checkbox" className="mt-0.5" checked={encryptDl} onChange={(e) => setEncryptDl(e.target.checked)} />
+            <span>🔒 database.sql එක මේ Download password එකෙන්ම <b>encrypt</b> කරන්න — ආරක්ෂාව වැඩියි (Import කරද්දී එම password එකම අවශ්‍යයි)</span>
+          </label>
           <button className="btn btn-primary w-full mt-4 disabled:opacity-60" disabled={busy} onClick={downloadBackup}>
             <DatabaseBackup size={16} className="hidden" /><Download size={16} /> Generate &amp; Download Backup
           </button>
@@ -165,20 +334,76 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             <UploadCloud size={19} className="text-emerald-700" /> Import Backup (Restore)
           </h3>
           <p className="text-slate-500 text-[12px] mt-1.5">
-            Download කළ ZIP එකම (හෝ database.sql එක) තෝරන්න — සියලු දත්ත, images සහ settings නැවත පූර්ණ ලෙස restore වේ (දැන් ඇති දත්ත replace වේ).
+            Download කළ ZIP එකම (හෝ database.sql එක) තෝරන්න — මුලින්ම <b>Preview</b> එකක් පෙන්වනවා (tables/rows ගණන + manifest verify). තහවුරු කළාට පස්සේ විතරයි restore වෙන්නේ.
           </p>
           <label className="field-label mt-4">Import Password</label>
           <input type="password" className="field" value={imPw} onChange={(e) => setImPw(e.target.value)} placeholder="Import password එක ඇතුළත් කරන්න" />
+          <label className="field-label mt-3">Encryption Password <span className="normal-case text-slate-400">(encrypted backup එකක් නම් විතරයි)</span></label>
+          <input type="password" className="field" value={encPw} onChange={(e) => setEncPw(e.target.value)} placeholder="🔒 backup එක encrypt කළ password එක" />
           <label className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/60 p-5 cursor-pointer hover:border-emerald-400 mt-4">
-            <input type="file" accept=".sql,.zip" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importBackup(f); }} />
+            <input type="file" accept=".sql,.zip" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) prepareImport(f); }} />
             <span className="btn btn-outline !py-2 !px-4 !text-[12px]">Choose Backup File (.zip / .sql)</span>
             <span className="text-slate-500 text-[12.5px]">backup file එක තෝරන්න…</span>
           </label>
           <div className="mt-3 text-[11px] text-slate-400">
-            ⚠ Import password එක හරි නම් පමණයි restore එක පටන් ගනී. රූප ඇතුළු සියල්ල නැවත storage එකටත් උඩුගත වේ.
+            ⚠ File එක තේරුවම යටින් Preview එකක් එනවා — එහිදී tables තෝරලා (partial restore ද පුළුවන්), RESTORE කියා ලියා තහවුරු කළ යුතුයි. Import එකට කලින් safety backup එකකුත් (විකල්පය) ඉබේම download වේ.
           </div>
         </div>
       </div>
+
+      {/* IMPORT PREVIEW */}
+      {preview && (
+        <div className="card mt-6 border-l-4 border-emerald-500 p-6">
+          <h3 className="text-lg font-extrabold text-slate-900">📋 Import Preview — {preview.fileName}</h3>
+          <div className="mt-2 text-[12px] text-slate-600">{preview.manifestMsg}</div>
+          <div className="mt-1 text-[12px] text-slate-500">
+            Tables {preview.tables.length} · Rows {preview.totalRows}
+            {preview.encrypted ? " · 🔒 Encrypted backup" : ""}
+            {preview.manifest ? ` · Backup දිනය: ${preview.manifest.generatedAt?.slice(0, 10)}` : ""}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button className="btn btn-outline !px-3 !py-1 !text-[11px]" onClick={() => setSelected(Object.fromEntries(preview.tables.map((t) => [t.name, t.known])))}>
+              සියල්ල තෝරන්න
+            </button>
+            <button className="btn btn-outline !px-3 !py-1 !text-[11px]" onClick={() => setSelected(Object.fromEntries(preview.tables.map((t) => [t.name, false])))}>
+              සියල්ල අයින් කරන්න
+            </button>
+          </div>
+
+          <div className="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
+            {preview.tables.map((t) => (
+              <label key={t.name} className={`flex items-center gap-2.5 px-3 py-1.5 text-[12px] ${t.known ? "cursor-pointer hover:bg-slate-50" : "opacity-50"}`}>
+                <input
+                  type="checkbox"
+                  disabled={!t.known}
+                  checked={!!selected[t.name]}
+                  onChange={(e) => setSelected((s) => ({ ...s, [t.name]: e.target.checked }))}
+                />
+                <span className="flex-1 font-mono text-slate-800">{t.name}</span>
+                <span className="tabular-nums text-slate-500">{t.rows} rows</span>
+                {!t.known && <span className="text-[10.5px] font-bold text-rose-500">නොදන්නා table — skip වේ</span>}
+              </label>
+            ))}
+          </div>
+
+          <label className="mt-4 flex cursor-pointer items-start gap-2 text-[12px] text-slate-600">
+            <input type="checkbox" className="mt-0.5" checked={safetyFirst} onChange={(e) => setSafetyFirst(e.target.checked)} />
+            <span>🛡 <b>Import එකට කලින්</b> දැන් තියන site එකේ safety backup එකක් auto-download කරන්න <span className="font-bold text-emerald-600">(නිර්දේශිතයි)</span> — වැරදුණොත් ආපහු යන්න පුළුවන්</span>
+          </label>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <input className="field !w-52 !py-2 !text-[12px]" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder="තහවුරු කරන්න: RESTORE" />
+            <button className="btn btn-primary !px-4 !py-2 !text-[12.5px] disabled:opacity-50" disabled={busy || confirmText !== "RESTORE"} onClick={confirmImport}>
+              ✅ Restore කරන්න
+            </button>
+            <button className="btn btn-outline !px-4 !py-2 !text-[12.5px]" disabled={busy} onClick={() => setPreview(null)}>
+              අවලංගු කරන්න
+            </button>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-400">⚠ තෝරගත් tables වල දැන් තියන දත්ත සම්පූර්ණයෙන් replace වේ. Login ගිණුම් (auth.users) වලට මෙයින් බලපෑමක් නෑ.</div>
+        </div>
+      )}
 
       {/* PASSWORDS */}
       <div className="card p-6 mt-6">
@@ -238,6 +463,26 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             {showPw ? <EyeOff size={13} /> : <Eye size={13} />} {showPw ? "සඟවන්න" : "passwords පෙන්වන්න"}
           </button>
           <span className="text-[11px] text-slate-400">මේ passwords දෙක පෙන්වන්නේ superadmin ගිණුමට පමණයි — ඕන නම් මෙතනින් වෙනස් කරන්න.</span>
+        </div>
+      </div>
+
+      {/* EXTRA SAFETY — scheduled + cloud */}
+      <div className="card p-6 mt-6">
+        <h3 className="text-lg font-extrabold text-slate-900">🛡️ අමතර ආරක්ෂාව</h3>
+        <div className="grid gap-4 sm:grid-cols-2 mt-3 text-[12px] text-slate-600">
+          <div className="rounded-2xl border border-slate-200 p-4">
+            <div className="font-extrabold text-slate-800">📅 Scheduled auto-backup (උසස්)</div>
+            <p className="mt-1">
+              Repo එකේ <span className="font-mono">supabase/functions/scheduled-backup</span> එක deploy කළොත් සතියකට වරක් data-only backup එකක් ඉබේම{" "}
+              <span className="font-mono">backups</span> bucket එකට වැටෙනවා. සක්‍රිය කරන පියවර backup ZIP එකේ <b>RECOVERY.txt</b> එකේ ඇත. (මේ පිටුවේ උඩ තියන මතක් කිරීමේ banner එක දැනටමත් ක්‍රියාත්මකයි.)
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 p-4">
+            <div className="font-extrabold text-slate-800">☁️ Supabase Pro — දෛනික backups</div>
+            <p className="mt-1">
+              Pro plan එක ($25/මාසෙට) ගත්තා නම් Supabase එකෙන්ම හැමදාම auto-backup + point-in-time recovery ලැබෙනවා. මේ ZIP backup එකට අමතර දෙවෙනි ආරක්ෂාවක් විදිහට නිර්දේශ කරනවා — supabase.com → Project → Settings → Billing එකෙන් upgrade කළ හැක.
+            </p>
+          </div>
         </div>
       </div>
 
