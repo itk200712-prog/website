@@ -48,6 +48,12 @@ export function SiteFooter() {
   const { t, lang } = useLang();
   const L = (p: string) => `/${lang}${p === "/" ? "" : p}`;
 
+  // උඩ තියෙන සමාජ icons දෙක (Image‑1) = Admin → Settings එකේ Social links විතරයි.
+  // Designer popup එක මේවා පාවිච්චි කරන්නේ නෑ — ඒකට SITE.designer links වෙනමයි.
+  const footerFbHref = socialLinks?.fb || "#";
+  const footerWaHref =
+    socialLinks?.wa || `https://wa.me/94${SITE.phones[1].replace(/\D/g, "").replace(/^0/, "")}`;
+
   const quick = [
     ["/", "Home", "මුල් පිටුව"],
     ["/businesses/rural-bank", "Rural Banking", "ග්‍රාමීය බැංකු"],
@@ -91,11 +97,17 @@ export function SiteFooter() {
               <span>Est: {SITE.est}</span>
             </div>
             <div className="mt-4 flex gap-2">
-              <a href="#" title="Facebook" aria-label="Facebook" className="w-10 h-10 rounded-full border border-white/15 bg-white/5 text-white flex items-center justify-center hover:bg-white/20 transition">
+              <a
+                href={footerFbHref}
+                target={footerFbHref === "#" ? undefined : "_blank"}
+                rel={footerFbHref === "#" ? undefined : "noreferrer"}
+                title="Facebook" aria-label="Facebook"
+                className="w-10 h-10 rounded-full border border-white/15 bg-white/5 text-white flex items-center justify-center hover:bg-white/20 transition"
+              >
                 <Facebook size={17} />
               </a>
               <a
-                href={`https://wa.me/${SITE.phones[1].replace(/\s/g, "")}`}
+                href={footerWaHref}
                 target="_blank"
                 rel="noreferrer"
                 title="WhatsApp" aria-label="WhatsApp"
@@ -187,7 +199,7 @@ export function SiteFooter() {
               {showDesigner && (
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 flex items-center gap-2.5 rounded-full border border-slate-700 bg-slate-900 px-4 py-2.5 shadow-2xl whitespace-nowrap pop-in">
                   <a
-                    href={socialLinks?.wa || SITE.designer.whatsapp}
+                    href={SITE.designer.whatsapp}
                     target="_blank"
                     rel="noreferrer"
                     title="WhatsApp"
@@ -196,7 +208,7 @@ export function SiteFooter() {
                     <WhatsAppIcon size={19} />
                   </a>
                   <a
-                    href={socialLinks?.fb || SITE.designer.facebook}
+                    href={SITE.designer.facebook}
                     target="_blank"
                     rel="noreferrer"
                     title="Facebook"

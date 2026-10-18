@@ -50,6 +50,15 @@ ok("Kerosene = 285", fuel.kerosene === 285);
 
 console.log("\n── 3) System settings (req #1 contact email, #2 WhatsApp) ──");
 ok("WhatsApp number 94742352670", seed.SETTINGS.whatsapp_number === "94742352670");
+ok("Designer social links (footer popup)", seed.SITE.designer.whatsapp === "https://wa.me/94764247716" && seed.SITE.designer.facebook === "https://www.facebook.com/profile.php?id=61595473522949");
+const footerSrc = readFileSync(join(root, "src/components/site-footer.tsx"), "utf8");
+ok("Footer social icons use Admin links; designer popup stays separate",
+  footerSrc.includes('const footerFbHref = socialLinks?.fb || "#";') &&
+  footerSrc.includes("socialLinks?.wa ||") &&
+  footerSrc.includes("href={SITE.designer.whatsapp}") &&
+  footerSrc.includes("href={SITE.designer.facebook}") &&
+  !footerSrc.includes("socialLinks?.wa || SITE.designer") &&
+  !footerSrc.includes("socialLinks?.fb || SITE.designer"));
 ok("FormSubmit email itk200712@gmail.com", seed.SETTINGS.contact_email_1 === "itk200712@gmail.com");
 ok("Years of service 50", seed.SETTINGS.years_of_service === 50 || seed.SETTINGS.years_of_service === "50");
 ok("Hero images 5ක් (auto-change slideshow)", Array.isArray(seed.SETTINGS.hero_images) && seed.SETTINGS.hero_images.length === 5, `got ${seed.SETTINGS.hero_images?.length}`);

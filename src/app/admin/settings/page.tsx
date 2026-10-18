@@ -20,8 +20,8 @@ export default function AdminSettingsPage() {
   const [membersTotal, setMembersTotal] = useState(String(SETTINGS.members_total));
   const [votersTotal, setVotersTotal] = useState(String(SETTINGS.voters_total));
   const [loaded, setLoaded] = useState(false);
-  const [socialWa, setSocialWa] = useState("");
-  const [socialFb, setSocialFb] = useState("");
+  const [socialWa, setSocialWa] = useState<string>("");
+  const [socialFb, setSocialFb] = useState<string>("");
   const [siteLogo, setSiteLogo] = useState("");
   const [logoBusy, setLogoBusy] = useState(false);
 
@@ -331,7 +331,7 @@ export default function AdminSettingsPage() {
             <div>
               <h2 className="font-extrabold text-slate-900 text-[15px]">සමාජ මාධ්‍ය සබැඳි / Social Media Links</h2>
               <p className="text-slate-400 text-[11px]">
-                Footer එකේ සමාජ මාධ්‍ය icons දෙකේ link මෙතනින් වෙනස් කරන්න (designer popup එකේත් මේවා පෙන්වයි)
+                Footer එකේ උඩ සමාජ මාධ්‍ය icons දෙකේ links විතරයි මෙතනින් වෙනස් වෙන්නේ (designer popup එක වෙනම links පාවිච්චි කරයි)
               </p>
             </div>
           </div>
@@ -349,7 +349,7 @@ export default function AdminSettingsPage() {
             <span className="text-[11px] text-slate-300 font-bold mr-1">Preview:</span>
             <span className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center">💬</span>
             <span className="w-9 h-9 rounded-full bg-sky-600 text-white flex items-center justify-center">f</span>
-            <span className="text-[10.5px] text-slate-400">Icons මේ විදිහට footer එකේ + designer popup එකේ පෙන්වයි</span>
+            <span className="text-[10.5px] text-slate-400">මේ links යන්නේ footer එකේ උඩ icons දෙකට විතරයි</span>
           </div>
         </section>
 

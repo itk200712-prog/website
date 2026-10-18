@@ -29,8 +29,8 @@ export const SITE = {
   hours_en: ["Mon – Fri : 8.30 AM – 5.30 PM", "Saturday : 8.30 AM – 1.30 PM", "Closed on Sundays & Public Holidays"],
   credit: "Designed By Induwara Thathsara",
   designer: {
-    whatsapp: "https://wa.me/",
-    facebook: "https://www.facebook.com/",
+    whatsapp: "https://wa.me/94764247716",
+    facebook: "https://www.facebook.com/profile.php?id=61595473522949",
   },
 } as const;
 
