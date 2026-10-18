@@ -382,7 +382,7 @@ ok("backup: ZIP embeds canonical schema.sql (live chat DB logic + RLS)",
 ok("backup: image scan covers nested JSON (JSON.stringify) + recursive storage list",
   backupSrc.includes("scanImagePathsInRows") && backupSrc.includes("JSON.stringify(r)") && backupSrc.includes("listAllStorageFiles"));
 ok("restore: wipe uses not(pk,is,null) in reverse order; profiles never fully wiped (no RLS lockout)",
-  backupSrc.includes('.not(t.pk, "is", null)') && backupSrc.includes("[...ordered].reverse()") && backupSrc.includes('new Set(["profiles", "backup_secrets"])'));
+  backupSrc.includes('.not(t.pk, "is", null)') && backupSrc.includes("[...ordered].reverse()") && backupSrc.includes('new Set(["profiles", "backup_secrets", "backup_history"])'));
 ok("restore: URL rewrite handles nested JSON values",
   backupSrc.includes("rewriteStr") && backupSrc.includes("JSON.parse(out)"));
 
@@ -615,6 +615,52 @@ ok("chat footer: AI Trained By Induwara Thathsara opens designer WhatsApp/Facebo
   liveChatSrc.includes("setShowTrainerLinks(false)") &&
   !liveChatSrc.includes("අඩවියේ තොරතුරු + AI සෙවුමෙන් උත්තර දෙයි · 24/7") &&
   !liveChatSrc.includes("Site answers + AI search · 24/7"));
+
+console.log("\n── 20) Admin deletes + sidebar autofill fix + backup history/encryption ──");
+ok("admin messages: delete option in Messages page + Live Chat contact requests",
+  adminMessagesSrc.includes("deleteMessage") &&
+  adminMessagesSrc.includes('dbDelete("messages", { id: m.id })') &&
+  adminLiveChatSrc.includes("deleteRequest") &&
+  adminLiveChatSrc.includes('dbDelete("messages", { id: m.id })'));
+const adminShellSrc = readFileSync(join(root, "src/components/admin.tsx"), "utf8");
+ok("admin sidebar: search cannot be credential-autofilled and clears on section change",
+  adminShellSrc.includes('type="search"') &&
+  adminShellSrc.includes('name="mpcs-admin-panel-search"') &&
+  adminShellSrc.includes('data-lpignore="true"') &&
+  adminShellSrc.includes("setNavQ(\"\")") &&
+  adminShellSrc.includes("[path]"));
+const applicationsSrc = readFileSync(join(root, "src/app/admin/applications/page.tsx"), "utf8");
+ok("applications: delete is superadmin-only in UI + RLS (section admins blocked)",
+  applicationsSrc.includes('const canDeleteApplications = role === "superadmin"') &&
+  applicationsSrc.includes("deleteApplication") &&
+  applicationsSrc.includes('dbDelete("membership_applications"') &&
+  schema.includes("apps_superadmin_delete") &&
+  schema.includes("apps_admin_update") &&
+  !schema.includes("create policy apps_admin on public.membership_applications for all"));
+const dataSrc = readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8");
+ok("data: uploaded sheets can be deleted one-by-one or all (members + voters, counters resync)",
+  dataSrc.includes("deleteSheet") &&
+  dataSrc.includes("deleteAllSheets") &&
+  dataSrc.includes("Delete all sheets") &&
+  dataSrc.includes("syncCounters") &&
+  dataSrc.includes("DATA_DELETE") &&
+  dataSrc.includes('<ImportPanel kind="member"') &&
+  dataSrc.includes('<ImportPanel kind="voter"'));
+const scheduledBackupSrc = readFileSync(join(root, "supabase/functions/scheduled-backup/index.ts"), "utf8");
+ok("backup: separate encryption password + saved download/import history (actor/date/time)",
+  backupTables.includes("backup_history") &&
+  backupSrc.includes("backup_encryption_password") &&
+  backupSrc.includes("recordBackupHistory") &&
+  backupSrc.includes("getBackupHistory") &&
+  adminBackupSrc.includes("ENCRYPTION PASSWORD") &&
+  adminBackupSrc.includes("Backup History") &&
+  adminBackupSrc.includes('action: "download"') &&
+  adminBackupSrc.includes('action: "safety_download"') &&
+  adminBackupSrc.includes('action: "import"') &&
+  schema.includes("create table if not exists public.backup_history") &&
+  schema.includes("backup_history_super") &&
+  scheduledBackupSrc.includes('{ name: "backup_history", pk: "id" }') &&
+  scheduledBackupSrc.includes('action: "scheduled"'));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

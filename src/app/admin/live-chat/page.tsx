@@ -12,7 +12,7 @@ import {
   Activity, ArrowUpRight, Bot, CheckCircle2, Clock, KeyRound, Mail, MessageCircle, Phone,
   RefreshCw, Save, Search, Send, Sparkles, Trash2, TrendingUp, Upload, UserRound, X as XIcon,
 } from "lucide-react";
-import { AdminStatCard, AdminTopbar, dbUpdate, useNotice } from "@/components/admin";
+import { AdminStatCard, AdminTopbar, dbDelete, dbUpdate, useNotice } from "@/components/admin";
 import { AdminLiveChats } from "@/components/admin-live-chats";
 import { authedClient } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
@@ -76,6 +76,7 @@ export default function AdminLiveChatPage() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [requests, setRequests] = useState<Msg[]>([]);
+  const [deletingRequestId, setDeletingRequestId] = useState("");
   const [tablesMissing, setTablesMissing] = useState(false);
   const [view, setView] = useState<"overview" | "chats">("overview");
   const [chatCount, setChatCount] = useState({ active: 0, unread: 0 });
@@ -302,6 +303,16 @@ export default function AdminLiveChatPage() {
     if (err) return show(`⚠ ${err}`);
     setRequests((xs) => xs.map((x) => (x.id === m.id ? { ...x, status: "read" } : x)));
     show("✅ handled ලෙස සලකුණු කළා");
+  }
+
+  async function deleteRequest(m: Msg) {
+    if (!confirm(`මේ contact request එක (${m.name || "Unknown"}) මකන්නද? Messages & Inquiries එකෙනුත් මැකෙනවා.`)) return;
+    setDeletingRequestId(m.id);
+    const err = await dbDelete("messages", { id: m.id });
+    setDeletingRequestId("");
+    if (err) return show(`⚠ ${err}`);
+    setRequests((xs) => xs.filter((x) => x.id !== m.id));
+    show("✅ Contact request එක මැකුණා");
   }
 
   /* ------------------------------- stats ------------------------------- */
@@ -655,6 +666,14 @@ export default function AdminLiveChatPage() {
                         <CheckCircle2 size={12} />
                       </button>
                     )}
+                    <button
+                      onClick={() => void deleteRequest(m)}
+                      disabled={deletingRequestId === m.id}
+                      className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center hover:bg-rose-100 disabled:opacity-50"
+                      title="මේ request එක මකන්න"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                 </div>
               </div>

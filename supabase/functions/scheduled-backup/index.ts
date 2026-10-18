@@ -37,6 +37,7 @@ const TABLES: { name: string; pk: string }[] = [
   { name: "f28_members", pk: "id" },
   { name: "f28_items", pk: "id" },
   { name: "admin_activity_logs", pk: "id" },
+  { name: "backup_history", pk: "id" },
   { name: "backup_secrets", pk: "key" },
   { name: "chat_sessions", pk: "id" },
   { name: "chat_messages", pk: "id" },
@@ -99,10 +100,25 @@ Deno.serve(async (req: Request) => {
 
   const day = new Date().toISOString().slice(0, 10);
   const path = `auto/database-${day}.sql`;
+  const backupBlob = new Blob([lines.join("\n")], { type: "text/plain" });
   const { error: upErr } = await sb.storage
     .from("backups")
-    .upload(path, new Blob([lines.join("\n")], { type: "text/plain" }), { upsert: true });
+    .upload(path, backupBlob, { upsert: true });
   if (upErr) return new Response(JSON.stringify({ ok: false, error: upErr.message }), { status: 500 });
+
+  // Site එකේ Backup History එකටත් සටහන් කරන්න (service role — RLS bypass)
+  await sb.from("backup_history").insert({
+    action: "scheduled",
+    actor_name: "Scheduled Auto-Backup",
+    actor_role: "system",
+    file_name: path,
+    file_size: backupBlob.size,
+    encrypted: false,
+    tables_count: TABLES.length,
+    rows_count: total,
+    status: "success",
+    detail: "Weekly data-only backup saved to private backups bucket",
+  });
 
   // අලුත්ම KEEP ගණන තියාගෙන පරණ ඒවා මකයි
   const { data: list } = await sb.storage.from("backups").list("auto", { limit: 100 });

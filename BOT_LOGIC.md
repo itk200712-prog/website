@@ -177,7 +177,7 @@ reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒව�
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 265 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + site brain/keywords + message box + backup (manifest/encryption/restore) + root-admin protection + NIC/phone validation + activity-log delete
+npx -y tsx scripts/test.mts   # 270 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls
 npm run build                 # production build
 ```
 

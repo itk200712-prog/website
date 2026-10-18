@@ -57,6 +57,11 @@ export function AdminSidebar() {
   const [isSuper, setIsSuper] = useState(false);
   const [navQ, setNavQ] = useState("");
 
+  // Section එකක් මාරු කළාම panel search එක ඉබේම හිස් වෙනවා — කලින් search එක අලුත් පිටුවට රැඳෙන්නේ නෑ
+  useEffect(() => {
+    setNavQ("");
+  }, [path]);
+
   // section permissions load (superadmin/empty = සේරම ඉඩ)
   useEffect(() => {
     let alive = true;
@@ -92,10 +97,19 @@ export function AdminSidebar() {
         </div>
       </Link>
       <div className="px-4 pt-3.5 pb-1.5 text-[8.5px] font-bold tracking-[0.18em] text-slate-500">NAVIGATION</div>
-      {/* ✅ quick search — panels ගොඩක් තියෙන නිසා ඉක්මනින් හොයන්න */}
+      {/* ✅ quick search — type=search නිසා browser/password-manager එක login නම (උදා: SUPERADMIN)
+          මේකට auto-fill කරලා navigation එක හංගන්නේ නෑ */}
       <div className="px-2.5 pb-2">
         <div className="relative">
           <input
+            type="search"
+            name="mpcs-admin-panel-search"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            data-lpignore="true"
+            data-1p-ignore="true"
             value={navQ}
             onChange={(e) => setNavQ(e.target.value)}
             placeholder="Search panels…"

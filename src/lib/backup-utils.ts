@@ -255,7 +255,7 @@ export function buildRecoveryChecklist(opts: { generatedAt: string; supabaseUrl:
     "■ ආරක්ෂාව:",
     "  • මේ ZIP එකේ login passwords + Gemini API key (backup_secrets) ඇත — පිටපත් 3ක් තැන් 2ක තියාගන්න",
     "    (උදා: Office PC + Pen drive + Google Drive), පිට අයට දෙන්න එපා.",
-    "  • Backup download/import passwords දෙක ඇත්තේ Admin → Backup පිටුවේය",
+    "  • Backup download/import/encryption passwords තුනම ඇත්තේ Admin → Backup පිටුවේය",
     "    (superadmin ට පමණක් පෙනේ) — ඒවාද database.sql එකේ backup_secrets",
     "    table එකේ සුරැකේ.",
     "════════════════════════════════════════════════════════════════════",

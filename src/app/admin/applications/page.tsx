@@ -1,10 +1,11 @@
 "use client";
 
 // Membership Applications Management — approve / reject / edit
+// Delete = superadmin පමණි (section access තියන සාමාන්‍ය admin ලාටවත් බෑ)
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, FileText, Lock, Pencil, RefreshCw, Search, XCircle } from "lucide-react";
-import { AdminTopbar, AdminStatCard, dbUpdate, useNotice } from "@/components/admin";
+import { CheckCircle2, FileText, Lock, Pencil, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
+import { AdminTopbar, AdminStatCard, dbDelete, dbUpdate, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
 import { logActivity } from "@/lib/activity";
 
@@ -37,9 +38,19 @@ export default function AdminApplicationsPage() {
   const [editApp, setEditApp] = useState<App | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ name_si: "", name_en: "", nic: "", phone: "", email: "", address: "", postal: "" });
   const [saving, setSaving] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState("");
+  const canDeleteApplications = role === "superadmin";
 
   const load = useCallback(async () => {
     const sb = await authedClient();
+    const { data: u } = await sb.auth.getUser();
+    if (u?.user) {
+      const { data: prof } = await sb.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
+      setRole((prof as { role?: string } | null)?.role ?? "member");
+    } else {
+      setRole("guest");
+    }
     const { data } = await sb.from("membership_applications").select("*").order("created_at", { ascending: false });
     if (data)
       setApps(
@@ -124,6 +135,22 @@ export default function AdminApplicationsPage() {
     setSaving(false);
     setEditApp(null);
     show(err ? `⚠ ${err}` : "✅ Application details saved");
+  }
+
+  async function deleteApplication(a: App) {
+    if (!canDeleteApplications) {
+      show("⚠ Application මකන්න පුළුවන් superadmin ට විතරයි");
+      return;
+    }
+    if (!confirm(`මේ application එක (${a.app_no} — ${a.name}) මකන්නද? මේක ආපසු ගන්න බෑ.`)) return;
+    setDeletingId(a.id);
+    const err = await dbDelete("membership_applications", { id: a.id });
+    setDeletingId("");
+    if (err) return show(`⚠ ${err}`);
+    setApps((xs) => xs.filter((x) => x.id !== a.id));
+    if (editApp?.id === a.id) setEditApp(null);
+    void logActivity("APPLICATION_DELETED", `application ${a.app_no} deleted`);
+    show("✅ Application එක මැකුණා");
   }
 
   return (
@@ -298,6 +325,16 @@ export default function AdminApplicationsPage() {
                         <button className="btn btn-outline !py-1 !px-2.5 !text-[11px]" onClick={() => openEdit(a)} title="Edit application details">
                           <Pencil size={11} /> Edit
                         </button>
+                        {canDeleteApplications && (
+                          <button
+                            className="btn btn-outline !py-1 !px-2.5 !text-[11px] !border-rose-200 !text-rose-600 hover:!bg-rose-50 disabled:opacity-50"
+                            onClick={() => void deleteApplication(a)}
+                            disabled={deletingId === a.id}
+                            title="Application එක මකන්න (superadmin only)"
+                          >
+                            <Trash2 size={11} /> {deletingId === a.id ? "Deleting…" : "Delete"}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

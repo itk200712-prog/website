@@ -43,6 +43,7 @@ export const BACKUP_TABLES: BackupTable[] = [
   { name: "f28_members", pk: "id" },
   { name: "f28_items", pk: "id" },
   { name: "admin_activity_logs", pk: "id" },
+  { name: "backup_history", pk: "id" },
   { name: "backup_secrets", pk: "key" },
   { name: "site_images_backup", pk: "path" },
   // ⑳ Live Chat (2-way) — sessions, messages, usage log
@@ -141,6 +142,22 @@ const DDL_OVERRIDE: Record<string, string> = {
   query text default '',
   matched int default 0,
   session_id text default '',
+  created_at timestamptz default now()
+);`,
+  backup_history: `create table if not exists public.backup_history (
+  id uuid primary key default gen_random_uuid(),
+  action text not null default 'download',
+  actor_id uuid,
+  actor_name text default '',
+  actor_email text default '',
+  actor_role text default '',
+  file_name text default '',
+  file_size bigint,
+  encrypted boolean not null default false,
+  tables_count int,
+  rows_count bigint,
+  status text not null default 'success',
+  detail text default '',
   created_at timestamptz default now()
 );`,
   notify_emails: `create table if not exists public.notify_emails (
@@ -465,7 +482,8 @@ export async function restoreBackup(
   );
   // ⚠ profiles + backup_secrets සම්පූර්ණයෙන් wipe කරන්නේ නෑ: RLS policies profiles එකෙන්
   //    බලන නිසා ඒක හිස් කළොත් admin තමන්වම lock out වෙනවා. එම tables upsert එකෙන් update වේ.
-  const NO_WIPE = new Set(["profiles", "backup_secrets"]);
+  //    backup_history එකත් audit ඉතිහාසය නිසා wipe කරන්නේ නෑ — restore එකේදී merge වේ.
+  const NO_WIPE = new Set(["profiles", "backup_secrets", "backup_history"]);
   for (const t of [...ordered].reverse()) {
     if (NO_WIPE.has(t.name)) continue;
     // not(pk, is, null) — uuid/text ඕන pk එකකට වැඩ කරයි (පරණ neq("__backup_wipe__") එක uuid වල fail වුණා)
@@ -522,7 +540,7 @@ export async function restoreBackup(
 }
 
 /* ------------------------------------------------------------- SECRETS --- */
-export async function getBackupSecrets(): Promise<{ download: string; importPw: string } | null> {
+export async function getBackupSecrets(): Promise<{ download: string; importPw: string; encryption: string } | null> {
   const sb = await authedClient();
   const { data, error } = await sb.from("backup_secrets").select("key, value");
   if (error || !data) return null;
@@ -530,20 +548,112 @@ export async function getBackupSecrets(): Promise<{ download: string; importPw: 
   return {
     download: map.get("backup_download_password") ?? "",
     importPw: map.get("backup_import_password") ?? "",
+    encryption: map.get("backup_encryption_password") ?? "",
   };
 }
 
-export async function setBackupSecret(key: "backup_download_password" | "backup_import_password", value: string) {
+export async function setBackupSecret(
+  key: "backup_download_password" | "backup_import_password" | "backup_encryption_password",
+  value: string
+) {
   const sb = await authedClient();
   const { error } = await sb.from("backup_secrets").upsert({ key, value }, { onConflict: "key" });
   return error ? error.message : null;
+}
+
+/* ------------------------------------------------------------- HISTORY --- */
+export type BackupHistoryAction = "download" | "safety_download" | "import" | "scheduled";
+
+export type BackupHistoryEntry = {
+  id: string;
+  action: BackupHistoryAction;
+  actor_id: string | null;
+  actor_name: string;
+  actor_email: string;
+  actor_role: string;
+  file_name: string;
+  file_size: number | null;
+  encrypted: boolean;
+  tables_count: number | null;
+  rows_count: number | null;
+  status: string;
+  detail: string;
+  created_at: string;
+};
+
+export async function getBackupHistory(limit = 30): Promise<{ entries: BackupHistoryEntry[]; error: string | null }> {
+  try {
+    const sb = await authedClient();
+    const { data, error } = await sb
+      .from("backup_history")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return { entries: [], error: error.message };
+    return { entries: ((data ?? []) as BackupHistoryEntry[]), error: null };
+  } catch (e) {
+    return { entries: [], error: (e as Error).message };
+  }
+}
+
+export async function recordBackupHistory(input: {
+  action: BackupHistoryAction;
+  fileName: string;
+  fileSize?: number | null;
+  encrypted?: boolean;
+  tablesCount?: number | null;
+  rowsCount?: number | null;
+  status?: string;
+  detail?: string;
+}): Promise<BackupHistoryEntry | null> {
+  try {
+    const sb = await authedClient();
+    const { data: u } = await sb.auth.getUser();
+    let actorName = u?.user?.email ?? "";
+    let actorEmail = u?.user?.email ?? "";
+    let actorRole = "";
+    if (u?.user) {
+      const { data: prof } = await sb
+        .from("profiles")
+        .select("full_name, role, auth_email")
+        .eq("id", u.user.id)
+        .maybeSingle();
+      const p = prof as { full_name?: string; role?: string; auth_email?: string } | null;
+      actorName = p?.full_name || actorName;
+      actorEmail = p?.auth_email || actorEmail;
+      actorRole = p?.role || "";
+    }
+    const { data, error } = await sb
+      .from("backup_history")
+      .insert({
+        action: input.action,
+        actor_id: u?.user?.id ?? null,
+        actor_name: actorName,
+        actor_email: actorEmail,
+        actor_role: actorRole,
+        file_name: input.fileName,
+        file_size: input.fileSize ?? null,
+        encrypted: !!input.encrypted,
+        tables_count: input.tablesCount ?? null,
+        rows_count: input.rowsCount ?? null,
+        status: input.status ?? "success",
+        detail: input.detail ?? "",
+      })
+      .select("*")
+      .single();
+    if (error || !data) return null;
+    return data as BackupHistoryEntry;
+  } catch {
+    // History table එක නැති වුණත් (SQL run කරලා නැත්නම්) backup/restore එක නවත්වන්නේ නෑ
+    return null;
+  }
 }
 
 
 /* ============================================================================
  * FULL BACKUP ZIP — මුලු site එකම, එකක් නෑර:
  *   · schema.sql   (tables + RLS + functions + live chat DB logic)
- *   · database.sql (tables 27ම data + images base64 + LOGIN accounts/passwords)
+ *   · database.sql (tables 28ම data + images base64 + LOGIN accounts/passwords)
  *   · Members Register + Voters Register — XLSX + CSV
  *   · manifest.json (version + row counts + SHA-256 hashes) · RECOVERY.txt · README.txt
  *   · විකල්ප: database.sql එක password එකකින් encrypt කළ හැක (AES-GCM)
@@ -646,7 +756,7 @@ export async function generateBackupZip(
       "",
       "මේ ZIP එකේ තියෙන්නේ (මුලු site එකම — එකක් නෑර):",
       "  • schema.sql            — database ව්‍යුහය: tables + RLS + functions (live chat logic ඇතුළුව)",
-      "  • database.sql          — සියලු data: tables 27ම (members, voters, settings, emails,",
+      "  • database.sql          — සියලු data: tables 28ම (members, voters, settings, emails,",
       "                          board, business, news, gallery, messages, live chat, applications,",
       "                          fuel, f28, activity logs) + සියලු images/photos (base64)",
       "                          + LOGIN accounts (auth.users) password සහිතව",

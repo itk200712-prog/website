@@ -5,8 +5,8 @@
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, Mail, RefreshCw, Reply, Search, Send } from "lucide-react";
-import { AdminTopbar, dbUpdate, useNotice } from "@/components/admin";
+import { Building2, Mail, RefreshCw, Reply, Search, Send, Trash2 } from "lucide-react";
+import { AdminTopbar, dbDelete, dbUpdate, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
 
 type Msg = {
@@ -60,6 +60,7 @@ export default function AdminMessagesPage() {
   const [status, setStatus] = useState<(typeof STATUS)[number]>("all");
   const [q, setQ] = useState("");
   const [replyFor, setReplyFor] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState("");
 
   // ඇත්ත පණිවිඩ database එකෙන් — Contact form, business inquiries සහ
   // චැට් එකේ Message tab එකෙන් එන ඔක්කොම මෙතැනට එයි
@@ -131,6 +132,17 @@ export default function AdminMessagesPage() {
     const err = await dbUpdate("messages", { id: m.id }, { status: "replied", reply: text });
     setReplyFor(null);
     show(err ? `⚠ ${err}` : "✅ Reply sent — status: Replied");
+  }
+
+  async function deleteMessage(m: Msg) {
+    if (!confirm(`මේ පණිවිඩය (${m.name || "Unknown"} — ${m.department}) මකන්නද? මේක ආපසු ගන්න බෑ.`)) return;
+    setDeletingId(m.id);
+    const err = await dbDelete("messages", { id: m.id });
+    setDeletingId("");
+    if (err) return show(`⚠ ${err}`);
+    setMsgs((xs) => xs.filter((x) => x.id !== m.id));
+    if (replyFor === m.id) setReplyFor(null);
+    show("✅ පණිවිඩය මැකුණා");
   }
 
   return (
@@ -226,9 +238,19 @@ export default function AdminMessagesPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-slate-400 text-[10.5px]">{m.ago}</div>
-                  <button className="btn btn-primary !py-1.5 !px-3.5 !text-[11.5px] mt-2" onClick={() => openReply(m)}>
-                    <Reply size={13} /> Reply
-                  </button>
+                  <div className="mt-2 flex gap-1.5 justify-end">
+                    <button className="btn btn-primary !py-1.5 !px-3.5 !text-[11.5px]" onClick={() => openReply(m)}>
+                      <Reply size={13} /> Reply
+                    </button>
+                    <button
+                      className="btn btn-outline !py-1.5 !px-3 !text-[11.5px] !border-rose-200 !text-rose-600 hover:!bg-rose-50 disabled:opacity-50"
+                      onClick={() => void deleteMessage(m)}
+                      disabled={deletingId === m.id}
+                      title="මේ පණිවිඩය මකන්න"
+                    >
+                      <Trash2 size={13} /> {deletingId === m.id ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
                 </div>
               </div>
               {replyFor === m.id && (

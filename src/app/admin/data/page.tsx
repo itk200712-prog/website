@@ -7,9 +7,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Database, Download, FileSpreadsheet, Printer, UploadCloud, UsersRound, Vote,
+  Database, Download, FileSpreadsheet, Printer, Trash2, UploadCloud, UsersRound, Vote,
 } from "lucide-react";
 import { AdminTopbar, dbInsert, useNotice } from "@/components/admin";
+import { logActivity } from "@/lib/activity";
 import { authedClient } from "@/lib/supabase/client";
 import { MEMBER_FILES, SETTINGS, VOTER_FILES } from "@/lib/seed";
 
@@ -153,6 +154,7 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
   const [mode, setMode] = useState("append");
   const [chosen, setChosen] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState("");
   const [prog, setProg] = useState("");
   const [files, setFiles] = useState<{ file_name: string; rows: number }[]>([]);
   const [selected, setSelected] = useState<string>("");
@@ -167,7 +169,30 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
     const { data } = await sb.from("data_files").select("file_name, rows").eq("kind", kind).order("rows", { ascending: false });
     const real = ((data as { file_name: string; rows: number }[]) ?? []).map((f) => ({ file_name: f.file_name, rows: Number(f.rows) }));
     setFiles(real); // demo files නෑ — real uploads පමණයි
-    if (!selected && real.length) setSelected(stripExt(real[0].file_name));
+    setSelected((prev) =>
+      real.some((f) => stripExt(f.file_name) === prev) ? prev : real[0] ? stripExt(real[0].file_name) : ""
+    );
+  }
+
+  async function syncCounters(sb: Awaited<ReturnType<typeof authedClient>>) {
+    const { data: all, error: countErr } = await sb.from("data_files").select("rows").eq("kind", kind);
+    if (countErr) throw new Error(countErr.message);
+    const list = ((all as { rows: number }[]) ?? []);
+    const sum = list.reduce((a, b) => a + Number(b.rows), 0);
+    const count = list.length;
+    const settings =
+      kind === "member"
+        ? [
+            { key: "members_total", value: String(sum) },
+            { key: "members_files_count", value: String(count) },
+          ]
+        : [
+            { key: "voters_total", value: String(sum) },
+            { key: "voters_files_count", value: String(count) },
+          ];
+    const { error } = await sb.from("system_settings").upsert(settings, { onConflict: "key" });
+    if (error) throw new Error(error.message);
+    return { sum, count };
   }
 
   useEffect(() => {
@@ -218,20 +243,7 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
       }
 
       // live totals -> main site counters
-      const { data: all } = await sb.from("data_files").select("rows").eq("kind", kind);
-      const sum = ((all as { rows: number }[]) ?? []).reduce((a, b) => a + Number(b.rows), 0);
-      const count = ((all as unknown[]) ?? []).length;
-      if (kind === "member") {
-        await sb.from("system_settings").upsert([
-          { key: "members_total", value: String(sum) },
-          { key: "members_files_count", value: String(count) },
-        ], { onConflict: "key" });
-      } else {
-        await sb.from("system_settings").upsert([
-          { key: "voters_total", value: String(sum) },
-          { key: "voters_files_count", value: String(count) },
-        ], { onConflict: "key" });
-      }
+      const { sum } = await syncCounters(sb);
       await dbInsert("data_imports", { kind, mode, files: names.join(",") });
       show(`✅ ${chosen.length} file(s) processed — ${sum.toLocaleString()} ${kind === "member" ? "members" : "voters"} total`);
       setChosen([]);
@@ -241,6 +253,56 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
     }
     setProg("");
     setBusy(false);
+  }
+
+  async function deleteSheet(f: { file_name: string; rows: number }) {
+    const label = stripExt(f.file_name);
+    const listName = kind === "member" ? "Members" : "Eligible Voters";
+    if (!confirm(`"${label}" sheet එක මකන්නද?\nඑහි rows ${f.rows.toLocaleString()}ම ${listName} live ලැයිස්තුවෙන් අයින් වෙනවා. මේක ආපසු ගන්න බෑ.`)) return;
+    setDeleting(label);
+    setProg(`Deleting ${label}…`);
+    try {
+      const sb = await authedClient();
+      const { error: rowErr } = await sb.from(table).delete().eq("file_name", label);
+      if (rowErr) throw new Error(rowErr.message);
+      const { error: fileErr } = await sb.from("data_files").delete().eq("kind", kind).eq("file_name", f.file_name);
+      if (fileErr) throw new Error(fileErr.message);
+      const { sum } = await syncCounters(sb);
+      await dbInsert("data_imports", { kind, mode: "delete-file", files: label });
+      void logActivity("DATA_DELETE", `${listName} sheet "${label}" deleted (${f.rows.toLocaleString()} rows)`);
+      await loadFiles();
+      show(`✅ "${label}" sheet එක මැකුණා — ඉතිරි ${listName}: ${sum.toLocaleString()}`);
+    } catch (e) {
+      show(`⚠ ${(e as Error).message}`);
+    }
+    setProg("");
+    setDeleting("");
+  }
+
+  async function deleteAllSheets() {
+    if (!files.length) return;
+    const listName = kind === "member" ? "Members" : "Eligible Voters";
+    if (!confirm(`${listName} එකට upload කරපු sheets ${files.length}ම මකන්නද?\nRows ${total.toLocaleString()}ම live ලැයිස්තුවෙන් අයින් වෙනවා. මේක ආපසු ගන්න බෑ.`)) return;
+    setDeleting("__all__");
+    setProg(`Deleting all ${listName} sheets…`);
+    try {
+      const sb = await authedClient();
+      const { error: rowErr } = await sb.from(table).delete().not("id", "is", null);
+      if (rowErr) throw new Error(rowErr.message);
+      const { error: fileErr } = await sb.from("data_files").delete().eq("kind", kind);
+      if (fileErr) throw new Error(fileErr.message);
+      await syncCounters(sb);
+      const names = files.map((f) => stripExt(f.file_name));
+      await dbInsert("data_imports", { kind, mode: "delete-all", files: names.join(",") });
+      void logActivity("DATA_DELETE", `All ${listName} sheets deleted (${files.length} files, ${total.toLocaleString()} rows)`);
+      setSelected("");
+      await loadFiles();
+      show(`✅ ${listName} uploaded sheets සියල්ල මැකුණා`);
+    } catch (e) {
+      show(`⚠ ${(e as Error).message}`);
+    }
+    setProg("");
+    setDeleting("");
   }
 
   async function downloadPdf() {
@@ -350,14 +412,60 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
         ))}
       </div>
 
-      <button className="btn btn-primary w-full mt-4 disabled:opacity-60" disabled={busy} onClick={upload}>
-        <UploadCloud size={16} /> {busy ? (prog || "Processing…") : "Upload & Process File"}
+      <button className="btn btn-primary w-full mt-4 disabled:opacity-60" disabled={busy || !!deleting} onClick={upload}>
+        <UploadCloud size={16} /> {busy || deleting ? (prog || "Processing…") : "Upload & Process File"}
       </button>
-      {busy && (
+      {(busy || deleting) && (
         <div className="mt-2.5 h-1.5 rounded-full bg-indigo-100 overflow-hidden">
           <div className="h-full rounded-full bg-indigo-600 transition-all duration-500" style={{ width: "100%", animation: "pulse 1s infinite" }} />
         </div>
       )}
+
+      {/* uploaded sheets — එකින් එක හෝ සියල්ලම මකන්න (live rows ත් අයින් වේ) */}
+      <div className="border-t border-slate-100 mt-6 pt-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="field-label !mb-1">Uploaded sheets ({files.length})</div>
+            <p className="text-[11px] text-slate-400">
+              Sheet එකක් මැකුවම එහි rows සියල්ලම live {kind === "member" ? "Members" : "Eligible Voters"} ලැයිස්තුවෙන් සහ counters වලින් අයින් වේ.
+            </p>
+          </div>
+          <button
+            className="btn btn-outline !py-1.5 !px-3 !text-[11px] !border-rose-200 !text-rose-600 hover:!bg-rose-50 disabled:opacity-50"
+            onClick={() => void deleteAllSheets()}
+            disabled={!files.length || busy || !!deleting}
+            title="Upload කරපු sheets සියල්ල මකන්න"
+          >
+            <Trash2 size={13} /> {deleting === "__all__" ? "Deleting…" : "Delete all sheets"}
+          </button>
+        </div>
+        {files.length === 0 ? (
+          <div className="mt-3 rounded-xl border border-dashed border-slate-200 px-4 py-4 text-center text-[11.5px] text-slate-400">
+            Upload කරපු sheets නෑ
+          </div>
+        ) : (
+          <div className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+            {files.map((f) => {
+              const label = stripExt(f.file_name);
+              return (
+                <div key={`${f.file_name}-${f.rows}`} className="flex items-center gap-2.5 px-3 py-2">
+                  <FileSpreadsheet size={14} className="shrink-0 text-emerald-600" />
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-slate-800">{label}</span>
+                  <span className="shrink-0 text-[11px] tabular-nums text-slate-400">{f.rows.toLocaleString()} rows</span>
+                  <button
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-50"
+                    onClick={() => void deleteSheet(f)}
+                    disabled={busy || !!deleting}
+                    title={`"${label}" sheet එක මකන්න`}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* download */}
       <div className="border-t border-slate-100 mt-6 pt-5">

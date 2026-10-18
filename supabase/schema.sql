@@ -292,6 +292,15 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
+-- Superadmin දැයි බලන helper එක (original + අලුතින් එකතු වූ superadmin ලා දෙන්නම)
+create or replace function public.is_superadmin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'superadmin'
+  );
+$$;
+
 -- 🔐 Original (root) Super Admin — මුල සිටම සිටි superadmin.
 -- අලුතින් එකතු වූ superadmin ලාටවත් වෙනත් admin කෙනෙක්ගේ password/role/sections
 -- වෙනස් කරන්නවත් ගිණුම මකන්නවත් බෑ; ඒවා root ට විතරයි. Member ගිණුම් ඕන admin කෙනෙක්ට.
@@ -480,11 +489,17 @@ create policy messages_insert on public.messages for insert with check (true);
 drop policy if exists messages_admin on public.messages;
 create policy messages_admin on public.messages for all using (public.is_admin()) with check (public.is_admin());
 
--- applications: ඕන කෙනෙකුට අයදුම් කරන්න පුළුවන්; admin approve/reject
+-- applications: ඕන කෙනෙකුට අයදුම් කරන්න පුළුවන්; admin approve/reject/edit.
+-- Delete කරන්න පුළුවන් superadmin ලාට විතරයි — section access ලැබුණු සාමාන්‍ය admin ලාට බෑ.
 drop policy if exists apps_insert on public.membership_applications;
 create policy apps_insert on public.membership_applications for insert with check (true);
 drop policy if exists apps_admin on public.membership_applications;
-create policy apps_admin on public.membership_applications for all using (public.is_admin()) with check (public.is_admin());
+drop policy if exists apps_admin_read on public.membership_applications;
+create policy apps_admin_read on public.membership_applications for select using (public.is_admin());
+drop policy if exists apps_admin_update on public.membership_applications;
+create policy apps_admin_update on public.membership_applications for update using (public.is_admin()) with check (public.is_admin());
+drop policy if exists apps_superadmin_delete on public.membership_applications;
+create policy apps_superadmin_delete on public.membership_applications for delete using (public.is_superadmin());
 
 -- data_imports: admin පමණයි
 drop policy if exists imports_admin on public.data_imports;
@@ -824,7 +839,7 @@ drop policy if exists "f28_items_all" on public.f28_items;
 create policy "f28_items_all" on public.f28_items for all to authenticated using (true) with check (true);
 
 -- ===========================================================================
--- 13. Backup & Restore (superadmin only) — backup_secrets + site_images_backup
+-- 13. Backup & Restore (superadmin only) — secrets + images + download/upload history
 -- ===========================================================================
 create table if not exists public.backup_secrets (
   key text primary key,
@@ -835,8 +850,26 @@ create table if not exists public.site_images_backup (
   data_base64 text default '',
   content_type text default ''
 );
+-- Backup download/import කළේ කවුද, කවදාද, වෙලාව කීයද කියා site එකේම රැඳෙන ඉතිහාසය
+create table if not exists public.backup_history (
+  id uuid primary key default gen_random_uuid(),
+  action text not null default 'download', -- download | safety_download | import | scheduled
+  actor_id uuid,
+  actor_name text default '',
+  actor_email text default '',
+  actor_role text default '',
+  file_name text default '',
+  file_size bigint,
+  encrypted boolean not null default false,
+  tables_count int,
+  rows_count bigint,
+  status text not null default 'success',
+  detail text default '',
+  created_at timestamptz default now()
+);
 alter table public.backup_secrets enable row level security;
 alter table public.site_images_backup enable row level security;
+alter table public.backup_history enable row level security;
 drop policy if exists backup_secrets_super on public.backup_secrets;
 create policy backup_secrets_super on public.backup_secrets for all
   using (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'))
@@ -845,9 +878,14 @@ drop policy if exists site_images_backup_super on public.site_images_backup;
 create policy site_images_backup_super on public.site_images_backup for all
   using (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'))
   with check (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'));
+drop policy if exists backup_history_super on public.backup_history;
+create policy backup_history_super on public.backup_history for all
+  using (public.is_superadmin())
+  with check (public.is_superadmin());
 insert into public.backup_secrets (key, value) values
   ('backup_download_password','MPCS@Backup#2026'),
   ('backup_import_password','MPCS@Restore#2026'),
+  ('backup_encryption_password','MPCS@Encrypt#2026'),
   ('gemini_api_key','')
 on conflict (key) do nothing;
 
@@ -882,14 +920,7 @@ create table if not exists public.admin_activity_logs (
   created_at timestamptz default now()
 );
 alter table public.admin_activity_logs enable row level security;
--- Superadmin දැයි බලන helper එක (original + අලුතින් එකතු වූ superadmin ලා දෙන්නම)
-create or replace function public.is_superadmin() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from public.profiles
-    where id = auth.uid() and role = 'superadmin'
-  );
-$$;
+-- public.is_superadmin() helper එක ඉහළ RLS අංශයේ අර්ථ දක්වා ඇත
 
 drop policy if exists activity_admin_read on public.admin_activity_logs;
 create policy activity_admin_read on public.admin_activity_logs for select using (public.is_admin());
