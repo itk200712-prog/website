@@ -2,20 +2,21 @@
 
 // ============================================================================
 // Activities — See Log: සියලුම admin ක්‍රියා සටහන් (all admins can view;
-// txt download = superadmin only)
+// txt download + log delete = superadmin only — original/newly-added දෙගොල්ලම)
 // ============================================================================
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, ListOrdered, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { Download, ListOrdered, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { AdminTopbar, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
-import { downloadLogsTxt, type ActivityLog } from "@/lib/activity";
+import { downloadLogsTxt, logActivity, type ActivityLog } from "@/lib/activity";
 
 const ACTION_COLORS: Record<string, string> = {
   INSERT: "bg-emerald-100 text-emerald-700",
   UPDATE: "bg-amber-100 text-amber-700",
   UPSERT: "bg-indigo-100 text-indigo-700",
   DELETE: "bg-rose-100 text-rose-700",
+  LOG_DELETE: "bg-rose-100 text-rose-700",
   LOGIN: "bg-sky-100 text-sky-700",
   BACKUP_DOWNLOAD: "bg-purple-100 text-purple-700",
   BACKUP_IMPORT: "bg-purple-100 text-purple-700",
@@ -28,6 +29,10 @@ export default function AdminActivitiesPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [q, setQ] = useState("");
   const [role, setRole] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState("");
+  const [clearing, setClearing] = useState(false);
+  // Log මකන්න පුළුවන් superadmin ලාට විතරයි (original + අලුතින් එකතු වූ) — සාමාන්‍ය admin ලාට බෑ
+  const canDeleteLogs = role === "superadmin";
 
   async function load() {
     const sb = await authedClient();
@@ -60,6 +65,64 @@ export default function AdminActivitiesPage() {
     );
   }, [q, logs]);
 
+  async function deleteLog(l: ActivityLog) {
+    if (!canDeleteLogs) {
+      show("⚠ Log මකන්න පුළුවන් superadmin ලාට විතරයි");
+      return;
+    }
+    if (!confirm(`මේ log entry එක (${l.action} — ${l.actor || "—"}) මකන්නද?`)) return;
+    setDeletingId(l.id);
+    try {
+      const sb = await authedClient();
+      const { data, error } = await sb.from("admin_activity_logs").delete().eq("id", l.id).select("id");
+      if (error || !data?.length) {
+        show(error ? `⚠ ${error.message}` : "⚠ මකන්න බැරි වුණා — අවසර නැති වෙන්න පුළුවන් (schema.sql එක අලුත්ද බලන්න)");
+        return;
+      }
+      setLogs((xs) => xs.filter((x) => x.id !== l.id));
+      void logActivity("LOG_DELETE", "1 activity log entry deleted");
+      show("✅ Log entry එක මැකුණා");
+    } catch {
+      show("⚠ මකන්න බැරි වුණා — network එක බලලා ආයෙත් උත්සාහ කරන්න");
+    } finally {
+      setDeletingId("");
+    }
+  }
+
+  async function deleteShown() {
+    if (!canDeleteLogs || filtered.length === 0) return;
+    if (!confirm(`දැනට පෙන්වමින් තියෙන log entries ${filtered.length}ම මකන්නද? මේක ආපසු ගන්න බෑ.`)) return;
+    setClearing(true);
+    try {
+      const sb = await authedClient();
+      const ids = filtered.map((l) => l.id);
+      const gone = new Set<string>();
+      for (let i = 0; i < ids.length; i += 100) {
+        const { data, error } = await sb
+          .from("admin_activity_logs")
+          .delete()
+          .in("id", ids.slice(i, i + 100))
+          .select("id");
+        if (error) {
+          show(`⚠ ${error.message}`);
+          break;
+        }
+        for (const r of (data ?? []) as { id: string }[]) gone.add(String(r.id));
+      }
+      if (gone.size > 0) {
+        setLogs((xs) => xs.filter((x) => !gone.has(x.id)));
+        void logActivity("LOG_DELETE", `${gone.size} activity log entries deleted`);
+        show(`✅ Log entries ${gone.size}ක් මැකුණා`);
+      } else {
+        show("⚠ මකන්න බැරි වුණා — අවසර නැති වෙන්න පුළුවන් (schema.sql එක අලුත්ද බලන්න)");
+      }
+    } catch {
+      show("⚠ මකන්න බැරි වුණා — network එක බලලා ආයෙත් උත්සාහ කරන්න");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <div>
       <AdminTopbar title="Activities" sub="See Log — every action performed by site administrators, with date & time" />
@@ -79,13 +142,23 @@ export default function AdminActivitiesPage() {
             <button className="btn btn-outline !py-2 !px-3.5 !text-[12px]" onClick={load}>
               <RefreshCw size={13} /> Refresh
             </button>
-            {role === "superadmin" ? (
-              <button className="btn btn-primary !py-2 !px-3.5 !text-[12px]" onClick={() => downloadLogsTxt(filtered)}>
-                <Download size={13} /> Download Log (.txt)
-              </button>
+            {canDeleteLogs ? (
+              <>
+                <button className="btn btn-primary !py-2 !px-3.5 !text-[12px]" onClick={() => downloadLogsTxt(filtered)}>
+                  <Download size={13} /> Download Log (.txt)
+                </button>
+                <button
+                  className="btn !py-2 !px-3.5 !text-[12px] !bg-rose-600 !text-white hover:!bg-rose-700 disabled:opacity-50"
+                  onClick={deleteShown}
+                  disabled={clearing || filtered.length === 0}
+                  title="දැනට පෙන්වන entries මකනවා"
+                >
+                  <Trash2 size={13} /> {clearing ? "Deleting…" : `Delete shown (${filtered.length})`}
+                </button>
+              </>
             ) : (
               <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 font-semibold">
-                <ShieldCheck size={13} /> .txt download — superadmin පමණි
+                <ShieldCheck size={13} /> .txt download + log delete — superadmin පමණි
               </span>
             )}
           </div>
@@ -118,6 +191,17 @@ export default function AdminActivitiesPage() {
                 </div>
                 {l.detail && <div className="text-slate-600 text-[12px] mt-1 break-words">{l.detail}</div>}
               </div>
+              {canDeleteLogs && (
+                <button
+                  type="button"
+                  onClick={() => deleteLog(l)}
+                  disabled={deletingId === l.id || clearing}
+                  title="මේ entry එක මකන්න (superadmin only)"
+                  className="w-8 h-8 shrink-0 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:border-rose-200 disabled:opacity-50"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           ))}
         </div>

@@ -30,18 +30,34 @@ export function decodePw(enc: string): string {
 // ============================================================================
 // Validation (⑳) — NIC · Phone · Password
 // ============================================================================
+/** NIC එක පිරිසිදු කරයි — ඉඩ/ඉරි අයින් කර V එක ලොකු අකුර කරයි */
+export function normalizeNic(raw: string): string {
+  return raw.replace(/[\s-]/g, "").toUpperCase();
+}
+
+/** Phone එක පිරිසිදු කරයි — ඉඩ/ඉරි අයින් කරයි (+ එක එහෙම්මයි) */
+export function normalizePhone(raw: string): string {
+  return raw.replace(/[\s-]/g, "");
+}
+
+/** Search කොටුවට ගහලා තියෙන්නේ NIC එකක් වගේ දෙයක්ද? (නමක්/සාමාජික අංකයක් නෙවෙයි) */
+export function looksLikeNicAttempt(raw: string): boolean {
+  const v = normalizeNic(raw);
+  return /^\d+V?$/.test(v) && v.length >= 9;
+}
+
 /** NIC: ඉලක්කම් 12 හෝ ඉලක්කම් 9 + v/V */
 export function validateNic(raw: string): string | null {
-  const v = raw.trim();
+  const v = normalizeNic(raw);
   if (!v) return "NIC අංකය ඇතුළත් කරන්න / NIC is required";
   if (/^\d{12}$/.test(v)) return null;
-  if (/^\d{9}[vV]$/.test(v)) return null;
+  if (/^\d{9}V$/.test(v)) return null;
   return "NIC අංකය වැරදියි — ඉලක්කම් 12ක් හෝ ඉලක්කම් 9ක් + v/V (උදා: 123456789012 / 123456789V)";
 }
 
 /** Phone: 0 + ඉලක්කම් 9 (මුළු 10) හෝ +94 + ඉලක්කම් 9 */
 export function validatePhone(raw: string): string | null {
-  const v = raw.replace(/[\s-]/g, "");
+  const v = normalizePhone(raw);
   if (!v) return "දුරකථන අංකය ඇතුළත් කරන්න / Phone is required";
   if (/^0\d{9}$/.test(v)) return null;
   if (/^\+94\d{9}$/.test(v)) return null;

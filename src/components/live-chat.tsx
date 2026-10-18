@@ -22,6 +22,7 @@ import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { tokens } from "@/lib/search";
 import { BOARD, BUSINESSES, FUEL_PRICES, GALLERY, NEWS, RURAL_BANK_BRANCHES, SETTINGS, SITE } from "@/lib/seed";
+import { looksLikeNicAttempt, normalizeNic, normalizePhone, validateNic, validatePhone } from "@/lib/auth";
 import {
   detectBanking,
   detectComplaint,
@@ -151,6 +152,7 @@ export function LiveChat() {
   const [sending, setSending] = useState(false);
   const [sentOk, setSentOk] = useState(false);
   const [sentErr, setSentErr] = useState(false);
+  const [msgErr, setMsgErr] = useState("");
 
   // ── live agent (2-way) ──
   const [sessionKey, setSessionKey] = useState("");
@@ -179,6 +181,18 @@ export function LiveChat() {
   // මුල් සිංහල පණිවිඩය අතේ නැති නිසා page locale එකෙන් විතරක් තීරණය කරන්න බෑ.
   const [officerReplySi, setOfficerReplySi] = useState<boolean | null>(null);
   const contactReplySi = officerReplySi ?? si;
+  // Callback form එකේ NIC/Phone format එක type කරද්දීම බලනවා
+  const cNicInvalid = cNic.trim() !== "" && validateNic(cNic) !== null;
+  const cPhoneInvalid = cPhone.trim() !== "" && validatePhone(cPhone) !== null;
+  const contactFormErr = cNicInvalid
+    ? contactReplySi
+      ? "NIC එක වැරදියි — ඉලක්කම් 9ක් + V (උදා: 123456789V) හෝ ඉලක්කම් 12ක් (උදා: 123456789012) විය යුතුයි."
+      : "Invalid NIC — use 9 digits + V (e.g. 123456789V) or 12 digits (e.g. 123456789012)."
+    : cPhoneInvalid
+      ? contactReplySi
+        ? "දුරකථන අංකය වැරදියි — 0 එකෙන් පටන් ගන්නා ඉලක්කම් 10ක් (0 + ඉලක්කම් 9ක්) හෝ +94 සමඟ ඉලක්කම් 9ක් විය යුතුයි."
+        : "Invalid phone — use 10 digits starting with 0 (0 + 9 digits) or +94 with 9 digits."
+      : "";
   const audioRef = useRef<AudioContext | null>(null);
   const soundRef = useRef(true);
   const typingAt = useRef(0);
@@ -236,6 +250,7 @@ export function LiveChat() {
     setCNic("");
     setCPhone("");
     setCSent(false);
+    setMsgErr("");
     setOfficerReplySi(null);
     setTyping(false);
     setAutoScroll(true);
@@ -896,6 +911,21 @@ export function LiveChat() {
     if (!raw || busy) return;
     push({ from: "me", text: raw });
     setTerm("");
+    // NIC එකක් වගේ ගහලා තියෙනවා නම් format එක මුලින්ම බලනවා — වැරදි නම් හොයන්නේ නෑ.
+    // (නමකින්/සාමාජික අංකයකින් හොයන අයට මෙයින් බාධාවක් නෑ.)
+    const nicAttempt = looksLikeNicAttempt(raw) ? normalizeNic(raw) : "";
+    if (nicAttempt && validateNic(nicAttempt)) {
+      push({
+        from: "bot",
+        bold: si ? "⚠ NIC අංකය වැරදියි" : "⚠ Invalid NIC",
+        text: si
+          ? "NIC එක ඉලක්කම් 9ක් + V (උදා: 123456789V) හෝ ඉලක්කම් 12ක් (උදා: 123456789012) විය යුතුයි.\nනමකින් හොයනවා නම් නම සම්පූර්ණයෙන් ලියන්න."
+          : "A NIC must be 9 digits + V (e.g. 123456789V) or 12 digits (e.g. 123456789012).\nIf you're searching by name, type the full name.",
+        chips: si ? ["නැවත සොයන්න"] : ["Search again"],
+      });
+      void logEvent("search_invalid_nic", "", 0, sessionRef.current);
+      return;
+    }
     setBusy(true);
     setTyping(true);
     const safe = raw.replace(/[%,()*]/g, " ").replace(/\s+/g, " ").trim();
@@ -918,7 +948,7 @@ export function LiveChat() {
       setBusy(false);
       if (error) throw new Error(error.message);
       const rows = (data ?? []) as MemberRow[];
-      void logEvent("search", raw, rows.length, sessionRef.current);
+      void logEvent("search", nicAttempt ? "NIC search" : raw, rows.length, sessionRef.current);
       if (rows.length) {
         push({
           from: "bot",
@@ -944,7 +974,7 @@ export function LiveChat() {
     } catch (err) {
       setTyping(false);
       setBusy(false);
-      void logEvent("search_error", raw, 0, sessionRef.current);
+      void logEvent("search_error", nicAttempt ? "NIC search" : raw, 0, sessionRef.current);
       push({ from: "bot", text: si ? `⚠ ${String((err as Error).message)}` : `⚠ ${String((err as Error).message)}` });
     }
   }
@@ -966,9 +996,11 @@ export function LiveChat() {
     if (busy) return;
     const responseSi = contactReplySi;
     const name = cName.trim();
-    const nic = cNic.trim();
-    const phone = cPhone.trim();
+    const nic = normalizeNic(cNic);
+    const phone = normalizePhone(cPhone);
     if (!name || !nic || !phone) return;
+    // NIC = ඉලක්කම් 9ක් + V හෝ ඉලක්කම් 12ක් · Phone = 0+ඉලක්කම් 9ක් හෝ +94+ඉලක්කම් 9ක්
+    if (validateNic(nic) || validatePhone(phone)) return;
     // 🕘 form එක ඇරලා තියෙද්දී කාර්යාල වේලාව ඉවර වුණොත් ඉල්ලීම නොයවයි
     if (showLiveChatClosedNotice(responseSi)) return;
     setBusy(true);
@@ -1004,7 +1036,7 @@ export function LiveChat() {
     } catch {
       /* best effort */
     }
-    void logEvent("contact", `${name} · ${nic}`, 0, sessionRef.current);
+    void logEvent("contact", ref, 0, sessionRef.current);
 
     // ✅ admin ට Live Chats ලැයිස්තුවේ පේන්න session එකක් හදනවා (නම · දුරකථන · reference)
     const cbNote = `📞 Callback request · ${ref} · NIC ${nic} · ${phone}`;
@@ -1997,16 +2029,34 @@ export function LiveChat() {
   // එවන්නා email එකක් දුන්නොත් ඔහුට/ඇයට confirmation email එකකුත් යයි.
   async function submitMessage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSending(true);
-    setSentOk(false);
-    setSentErr(false);
     const form = e.currentTarget;
     const fd = new FormData(form);
     const name = String(fd.get("name") || "").trim();
-    const phone = String(fd.get("phone") || "").trim();
+    const phone = normalizePhone(String(fd.get("phone") || ""));
     const emailRaw = String(fd.get("email") || "").trim();
     const message = String(fd.get("message") || "").trim();
-    const visitorEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailRaw) ? emailRaw : "";
+    setSentOk(false);
+    setSentErr(false);
+    setMsgErr("");
+    if (!name || !message) {
+      setMsgErr(si ? "නම සහ පණිවිඩය ඇතුළත් කරන්න." : "Please fill in your name and message.");
+      return;
+    }
+    // Phone = 0+ඉලක්කම් 9ක් (මුළු 10ක්) හෝ +94+ඉලක්කම් 9ක් — වැරදි නම් යවන්නේ නෑ
+    if (validatePhone(phone)) {
+      setMsgErr(
+        si
+          ? "දුරකථන අංකය වැරදියි — 0 එකෙන් පටන් ගන්නා ඉලක්කම් 10ක් (0 + ඉලක්කම් 9ක්) හෝ +94 සමඟ ඉලක්කම් 9ක් ඇතුළත් කරන්න."
+          : "Invalid phone number — use 10 digits starting with 0 (0 + 9 digits) or +94 with 9 digits."
+      );
+      return;
+    }
+    if (emailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailRaw)) {
+      setMsgErr(si ? "Email එක වැරදියි — නැවත පරීක්ෂා කරන්න." : "That email looks invalid — please check it.");
+      return;
+    }
+    setSending(true);
+    const visitorEmail = emailRaw;
 
     const payload: Record<string, unknown> = {
       _subject: `MPCS website message — ${name || "Guest"}`,
@@ -2570,21 +2620,30 @@ export function LiveChat() {
                         required
                         value={cNic}
                         onChange={(e) => setCNic(e.target.value)}
+                        maxLength={12}
+                        autoComplete="off"
                         placeholder={contactReplySi ? "NIC අංකය *" : "NIC Number *"}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] outline-none focus:border-fuchsia-400 focus:bg-white"
+                        className={`w-full rounded-xl border bg-slate-50 px-3 py-2 text-[12px] outline-none focus:bg-white ${cNicInvalid ? "border-rose-300 focus:border-rose-400" : "border-slate-200 focus:border-fuchsia-400"}`}
                       />
                       <input
                         required
                         value={cPhone}
                         onChange={(e) => setCPhone(e.target.value)}
                         inputMode="tel"
+                        autoComplete="tel"
+                        maxLength={15}
                         placeholder={contactReplySi ? "දුරකථන අංකය *" : "Phone Number *"}
-                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] outline-none focus:border-fuchsia-400 focus:bg-white"
+                        className={`w-full rounded-xl border bg-slate-50 px-3 py-2 text-[12px] outline-none focus:bg-white ${cPhoneInvalid ? "border-rose-300 focus:border-rose-400" : "border-slate-200 focus:border-fuchsia-400"}`}
                       />
                     </div>
+                    {contactFormErr && (
+                      <div className="rounded-lg bg-rose-50 border border-rose-200 px-2.5 py-1.5 text-[10.5px] font-semibold text-rose-700">
+                        ⚠ {contactFormErr}
+                      </div>
+                    )}
                     <button
                       type="submit"
-                      disabled={busy || !cName.trim() || !cNic.trim() || !cPhone.trim()}
+                      disabled={busy || !cName.trim() || !cNic.trim() || !cPhone.trim() || cNicInvalid || cPhoneInvalid}
                       className="w-full rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white py-2.5 text-[12px] font-extrabold disabled:opacity-40 hover:opacity-95 transition flex items-center justify-center gap-1.5"
                     >
                       {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {contactReplySi ? "ඉදිරිපත් කරන්න" : "Submit"}
@@ -2868,7 +2927,7 @@ export function LiveChat() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{si ? "දුරකථන" : "Phone"} *</label>
-                  <input name="phone" required className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400" />
+                  <input name="phone" required inputMode="tel" autoComplete="tel" maxLength={15} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400" />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Email</label>
@@ -2887,6 +2946,11 @@ export function LiveChat() {
               {sentErr && (
                 <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2.5 text-[11.5px] font-bold text-rose-700">
                   ⚠ {si ? `පණිවිඩය යැවීමට බැරි විය. නැවත උත්සාහ කරන්න, නැත්නම් ${SITE.phones[0]} අමතන්න.` : `Couldn't send your message. Please try again, or call ${SITE.phones[0]}.`}
+                </div>
+              )}
+              {msgErr && (
+                <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2.5 text-[11.5px] font-bold text-rose-700">
+                  ⚠ {msgErr}
                 </div>
               )}
               <button

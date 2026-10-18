@@ -85,6 +85,23 @@ ok("nicToEmail('931234567v')", auth.nicToEmail("931234567v") === "931234567v@mem
 ok("nicToEmail lowercases NIC", auth.nicToEmail("931234567V") === "931234567v@members.mpcs.lk");
 const b64 = Buffer.from("Kenula@123").toString("base64");
 ok("decodePw(base64) round-trips", auth.decodePw(b64) === "Kenula@123", `got ${auth.decodePw(b64)}`);
+ok("NIC/phone formats (9+V or 12 · 0+9 more or +94+9)",
+  auth.validateNic("123456789V") === null &&
+  auth.validateNic("123456789v") === null &&
+  auth.validateNic("123456789012") === null &&
+  auth.validateNic("12345678V") !== null &&
+  auth.validateNic("12345678901") !== null &&
+  auth.validateNic("123456789") !== null &&
+  auth.validatePhone("0771234567") === null &&
+  auth.validatePhone("+94771234567") === null &&
+  auth.validatePhone("077123456") !== null &&
+  auth.validatePhone("+9477123456") !== null &&
+  auth.validatePhone("07712345678") !== null &&
+  auth.normalizeNic(" 123 456 789 v ") === "123456789V" &&
+  auth.normalizePhone("+94 77-1234567") === "+94771234567" &&
+  auth.looksLikeNicAttempt("12345678V") === true &&
+  auth.looksLikeNicAttempt("Maduranga") === false &&
+  auth.looksLikeNicAttempt("41/01") === false);
 
 console.log("\n── 5) WhatsApp recovery link format (req #2) ──");
 const wa = `https://wa.me/${seed.SETTINGS.whatsapp_number}?text=${encodeURIComponent("test")}`;
@@ -568,6 +585,26 @@ ok("root: backup carries root flag + AI secret (profiles + backup_secrets + sche
   backupTables.includes("profiles") &&
   backupTables.includes("backup_secrets") &&
   schema.includes("is_root_admin boolean"));
+
+console.log("\n── 18) Chat NIC/Phone validation + Activities log delete (superadmin only) ──");
+ok("chat: callback + message + member search validate NIC/phone before sending/searching",
+  liveChatSrc.includes("looksLikeNicAttempt(raw)") &&
+  liveChatSrc.includes("search_invalid_nic") &&
+  liveChatSrc.includes("validateNic(nic) || validatePhone(phone)") &&
+  liveChatSrc.includes("validatePhone(phone)") &&
+  liveChatSrc.includes("normalizeNic(cNic)") &&
+  liveChatSrc.includes("normalizePhone(String(fd.get(\"phone\")") &&
+  liveChatSrc.includes('logEvent("contact", ref') &&
+  !liveChatSrc.includes('logEvent("contact", `${name}'));
+const activitiesSrc = readFileSync(join(root, "src/app/admin/activities/page.tsx"), "utf8");
+ok("activities: log delete is superadmin-only in UI + RLS (regular admins blocked)",
+  activitiesSrc.includes('const canDeleteLogs = role === "superadmin"') &&
+  activitiesSrc.includes("deleteLog") &&
+  activitiesSrc.includes("deleteShown") &&
+  activitiesSrc.includes("LOG_DELETE") &&
+  schema.includes("create or replace function public.is_superadmin()") &&
+  schema.includes("activity_superadmin_delete") &&
+  !schema.includes("activity_admin_write on public.admin_activity_logs for all"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

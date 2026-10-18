@@ -882,12 +882,25 @@ create table if not exists public.admin_activity_logs (
   created_at timestamptz default now()
 );
 alter table public.admin_activity_logs enable row level security;
+-- Superadmin දැයි බලන helper එක (original + අලුතින් එකතු වූ superadmin ලා දෙන්නම)
+create or replace function public.is_superadmin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'superadmin'
+  );
+$$;
+
 drop policy if exists activity_admin_read on public.admin_activity_logs;
 create policy activity_admin_read on public.admin_activity_logs for select using (public.is_admin());
 drop policy if exists activity_insert on public.admin_activity_logs;
 create policy activity_insert on public.admin_activity_logs for insert with check (public.is_admin());
 drop policy if exists activity_admin_write on public.admin_activity_logs;
-create policy activity_admin_write on public.admin_activity_logs for all using (public.is_admin()) with check (public.is_admin());
+drop policy if exists activity_admin_update on public.admin_activity_logs;
+create policy activity_admin_update on public.admin_activity_logs for update using (public.is_admin()) with check (public.is_admin());
+-- Log මකන්න පුළුවන් superadmin ලාට විතරයි — සාමාන්‍ය admin ලාට බෑ
+drop policy if exists activity_superadmin_delete on public.admin_activity_logs;
+create policy activity_superadmin_delete on public.admin_activity_logs for delete using (public.is_superadmin());
 
 -- ===========================================================================
 -- 16. Application photo upload (public apply form) — anon storage insert
