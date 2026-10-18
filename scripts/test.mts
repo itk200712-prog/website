@@ -606,6 +606,16 @@ ok("activities: log delete is superadmin-only in UI + RLS (regular admins blocke
   schema.includes("activity_superadmin_delete") &&
   !schema.includes("activity_admin_write on public.admin_activity_logs for all"));
 
+console.log("\n── 19) Chat trainer credit + designer social menu ──");
+ok("chat footer: AI Trained By Induwara Thathsara opens designer WhatsApp/Facebook choices",
+  liveChatSrc.includes("AI Trained By") &&
+  liveChatSrc.includes("setShowTrainerLinks((v) => !v)") &&
+  liveChatSrc.includes("SITE.designer.whatsapp") &&
+  liveChatSrc.includes("SITE.designer.facebook") &&
+  liveChatSrc.includes("setShowTrainerLinks(false)") &&
+  !liveChatSrc.includes("අඩවියේ තොරතුරු + AI සෙවුමෙන් උත්තර දෙයි · 24/7") &&
+  !liveChatSrc.includes("Site answers + AI search · 24/7"));
+
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
 console.log(`══════════════════════════════════════\n`);

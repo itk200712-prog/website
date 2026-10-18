@@ -17,7 +17,7 @@
 // ============================================================================
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Fuel, Images, Loader2, Lock, MessageCircle, Minus, Newspaper, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Facebook, Fuel, Images, Loader2, Lock, MessageCircle, Minus, Newspaper, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { tokens } from "@/lib/search";
@@ -153,6 +153,7 @@ export function LiveChat() {
   const [sentOk, setSentOk] = useState(false);
   const [sentErr, setSentErr] = useState(false);
   const [msgErr, setMsgErr] = useState("");
+  const [showTrainerLinks, setShowTrainerLinks] = useState(false);
 
   // ── live agent (2-way) ──
   const [sessionKey, setSessionKey] = useState("");
@@ -251,6 +252,7 @@ export function LiveChat() {
     setCPhone("");
     setCSent(false);
     setMsgErr("");
+    setShowTrainerLinks(false);
     setOfficerReplySi(null);
     setTyping(false);
     setAutoScroll(true);
@@ -2678,7 +2680,41 @@ export function LiveChat() {
                       <Send size={16} />
                     </button>
                   </div>
-                  <div className="mt-1.5 text-center text-[9.5px] text-slate-400">{aiEnabled ? (si ? "අඩවියේ තොරතුරු + AI සෙවුමෙන් උත්තර දෙයි · 24/7" : "Site answers + AI search · 24/7") : si ? "අඩවියේ තහවුරු කළ තොරතුරු වලින් උත්තර දෙයි · 24/7" : "Answers from verified website information · 24/7"}</div>
+                  <div className="relative mt-1.5 text-center text-[9.5px] text-slate-400">
+                    AI Trained By{" "}
+                    <button
+                      type="button"
+                      onClick={() => setShowTrainerLinks((v) => !v)}
+                      aria-expanded={showTrainerLinks}
+                      aria-haspopup="true"
+                      title="WhatsApp / Facebook"
+                      className="font-bold text-slate-600 underline decoration-dotted underline-offset-2 transition hover:text-indigo-600"
+                    >
+                      Induwara Thathsara
+                    </button>
+                    {showTrainerLinks && (
+                      <div className="pop-in absolute bottom-full left-1/2 z-20 mb-2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-slate-200 bg-white p-1 shadow-xl">
+                        <a
+                          href={SITE.designer.whatsapp}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={() => setShowTrainerLinks(false)}
+                          className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-1.5 text-[10px] font-extrabold text-white transition hover:bg-emerald-700"
+                        >
+                          <MessageCircle size={13} /> WhatsApp
+                        </a>
+                        <a
+                          href={SITE.designer.facebook}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={() => setShowTrainerLinks(false)}
+                          className="flex items-center gap-1.5 rounded-full bg-blue-600 px-2.5 py-1.5 text-[10px] font-extrabold text-white transition hover:bg-blue-700"
+                        >
+                          <Facebook size={13} /> Facebook
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </>
