@@ -59,6 +59,22 @@ ok("Footer social icons use Admin links; designer popup stays separate",
   footerSrc.includes("href={SITE.designer.facebook}") &&
   !footerSrc.includes("socialLinks?.wa || SITE.designer") &&
   !footerSrc.includes("socialLinks?.fb || SITE.designer"));
+const exampleUiSrc = [
+  "src/components/live-chat.tsx",
+  "src/app/signin/page.tsx",
+  "src/app/register/page.tsx",
+  "src/components/apply-form.tsx",
+  "src/components/site-sections.tsx",
+  "src/app/admin/data/page.tsx",
+  "src/lib/search.ts",
+  "src/lib/auth.ts",
+].map((p) => readFileSync(join(root, p), "utf8")).join("\n");
+const nicExampleTokens = [...exampleUiSrc.matchAll(/(?<![\d-])(?:\d{9}V|\d{12})(?![\d-])/g)].map((m) => m[0]);
+ok("Examples use Maduranga + fake NIC formats only (no personal example name/NIC)",
+  nicExampleTokens.length > 0 &&
+  nicExampleTokens.every((x) => x === "123456789V" || x === "123456789012") &&
+  exampleUiSrc.includes("Maduranga") &&
+  exampleUiSrc.includes("මදුරංග"));
 ok("FormSubmit email itk200712@gmail.com", seed.SETTINGS.contact_email_1 === "itk200712@gmail.com");
 ok("Years of service 50", seed.SETTINGS.years_of_service === 50 || seed.SETTINGS.years_of_service === "50");
 ok("Hero images 5ක් (auto-change slideshow)", Array.isArray(seed.SETTINGS.hero_images) && seed.SETTINGS.hero_images.length === 5, `got ${seed.SETTINGS.hero_images?.length}`);

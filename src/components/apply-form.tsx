@@ -193,7 +193,7 @@ export function ApplyForm() {
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <label className="field-label">{t.applyPage.nicField} *</label>
-            <input name="nic" required className="field" defaultValue={me?.nic || ""} placeholder="e.g. 199012345678 or 901234567V" />
+            <input name="nic" required className="field" defaultValue={me?.nic || ""} placeholder="e.g. 123456789V or 123456789012" />
           </div>
           <div>
             <label className="field-label">{t.applyPage.phoneField} *</label>

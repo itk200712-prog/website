@@ -288,7 +288,7 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
 
   function downloadSample(xlsx: boolean) {
     const head = ["Member Number", "NIC", "FULL NAME", "ADDRESS", "POSTAL ADDRESS", "GENDER"];
-    const sample = [{ member_no: "001", nic: "199012345678", full_name: "නිමල් පෙරේරා", address: "හෙට්ටිපොල", postal_address: "හෙට්ටිපොල", gender: "Male" }];
+    const sample = [{ member_no: "001", nic: "123456789012", full_name: "මදුරංග", address: "හෙට්ටිපොල", postal_address: "හෙට්ටිපොල", gender: "Male" }];
     if (xlsx) {
       (async () => {
         const XLSX = await import("xlsx");

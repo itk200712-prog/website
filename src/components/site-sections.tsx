@@ -239,7 +239,7 @@ export function InquiryForm({ department, compact }: { department?: string; comp
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="field-label">{t.contactPage.name} *</label>
-          <input name="name" required className="field" placeholder="e.g. Sunil Perera" />
+          <input name="name" required className="field" placeholder="e.g. Maduranga" />
         </div>
         <div>
           <label className="field-label">{t.contactPage.phone} *</label>

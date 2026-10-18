@@ -164,7 +164,7 @@ export default function SignInPage() {
           <form onSubmit={submit} className="mt-7 space-y-4">
             <div>
               <label className="field-label">{t.auth.nic}</label>
-              <input name="nic" required className="field !py-3 !text-[14px]" placeholder="e.g. 200478922123 or 851234567V" />
+              <input name="nic" required className="field !py-3 !text-[14px]" placeholder="e.g. 123456789V or 123456789012" />
             </div>
             <div>
               <div className="flex items-center justify-between">
@@ -248,11 +248,11 @@ function WhatsAppRecovery({ onClose }: { onClose: () => void }) {
         >
           <div>
             <label className="field-label">{t.auth.fullname} *</label>
-            <input name="name" required className="field" placeholder="e.g. Induwara Perera" />
+            <input name="name" required className="field" placeholder="e.g. Maduranga" />
           </div>
           <div>
             <label className="field-label">{t.auth.nic} *</label>
-            <input name="nic" required className="field" placeholder="E.G. 200478922123 OR 851234567V" />
+            <input name="nic" required className="field" placeholder="E.G. 123456789V OR 123456789012" />
           </div>
           <div>
             <label className="field-label">{t.auth.phone} *</label>

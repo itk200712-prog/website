@@ -36,7 +36,7 @@ export function validateNic(raw: string): string | null {
   if (!v) return "NIC අංකය ඇතුළත් කරන්න / NIC is required";
   if (/^\d{12}$/.test(v)) return null;
   if (/^\d{9}[vV]$/.test(v)) return null;
-  return "NIC අංකය වැරදියි — ඉලක්කම් 12ක් හෝ ඉලක්කම් 9ක් + v/V (උදා: 200012345678 / 912345678V)";
+  return "NIC අංකය වැරදියි — ඉලක්කම් 12ක් හෝ ඉලක්කම් 9ක් + v/V (උදා: 123456789012 / 123456789V)";
 }
 
 /** Phone: 0 + ඉලක්කම් 9 (මුළු 10) හෝ +94 + ඉලක්කම් 9 */

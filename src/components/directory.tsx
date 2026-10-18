@@ -148,7 +148,7 @@ export function DirectoryTable({
 
   const filtered = useMemo(() => {
     if (!q.trim()) return allRows.filter((r) => file === "all" || r.file_name === file);
-    // ✅ "ඉඳුවර කුමාරතුංග" → වචන දෙකම තියෙන සියලු අය (පිළිවෙළ වැදගත් නෑ)
+    // ✅ නමේ වචන කිහිපයක් දුන්නොත් → ඒ වචන ඔක්කොම තියෙන සියලු අය (පිළිවෙළ වැදගත් නෑ)
     return allRows.filter((r) => {
       if (file !== "all" && r.file_name !== file) return false;
       return rowMatch(r as unknown as Record<string, unknown>, q, [

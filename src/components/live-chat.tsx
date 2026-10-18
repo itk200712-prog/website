@@ -411,8 +411,8 @@ export function LiveChat() {
         from: "bot",
         bold: si ? "🔎 සාමාජිකයෙක් සොයන්න" : "🔎 Find a Member",
         text: si
-          ? "ඔබේ නම හෝ ජාතික හැඳුනුම්පත් අංකය (NIC) පහත කොටුවේ ලියා Search ඔබන්න.\nඋදා: මුදිත හෝ 200700203704"
-          : "Enter Your Name or NIC in the box below and press Search.\nExample: Muditha or 200700203704",
+          ? "ඔබේ නම හෝ ජාතික හැඳුනුම්පත් අංකය (NIC) පහත කොටුවේ ලියා Search ඔබන්න.\nඋදා: මදුරංග, 123456789V හෝ 123456789012"
+          : "Enter Your Name or NIC in the box below and press Search.\nExample: Maduranga, 123456789V or 123456789012",
       });
       return;
     }
@@ -899,7 +899,7 @@ export function LiveChat() {
     setBusy(true);
     setTyping(true);
     const safe = raw.replace(/[%,()*]/g, " ").replace(/\s+/g, " ").trim();
-    // ✅ "ඉඳුවර කුමාරතුංග" → වචන දෙකම තියෙන සියලු අය (පිළිවෙළ වැදගත් නෑ)
+    // ✅ නමේ වචන කිහිපයක් දුන්නොත් → ඒ වචන ඔක්කොම තියෙන සියලු අය (පිළිවෙළ වැදගත් නෑ)
     const toks = tokens(raw).map((t) => t.replace(/[%,()*]/g, "")).filter(Boolean);
     const FIELDS = "member_no,full_name,nic,address,postal_address,gender,file_name";
     const orFor = (t: string) => `or(full_name.ilike.*${t}*,nic.ilike.*${t}*,member_no.ilike.*${t}*)`;
@@ -2534,7 +2534,7 @@ export function LiveChat() {
                       autoFocus
                       value={term}
                       onChange={(e) => setTerm(e.target.value)}
-                      placeholder={si ? "උදා: මුදිත / 200700203704" : "e.g. Muditha / 200700203704"}
+                      placeholder={si ? "උදා: මදුරංග / 123456789V" : "e.g. Maduranga / 123456789V"}
                       className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] outline-none focus:border-indigo-400 focus:bg-white"
                     />
                     <button
