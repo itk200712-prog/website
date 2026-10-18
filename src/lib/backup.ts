@@ -26,6 +26,7 @@ export const BACKUP_TABLES: BackupTable[] = [
   { name: "fuel_prices", pk: "type" },
   { name: "fuel_stock", pk: "id" },
   { name: "system_settings", pk: "key" },
+  { name: "notify_emails", pk: "id" },
   { name: "messages", pk: "id" },
   { name: "f28_members", pk: "id" },
   { name: "f28_items", pk: "id" },
@@ -128,6 +129,15 @@ const DDL_OVERRIDE: Record<string, string> = {
   query text default '',
   matched int default 0,
   session_id text default '',
+  created_at timestamptz default now()
+);`,
+  notify_emails: `create table if not exists public.notify_emails (
+  id uuid primary key default gen_random_uuid(),
+  label text not null default '',
+  email text not null,
+  active boolean not null default true,
+  verification text not null default 'pending',
+  verified_at timestamptz,
   created_at timestamptz default now()
 );`,
 };

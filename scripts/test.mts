@@ -270,6 +270,16 @@ ok("admin: Messages page loads real DB rows (no fake seed)",
 ok("admin: Emails page has the Message Box route card",
   adminEmailsSrc.includes("message: Inbox") && adminEmailsSrc.includes("fb.message"));
 
+console.log("\n── 14) Backup completeness ──");
+const backupSrc = readFileSync(join(root, "src/lib/backup.ts"), "utf8");
+const schemaTables = Array.from(new Set([...schema.matchAll(/create table if not exists public\.([a-z0-9_]+)/gi)].map((m) => m[1])));
+const backupTables = [...backupSrc.matchAll(/\{ name: "([a-z0-9_]+)"/g)].map((m) => m[1]);
+ok("backup: covers EVERY table in schema.sql",
+  schemaTables.every((t) => backupTables.includes(t)),
+  `missing: ${schemaTables.filter((t) => !backupTables.includes(t)).join(", ") || "none"}`);
+ok("backup: includes settings + messages + notify emails (new mail features)",
+  ["system_settings", "messages", "notify_emails", "chat_sessions", "chat_messages"].every((t) => backupTables.includes(t)));
+
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
 console.log(`══════════════════════════════════════\n`);
