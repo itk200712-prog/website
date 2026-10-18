@@ -390,7 +390,7 @@ ok("ai: enabled only for explicit on values", baymaxAi.isAiEnabledValue("1") ===
 ok("ai: secret mask never reveals the full key", baymaxAi.maskSecret("prod-secret-123456abcd") === "prod…abcd" && baymaxAi.maskSecret("short") === "••••••••" && baymaxAi.maskSecret("") === "");
 ok("ai: question is trimmed/collapsed and capped", baymaxAi.normalizeAiQuestion("  hello\n\n world  ") === "hello world" && baymaxAi.normalizeAiQuestion("x".repeat(900)).length === 600);
 const siInstruction = baymaxAi.baymaxAiSystemInstruction("si");
-ok("ai: Sinhala instruction + no invented society facts", siInstruction.includes("Sinhala script") && siInstruction.includes("Never invent facts") && siInstruction.includes("Google Search"));
+ok("ai: Sinhala instruction + no invented society facts", siInstruction.includes("Sinhala script") && siInstruction.includes("Never invent facts") && siInstruction.includes("Google Search") && siInstruction.includes("Do not add an unrelated society"));
 const groundedReq = baymaxAi.buildGeminiRequest("සමූපකාරයක් යනු කුමක්ද?", "si", true) as { tools?: unknown; contents: { parts: { text: string }[] }[] };
 ok("ai: Gemini request uses Google Search grounding", JSON.stringify(groundedReq.tools) === JSON.stringify([{ google_search: {} }]) && groundedReq.contents[0].parts[0].text.includes("සමූපකාරයක්"));
 const plainReq = baymaxAi.buildGeminiRequest("hello", "en", false) as { tools?: unknown };
