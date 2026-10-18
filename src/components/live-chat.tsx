@@ -146,6 +146,7 @@ export function LiveChat() {
   // legacy message form
   const [sending, setSending] = useState(false);
   const [sentOk, setSentOk] = useState(false);
+  const [sentErr, setSentErr] = useState(false);
 
   // ── live agent (2-way) ──
   const [sessionKey, setSessionKey] = useState("");
@@ -1844,45 +1845,77 @@ export function LiveChat() {
     }, 350);
   }
 
-  // ── legacy "Message" tab (free text) ──
+  // ── "Message" tab (free text) ──
+  // පණිවිඩය (1) Admin → Messages එකේ පෙන්නන්න messages table එකටත්,
+  // (2) Admin → Emails හි "වෙබ් පණිවිඩ පෙට්ටිය" ලිපිනවලට email එකක් ලෙසත් යයි.
+  // එවන්නා email එකක් දුන්නොත් ඔහුට/ඇයට confirmation email එකකුත් යයි.
   async function submitMessage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSending(true);
+    setSentOk(false);
+    setSentErr(false);
     const form = e.currentTarget;
     const fd = new FormData(form);
-    const payload = {
-      _subject: `MPCS Live Chat message — ${String(fd.get("name") || "Guest")}`,
-      Source: "Website Live Chat",
-      Name: String(fd.get("name") || ""),
-      Phone: String(fd.get("phone") || ""),
-      Email: String(fd.get("email") || "—"),
-      Message: String(fd.get("message") || ""),
+    const name = String(fd.get("name") || "").trim();
+    const phone = String(fd.get("phone") || "").trim();
+    const emailRaw = String(fd.get("email") || "").trim();
+    const message = String(fd.get("message") || "").trim();
+    const visitorEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailRaw) ? emailRaw : "";
+
+    const payload: Record<string, unknown> = {
+      _subject: `MPCS website message — ${name || "Guest"}`,
+      Source: "Website Message Box (chat widget)",
+      Name: name,
+      Phone: phone,
+      Email: visitorEmail || "—",
+      Message: message,
     };
-    try {
-      const { sendToRoute } = await import("@/lib/mail-routes");
-      await sendToRoute("livechat", payload);
-    } catch {
-      /* offline */
+    if (visitorEmail) {
+      // FormSubmit: "email" field එකටයි confirmation (autoresponse) එක යන්නේ
+      payload.email = visitorEmail;
+      payload._replyto = visitorEmail;
+      payload._autoresponse = si
+        ? `ස්තූතියි ${name}! ඔබේ පණිවිඩය ${SITE.short_si} ට ලැබුණා. අපි ඉක්මනින් ඔබ සම්බන්ධ කර ගන්නෙමු. හදිසි නම් ${SITE.phones[0]} අමතන්න.`
+        : `Thank you ${name}! Your message has been received by ${SITE.short_en}. We will get back to you shortly. For anything urgent, call ${SITE.phones[0]}.`;
     }
+
+    // ① site එකේ (Admin → Messages) පෙන්නන්න save කරන්න
+    let saved = false;
     try {
       const { createAnonClient } = await import("@/lib/supabase/anon");
-      await createAnonClient().from("messages").insert({
-        name: payload.Name,
-        phone: payload.Phone,
-        email: payload.Email,
+      const { error } = await createAnonClient().from("messages").insert({
+        name,
+        phone,
+        email: visitorEmail,
         department: "Live Chat",
-        subject: "Live Chat message",
-        message: payload.Message,
+        subject: "Website message (Message tab)",
+        message,
         status: "unread",
       });
+      saved = !error;
     } catch {
       /* best effort */
     }
-    void logEvent("message", payload.Name, 0, sessionRef.current);
+
+    // ② කාර්යාල inbox වලට email කරන්න (Admin → Emails → වෙබ් පණිවිඩ පෙට්ටිය)
+    let emailed = false;
+    try {
+      const { sendToRoute } = await import("@/lib/mail-routes");
+      emailed = (await sendToRoute("message", payload)) > 0;
+    } catch {
+      /* offline */
+    }
+
+    void logEvent(saved || emailed ? "message" : "message_failed", name, 0, sessionRef.current);
     setSending(false);
-    setSentOk(true);
-    form.reset();
-    setTimeout(() => setSentOk(false), 5000);
+    if (saved || emailed) {
+      setSentOk(true);
+      form.reset();
+      setTimeout(() => setSentOk(false), 6000);
+    } else {
+      // බොරුවට "යැවුණා" කියන්නේ නෑ — නැවත උත්සාහයට පෝරමය එහෙම්ම තියයි
+      setSentErr(true);
+    }
   }
 
   // ✅ Clear chat පෙන්වන්නේ clear කරන්න ඇත්ත පණිවිඩ (visitor/agent) තිබුණොත් විතරයි —
@@ -2654,7 +2687,7 @@ export function LiveChat() {
           ) : (
             <form onSubmit={submitMessage} className="flex-1 overflow-y-auto bg-slate-50 p-3.5 space-y-2.5">
               <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 text-[11px] text-indigo-800 font-semibold">
-                {si ? "📨 ඔබේ පණිවිඩය කෙලින්ම අපගේ කාර්යාලයට email එකක් ලෙස යැවේ." : "📨 Your message goes straight to our office as an email."}
+                {si ? "📨 ඔබේ පණිවිඩය අපේ කාර්යාල inbox එකට යැවෙන අතර අපට email එකකුත් ලැබේ." : "📨 Your message goes to our office inbox and is emailed to us right away."}
               </div>
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{si ? "නම" : "Name"} *</label>
@@ -2677,6 +2710,11 @@ export function LiveChat() {
               {sentOk && (
                 <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2.5 text-[11.5px] font-bold text-emerald-700">
                   ✅ {si ? "පණිවිඩය යැවුණා! අපි ඉක්මනින් සම්බන්ධ වන්නෙමු." : "Message sent! We'll get back to you shortly."}
+                </div>
+              )}
+              {sentErr && (
+                <div className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2.5 text-[11.5px] font-bold text-rose-700">
+                  ⚠ {si ? `පණිවිඩය යැවීමට බැරි විය. නැවත උත්සාහ කරන්න, නැත්නම් ${SITE.phones[0]} අමතන්න.` : `Couldn't send your message. Please try again, or call ${SITE.phones[0]}.`}
                 </div>
               )}
               <button

@@ -4,9 +4,10 @@
 // Messages & Inquiries — business categories + status + Reply option
 // ============================================================================
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, Mail, RefreshCw, Reply, Search, Send } from "lucide-react";
 import { AdminTopbar, dbUpdate, useNotice } from "@/components/admin";
+import { authedClient } from "@/lib/supabase/client";
 
 type Msg = {
   id: string;
@@ -14,28 +15,28 @@ type Msg = {
   phone: string;
   email: string;
   department: string;
+  subject?: string | null;
   message: string;
   status: "unread" | "read" | "replied";
   reply: string;
   ago: string;
 };
 
-const SEED: Msg[] = [
-  {
-    id: "m1",
-    name: "INDUWARA",
-    phone: "076 424 7716",
-    email: "induwara@gmail.com",
-    department: "General Society Inquiries",
-    message: "සිංහල පරීක්ෂණය - පණිවුඩය පරීක්ෂණය / EFWERGFREG",
-    status: "unread",
-    reply: "",
-    ago: "23h ago",
-  },
-];
+function timeAgo(iso?: string): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return "";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
+  return new Date(iso).toLocaleDateString("en-GB");
+}
 
 const DEPTS = [
   "All Messages",
+  "Live Chat",
   "Rural Bank",
   "Consumer Section",
   "Fuel Station",
@@ -53,11 +54,54 @@ const STATUS = ["all", "unread", "read", "replied"] as const;
 
 export default function AdminMessagesPage() {
   const { show, node } = useNotice();
-  const [msgs, setMsgs] = useState<Msg[]>(SEED);
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [loading, setLoading] = useState(true);
   const [dept, setDept] = useState("All Messages");
   const [status, setStatus] = useState<(typeof STATUS)[number]>("all");
   const [q, setQ] = useState("");
   const [replyFor, setReplyFor] = useState<string | null>(null);
+
+  // ඇත්ත පණිවිඩ database එකෙන් — Contact form, business inquiries සහ
+  // චැට් එකේ Message tab එකෙන් එන ඔක්කොම මෙතැනට එයි
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const sb = await authedClient();
+      const { data, error } = await sb
+        .from("messages")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(300);
+      if (error) throw new Error(error.message);
+      setMsgs(
+        ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+          id: String(r.id ?? ""),
+          name: String(r.name ?? ""),
+          phone: String(r.phone ?? ""),
+          email: String(r.email ?? ""),
+          department: String(r.department ?? "General Society Inquiries"),
+          subject: (r.subject as string | null) ?? null,
+          message: String(r.message ?? ""),
+          status: (["unread", "read", "replied"].includes(String(r.status)) ? r.status : "unread") as Msg["status"],
+          reply: String(r.reply ?? ""),
+          ago: timeAgo(r.created_at as string | undefined),
+        }))
+      );
+    } catch (e) {
+      show(`⚠ පණිවිඩ load කිරීමට බැරි විය: ${e instanceof Error ? e.message : "error"}`);
+    }
+    setLoading(false);
+  }, [show]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // දත්තවල තියෙන අමතර department උත් tabs වලට එකතු කරන්න
+  const depts = useMemo(() => {
+    const extra = Array.from(new Set(msgs.map((m) => m.department).filter((d) => d && !DEPTS.includes(d))));
+    return [...DEPTS, ...extra];
+  }, [msgs]);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -65,9 +109,22 @@ export default function AdminMessagesPage() {
       (m) =>
         (dept === "All Messages" || m.department === dept) &&
         (status === "all" || m.status === status) &&
-        (!s || m.name.toLowerCase().includes(s) || m.message.toLowerCase().includes(s) || m.phone.includes(s))
+        (!s ||
+          m.name.toLowerCase().includes(s) ||
+          m.message.toLowerCase().includes(s) ||
+          (m.subject ?? "").toLowerCase().includes(s) ||
+          m.email.toLowerCase().includes(s) ||
+          m.phone.includes(s))
     );
   }, [msgs, dept, status, q]);
+
+  function openReply(m: Msg) {
+    setReplyFor(replyFor === m.id ? null : m.id);
+    if (m.status === "unread") {
+      setMsgs((xs) => xs.map((x) => (x.id === m.id ? { ...x, status: "read" } : x)));
+      void dbUpdate("messages", { id: m.id }, { status: "read" });
+    }
+  }
 
   async function sendReply(m: Msg, text: string) {
     setMsgs((xs) => xs.map((x) => (x.id === m.id ? { ...x, status: "replied", reply: text } : x)));
@@ -88,7 +145,7 @@ export default function AdminMessagesPage() {
               <Mail size={20} className="text-indigo-700" /> Customer Inquiries &amp; Messages
             </h2>
             <p className="text-slate-500 text-[12px] mt-1">
-              Incoming inquiries routed from business pages categorized by department
+              Incoming messages from the website — contact form, business pages and the chat Message tab
             </p>
           </div>
           <div className="relative w-full sm:w-80">
@@ -100,7 +157,7 @@ export default function AdminMessagesPage() {
         {/* business category tabs (scrollable) */}
         <div className="scroll-x mt-5 pb-1">
           <div className="flex gap-2 min-w-max">
-            {DEPTS.map((d) => {
+            {depts.map((d) => {
               const count = msgs.filter((m) => d === "All Messages" || m.department === d).length;
               return (
                 <button
@@ -131,8 +188,8 @@ export default function AdminMessagesPage() {
               {s[0].toUpperCase() + s.slice(1)} {s === "all" ? msgs.length : msgs.filter((m) => m.status === s).length}
             </button>
           ))}
-          <button className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center ml-1" onClick={() => show("Refreshed")}>
-            <RefreshCw size={13} />
+          <button className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center ml-1" onClick={() => void load()} disabled={loading} title="Refresh">
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
@@ -142,8 +199,8 @@ export default function AdminMessagesPage() {
         {filtered.length === 0 ? (
           <div className="card py-16 text-center">
             <Mail size={40} className="mx-auto text-slate-300" />
-            <div className="text-slate-600 font-bold text-[15px] mt-3">No inquiries found for this category.</div>
-            <div className="text-slate-400 text-[12px]">Messages submitted by customers and members will appear here automatically.</div>
+            <div className="text-slate-600 font-bold text-[15px] mt-3">{loading ? "Loading messages…" : "No inquiries found for this category."}</div>
+            <div className="text-slate-400 text-[12px]">Messages from the contact form, business pages and the chat Message tab appear here automatically.</div>
           </div>
         ) : (
           filtered.map((m) => (
@@ -157,8 +214,9 @@ export default function AdminMessagesPage() {
                     {m.status === "replied" && <span className="badge-green rounded-full px-2 py-0.5 text-[9.5px] font-bold">Replied</span>}
                   </div>
                   <div className="text-slate-500 text-[11.5px] mt-1">
-                    📞 {m.phone} · ✉ {m.email}
+                    📞 {m.phone} · ✉ {m.email || "—"}
                   </div>
+                  {m.subject && <div className="text-slate-400 text-[11px] mt-0.5 font-semibold">{m.subject}</div>}
                   <div className="text-slate-700 text-[12.5px] mt-2">{m.message}</div>
                   {m.reply && (
                     <div className="mt-2.5 rounded-xl bg-emerald-50 border border-emerald-100 px-3.5 py-2.5 text-[12px] text-emerald-900">
@@ -168,7 +226,7 @@ export default function AdminMessagesPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-slate-400 text-[10.5px]">{m.ago}</div>
-                  <button className="btn btn-primary !py-1.5 !px-3.5 !text-[11.5px] mt-2" onClick={() => setReplyFor(replyFor === m.id ? null : m.id)}>
+                  <button className="btn btn-primary !py-1.5 !px-3.5 !text-[11.5px] mt-2" onClick={() => openReply(m)}>
                     <Reply size={13} /> Reply
                   </button>
                 </div>
@@ -194,7 +252,7 @@ export default function AdminMessagesPage() {
       </div>
 
       <div className="mt-5 text-[11px] text-slate-400 flex items-center gap-1.5">
-        <Building2 size={12} /> Business "Send Inquiry" forms route here — replies update status to Replied. Notification email is set in System Settings.
+        <Building2 size={12} /> Contact form, business "Send Inquiry" forms and the chat Message tab all route here. Notification email addresses are set in Admin → Emails.
       </div>
     </div>
   );

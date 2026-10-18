@@ -11,7 +11,7 @@
 
 import { createAnonClient } from "@/lib/supabase/anon";
 
-export type MailRouteKey = "membership" | "inquiry" | "livechat" | "business";
+export type MailRouteKey = "membership" | "inquiry" | "livechat" | "message" | "business";
 
 export type MailRouteDef = {
   key: MailRouteKey;
@@ -53,6 +53,14 @@ export const MAIL_ROUTES: MailRouteDef[] = [
     desc_en: "‘Contact Live Chat’ සහ ‘Request a Call’ ඉල්ලීම් (නම · NIC · දුරකථන) මේ ලිපින වලට යයි.",
     desc_si: "‘Contact Live Chat’ සහ ‘Request a Call’ ඉල්ලීම් (නම · NIC · දුරකථන) මේ ලිපින වලට යයි.",
     fallbackKeys: ["live_chat_email", "contact_email_1"],
+  },
+  {
+    key: "message",
+    title_en: "Website Message Box",
+    title_si: "වෙබ් පණිවිඩ පෙට්ටිය (Message tab)",
+    desc_en: "Messages sent from the chat widget's ‘Message’ tab are emailed to these addresses (and also appear in Admin → Messages).",
+    desc_si: "චැට් එකේ ‘Message’ tab එකෙන් එවන පණිවිඩ මේ ලිපින වලට email වේ — එම පණිවිඩ Admin → Messages එකෙත් පෙනේ.",
+    fallbackKeys: ["mail_route_livechat_1", "live_chat_email", "contact_email_1"],
   },
   {
     key: "business",
@@ -150,14 +158,27 @@ export async function sendToRoute(route: MailRouteKey, payload: Record<string, u
   if (!list.length) return 0;
   let ok = 0;
   await Promise.all(
-    list.map(async (to) => {
+    list.map(async (to, i) => {
       try {
+        // Visitor confirmation (_autoresponse) එක පළමු ලිපිනයෙන් පමණයි —
+        // නැත්නම් ලිපින ගණනටම confirmation mail යයි
+        const body: Record<string, unknown> = { ...payload };
+        if (i > 0) delete body._autoresponse;
         const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(body),
         });
-        if (res.ok) ok++;
+        // FormSubmit එක HTTP 200 දුන්නත් confirm නොකළ ලිපිනයකට success:"false" එයි —
+        // ඒක "යැවුණා" කියලා ගණන් ගන්නේ නෑ
+        let sent = res.ok;
+        try {
+          const j = (await res.json()) as { success?: boolean | string } | null;
+          if (j && typeof j.success !== "undefined") sent = res.ok && (j.success === true || j.success === "true");
+        } catch {
+          /* JSON නෙවෙයි නම් HTTP status එකම ඇති */
+        }
+        if (sent) ok++;
       } catch {
         /* ignore */
       }

@@ -4,12 +4,12 @@
 // Admin → Emails — ㉕  (හැම email notification එකක්ම එකම තැනක)
 //  එක් එක් "කාරනාව" (route) එකට ලිපින 1–4ක් — හැම ලිපිනයකටම email යයි.
 //  · Membership Applications  · Contact / Inquiry Form
-//  · Live Chat Requests        · Business Unit Inquiries
+//  · Live Chat Requests        · Website Message Box · Business Unit Inquiries
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle, Briefcase, CheckCircle2, Info, Mail, MessageCircle, Plus, RefreshCw,
+  AlertTriangle, Briefcase, CheckCircle2, Inbox, Info, Mail, MessageCircle, Plus, RefreshCw,
   Save, Send, Sparkles, Trash2, UserPlus, X,
 } from "lucide-react";
 import { AdminTopbar, useNotice } from "@/components/admin";
@@ -25,6 +25,7 @@ const ICONS: Record<MailRouteKey, typeof Mail> = {
   membership: UserPlus,
   inquiry: Mail,
   livechat: MessageCircle,
+  message: Inbox,
   business: Briefcase,
 };
 
@@ -32,6 +33,7 @@ const TONES: Record<MailRouteKey, string> = {
   membership: "from-indigo-500 to-indigo-700 shadow-indigo-200",
   inquiry: "from-sky-500 to-cyan-600 shadow-sky-200",
   livechat: "from-fuchsia-500 to-purple-600 shadow-fuchsia-200",
+  message: "from-emerald-500 to-teal-600 shadow-emerald-200",
   business: "from-amber-500 to-orange-600 shadow-amber-200",
 };
 
@@ -72,6 +74,7 @@ export default function AdminEmailsPage() {
       fb.membership = pick(["contact_email_1", "contact_email_2"]);
       fb.inquiry = pick(["contact_email_1", "contact_email_2"]);
       fb.livechat = pick(["live_chat_email", "contact_email_1"]);
+      fb.message = Array.from(new Set(pick(["mail_route_livechat_1", "live_chat_email", "contact_email_1"])));
       fb.business = pick(["contact_email_1", "contact_email_2"]);
       setFallback(fb);
     } catch {

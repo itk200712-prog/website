@@ -252,6 +252,24 @@ ok(
   !registeredSecret || !JSON.stringify(knowledgeIndex).includes(registeredSecret),
 );
 
+console.log("\n── 13) Website Message Box → admin inbox + email ──");
+const mailRoutesSrc = readFileSync(join(root, "src/lib/mail-routes.ts"), "utf8");
+const liveChatSrc = readFileSync(join(root, "src/components/live-chat.tsx"), "utf8");
+const adminMessagesSrc = readFileSync(join(root, "src/app/admin/messages/page.tsx"), "utf8");
+const adminEmailsSrc = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
+ok("mail: dedicated 'message' route exists with livechat/contact fallback",
+  mailRoutesSrc.includes('key: "message"') && mailRoutesSrc.includes('"mail_route_livechat_1", "live_chat_email", "contact_email_1"'));
+ok("mail: unconfirmed FormSubmit address is not counted as sent",
+  mailRoutesSrc.includes('j.success === "true"'));
+ok("mail: Message tab emails via 'message' route + visitor confirmation",
+  liveChatSrc.includes('sendToRoute("message", payload)') && liveChatSrc.includes("_autoresponse") && liveChatSrc.includes("payload.email = visitorEmail"));
+ok("mail: Message tab claims success only when saved or emailed",
+  liveChatSrc.includes("if (saved || emailed)") && liveChatSrc.includes("saved = !error"));
+ok("admin: Messages page loads real DB rows (no fake seed)",
+  adminMessagesSrc.includes('.from("messages")') && adminMessagesSrc.includes('.select("*")') && !adminMessagesSrc.includes("INDUWARA"));
+ok("admin: Emails page has the Message Box route card",
+  adminEmailsSrc.includes("message: Inbox") && adminEmailsSrc.includes("fb.message"));
+
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
 console.log(`══════════════════════════════════════\n`);
