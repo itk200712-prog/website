@@ -29,6 +29,7 @@ import {
   detectGallery,
   detectNameIntro,
   detectNews,
+  detectOfficerRequest,
   detectSmalltalk,
   canUseLiveChat,
   getLiveChatHoursStatus,
@@ -171,6 +172,10 @@ export function LiveChat() {
   const [officerJoined, setOfficerJoined] = useState(false);
   // 🕘 Live Chat කාර්යාල වේලාව (Asia/Colombo) — තත්පර 30කට වරක් refresh වේ
   const [liveHours, setLiveHours] = useState(() => getLiveChatHoursStatus());
+  // visitor ඇසූ භාෂාව officer flow එක පුරාම තබා ගන්න — ඊළඟ Yes/No click එකකදීත්
+  // මුල් සිංහල පණිවිඩය අතේ නැති නිසා page locale එකෙන් විතරක් තීරණය කරන්න බෑ.
+  const [officerReplySi, setOfficerReplySi] = useState<boolean | null>(null);
+  const contactReplySi = officerReplySi ?? si;
   const audioRef = useRef<AudioContext | null>(null);
   const soundRef = useRef(true);
   const typingAt = useRef(0);
@@ -225,6 +230,7 @@ export function LiveChat() {
     setCNic("");
     setCPhone("");
     setCSent(false);
+    setOfficerReplySi(null);
     setTyping(false);
     setAutoScroll(true);
   }
@@ -346,8 +352,9 @@ export function LiveChat() {
   // ─────────────────────────────────────────────────────────────────────────
   //  ACTIONS
   // ─────────────────────────────────────────────────────────────────────────
-  async function runAction(key: ActionKey) {
+  async function runAction(key: ActionKey, responseSi: boolean = si) {
     if (key === "live") {
+      setOfficerReplySi(responseSi);
       // ✅ නිලධාරියෙක් දැනටමත් join වී ඇත්නම් විතරක් Live Chat එක කෙලින්ම අරිනවා
       if (canUseLiveChat(liveStatus) || officerJoined) {
         setTab("live");
@@ -358,7 +365,7 @@ export function LiveChat() {
         return;
       }
       // 🕘 කාර්යාල වේලාවෙන් පිටත නම් ඊළඟ විවෘත වේලාව පෙන්වනවා
-      if (showLiveChatClosedNotice()) return;
+      if (showLiveChatClosedNotice(responseSi)) return;
       // 🔒 direct live chat නෑ — Baymax හරහා ඇමතුමක් ඉල්ලා නිලධාරියා join වෙනකම් ඉන්න ඕන
       setTab("chat");
       setPanel(null);
@@ -366,8 +373,8 @@ export function LiveChat() {
       if (sessionActive) {
         push({
           from: "bot",
-          bold: si ? "⏳ ඔබේ ඉල්ලීම ලැබී ඇත" : "⏳ Your request has been received",
-          text: si
+          bold: responseSi ? "⏳ ඔබේ ඉල්ලීම ලැබී ඇත" : "⏳ Your request has been received",
+          text: responseSi
             ? "නිලධාරියෙක් join වුණු ගමන් මෙතැන කොළ පාට දැනුම්දීමක් එනවා — ඒ බොත්තම ඔබලා Live Chat එකට එන්න පුළුවන්. කරුණාකර ටිකක් රැඳී සිටින්න."
             : "As soon as an officer joins, a green button will appear here — tap it to enter the live chat. Please hang tight a moment.",
         });
@@ -375,12 +382,12 @@ export function LiveChat() {
       }
       push({
         from: "bot",
-        bold: si ? "🔒 Live Chat එක පටන් ගන්නේ නිලධාරියෙක් join වුණාමයි" : "🔒 Live chat starts when an officer joins",
-        text: si
+        bold: responseSi ? "🔒 Live Chat එක පටන් ගන්නේ නිලධාරියෙක් join වුණාමයි" : "🔒 Live chat starts when an officer joins",
+        text: responseSi
           ? "මෙතැනින් කෙලින්ම chat පටන් ගන්න බෑ. මුලින් පහතින් ඔබේ විස්තර එවන්න — අපේ නිලධාරියෙක් join වුණු ගමන් ඔබට දැනුම් දීලා Live Chat එක unlock කරනවා."
           : "You can't start chatting from here directly. First send your details below — the moment our officer joins, we'll notify you and unlock the live chat.",
       });
-      void runAction("contact");
+      void runAction("contact", responseSi);
       return;
     }
     const my = ++flowRef.current;          // පරණ flow එක නවත්වයි
@@ -549,14 +556,15 @@ export function LiveChat() {
     }
 
     if (key === "contact") {
-      if (showLiveChatClosedNotice()) return;
+      setOfficerReplySi(responseSi);
+      if (showLiveChatClosedNotice(responseSi)) return;
       setTab("chat");
       setPanel("contact");
       setCSent(false);
       push({
         from: "bot",
-        bold: si ? "📨 සජීවී සම්බන්ධය" : "📨 Contact Live Chat",
-        text: si
+        bold: responseSi ? "📨 සජීවී සම්බන්ධය" : "📨 Contact Live Chat",
+        text: responseSi
           ? "ඔබේ නම, NIC සහ දුරකථන අංකය පහත ඇතුළත් කර Submit කරන්න.\nඅපගේ නිලධාරියෙක් ඉක්මනින් ඔබට කතා කරනවා."
           : "Enter your Name, NIC and Phone Number below, then press Submit.\nOne of our officers will contact you shortly.",
       });
@@ -949,12 +957,13 @@ export function LiveChat() {
   async function submitContact(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
+    const responseSi = contactReplySi;
     const name = cName.trim();
     const nic = cNic.trim();
     const phone = cPhone.trim();
     if (!name || !nic || !phone) return;
     // 🕘 form එක ඇරලා තියෙද්දී කාර්යාල වේලාව ඉවර වුණොත් ඉල්ලීම නොයවයි
-    if (showLiveChatClosedNotice()) return;
+    if (showLiveChatClosedNotice(responseSi)) return;
     setBusy(true);
     const ref = `LC-${Date.now().toString(36).toUpperCase().slice(-6)}`;
     push({ from: "me", text: `${name} · ${nic} · ${phone}` });
@@ -1015,8 +1024,8 @@ export function LiveChat() {
     setCSent(true);
     push({
       from: "bot",
-      bold: si ? "✅ ඉල්ලීම යවන ලදි" : "✅ Request sent",
-      text: si
+      bold: responseSi ? "✅ ඉල්ලීම යවන ලදි" : "✅ Request sent",
+      text: responseSi
         ? "ඔබේ තොරතුරු අපගේ කාර්යාලයට ලැබුණා.\nතහවුරු කිරීමේ email එකක් ද යවා ඇත.\n\n⏱ විනාඩි කීපයක් ඇතුළත අපගේ නිලධාරියෙක් ඔබට කතා කරනවා.\n\nකරුණාකර දුරකථනය ළඟ රැඳී සිටින්න."
         : "Your details have reached our office and a confirmation email was sent.\n\n⏱ Our officer will contact you within a few minutes.\n\nPlease keep your phone close.",
       card: "waiting",
@@ -1270,7 +1279,8 @@ export function LiveChat() {
    * නොයවා, ඊළඟට විවෘත වන වේලාව කියා දෙනවා. දැනටමත් join වී ඇති
    * සංවාදයකට මෙයින් බාධාවක් නෑ. @returns වසා ඇති බව දැනුම් දුන්නා නම් true
    */
-  function showLiveChatClosedNotice(): boolean {
+  function showLiveChatClosedNotice(responseSi: boolean = contactReplySi): boolean {
+    setOfficerReplySi(responseSi);
     const status = getLiveChatHoursStatus();
     setLiveHours(status);
     if (status.open || canUseLiveChat(liveStatus)) return false;
@@ -1279,8 +1289,8 @@ export function LiveChat() {
     setCSent(false);
     push({
       from: "bot",
-      bold: si ? "🕘 Live Chat දැන් වසා ඇත" : "🕘 Live Chat is closed right now",
-      text: si
+      bold: responseSi ? "🕘 Live Chat දැන් වසා ඇත" : "🕘 Live Chat is closed right now",
+      text: responseSi
         ? `මේ වෙලාවේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම අපහසුයි.\nකරුණාකර ${nextLiveChatOpenPhrase(true)} නැවත සම්බන්ධ වෙන්න.\n\nLive Chat වේලාවන්:\nසඳුදා – සිකුරාදා : පෙ.ව. 8.30 – ප.ව. 5.30\nසෙනසුරාදා : පෙ.ව. 8.30 – ප.ව. 1.30\nඉරිදා : වසා ඇත\n\nඊට අතරතුරු මට (Baymax) ඕනෑම දෙයක් අහන්න පුළුවන්. පණිවිඩයක් තියන්න ඕන නම් උඩ තියෙන “පණිවිඩය” tab එක පාවිච්චි කරන්න — නිලධාරීන් ඊළඟ කාර්යාල වේලාවේදී එය බලනවා.`
         : `It's difficult to connect you with a live officer at this time.\nPlease reconnect ${nextLiveChatOpenPhrase(false)}.\n\nLive Chat hours:\nMonday – Friday : 8:30 AM – 5:30 PM\nSaturday : 8:30 AM – 1:30 PM\nSunday : Closed\n\nIn the meantime, you can ask me (Baymax) anything. If you'd like to leave a message, use the “Message” tab above — our officers will see it during the next office hours.`,
       chips: si ? MENU_CHIPS_SI : MENU_CHIPS_EN,
@@ -1290,33 +1300,34 @@ export function LiveChat() {
   }
 
   // ── "Do you want to contact an officer?" — Yes / No ──
-  function askOfficer() {
-    if (showLiveChatClosedNotice()) return;
+  function askOfficer(responseSi: boolean = contactReplySi) {
+    setOfficerReplySi(responseSi);
+    if (showLiveChatClosedNotice(responseSi)) return;
     setTab("chat");
     setPanel(null);
     setCSent(false);
     push({
       from: "bot",
-      bold: si ? "🤝 නිලධාරියෙක් සම්බන්ධ කරගන්නද?" : "🤝 Do you want to contact an officer?",
-      text: si
+      bold: responseSi ? "🤝 නිලධාරියෙක් සම්බන්ධ කරගන්නද?" : "🤝 Do you want to contact an officer?",
+      text: responseSi
         ? "අපගේ නිලධාරියෙක් ඔබට කෙලින්ම කතා කරන්න පුළුවන්.\nඔබේ නම, NIC සහ දුරකථන අංකය දුන්නොත් විනාඩි කීපයක් ඇතුළත අපි සම්බන්ධ කරගන්නම්."
         : "One of our officers can call you back directly.\nShare your name, NIC and phone number and we will contact you within a few minutes.",
       choices: [
-        { label: si ? "ඔව්, සම්බන්ධ කරගන්න" : "Yes, contact me", kind: "yes" },
-        { label: si ? "නෑ, පස්සේ" : "No, not now", kind: "no" },
+        { label: responseSi ? "ඔව්, සම්බන්ධ කරගන්න" : "Yes, contact me", kind: "yes" },
+        { label: responseSi ? "නෑ, පස්සේ" : "No, not now", kind: "no" },
       ],
     });
     void logEvent("ask_officer", "", 0, sessionRef.current);
   }
 
-  function declineContact() {
+  function declineContact(responseSi: boolean = contactReplySi) {
     push({
       from: "bot",
-      bold: si ? "🙏 කමක් නෑ" : "🙏 No problem",
-      text: si
+      bold: responseSi ? "🙏 කමක් නෑ" : "🙏 No problem",
+      text: responseSi
         ? "ඕනෑම වෙලාවක “Contact Live Chat” බොත්තමෙන් අපිට කියන්න පුළුවන්.\n📞 දැන්ම කතා කරන්න ඕන නම්: " + SITE.phones[0]
         : "You can reach us anytime with the “Contact Live Chat” button.\n📞 To talk right now: " + SITE.phones[0],
-      chips: si ? ["කාර්යාල වේලාවන්", "සාමාජික සොයන්න"] : ["Office hours", "Find Member"],
+      chips: responseSi ? ["කාර්යාල වේලාවන්", "සාමාජික සොයන්න"] : ["Office hours", "Find Member"],
     });
     void logEvent("decline_officer", "", 0, sessionRef.current);
   }
@@ -1481,13 +1492,8 @@ export function LiveChat() {
 
   /** Search the website brain; returns false when no verified site answer is found. */
   async function answerFromKnowledge(q: string, rsi: boolean): Promise<boolean> {
-    const n = norm(q);
     // Explicit requests for a person keep using the officer-confirmation flow.
-    if (
-      /(live ?chat|live agent|contact (an )?(agent|officer|person|someone)|talk to (someone|somebody|a person)|call ?back|customer (care|service)|support team|සජීවී චැට්|නිලධාරියෙක් සම්බන්ධ|කෙනෙකුට කතා කරන්න)/.test(n)
-    ) {
-      return false;
-    }
+    if (detectOfficerRequest(q)) return false;
 
     const myFlow = flowRef.current;
     setTyping(true);
@@ -1559,7 +1565,7 @@ export function LiveChat() {
     // action shortcut
     const hit = ACTIONS.find((a) => norm(a.en) === n || norm(a.si) === n || (a.key === "find" && /^(search again|නැවත සොයන්න)$/.test(n)));
     if (hit) {
-      await runAction(hit.key);
+      await runAction(hit.key, replyIsSi(q, si));
       return;
     }
 
@@ -1626,6 +1632,22 @@ export function LiveChat() {
           : `I'm ${botName} — the live assistant of ${SITE.short_en}.\nHow are you doing?`,
       });
       void logEvent("intent_name_intro", "", 0, sessionRef.current);
+      return;
+    }
+
+    // “live chat / සජීවී චැට්” කෙටි නියෝගයම නම් පරණ direct live action එකම පාවිච්චි කරයි.
+    if (/^(live ?chat|live agent|සජීවී ?චැට්|සජීවී|ලයිව් ?චැට්|ලයිව්)$/.test(n)) {
+      void runAction("live", rsi);
+      return;
+    }
+
+    // 👤 කාර්යාලයේ කෙනෙකු/නිලධාරියෙකු කෙලින්ම ඉල්ලන විට — සිංහල අක්ෂර
+    // වින්‍යාස වෙනස්කම්ද තේරුම් ගෙන, knowledge/fallback වලට කලින් හරි flow එකට යවයි.
+    if (detectOfficerRequest(q)) {
+      setOfficerReplySi(rsi);
+      convoRef.current.lastIntent = "officer";
+      void logEvent("intent_officer", q, 0, sessionRef.current);
+      askOfficer(rsi);
       return;
     }
 
@@ -1780,7 +1802,7 @@ export function LiveChat() {
     // පැමිණිල්ලක් → නිලධාරියකුට භාරදීම (වඩාත් වෘත්තීයයි)
     if (detectComplaint(q)) {
       void logEvent("intent_complaint", q, 0, sessionRef.current);
-      askOfficer();
+      askOfficer(rsi);
       return;
     }
 
@@ -1835,21 +1857,6 @@ export function LiveChat() {
     }
 
     // ⛽ fuel / 📰 news / 🖼️ gallery / greeting intents — උඩ Baymax brain එකෙන් හසුරුවනවා
-
-    // “live chat / සජීවී චැට්” → කෙලින්ම live chat tab එකට
-    if (/^(live ?chat|live agent|සජීවී ?චැට්|සජීවී|ලයිව් ?චැට්)$/.test(n)) {
-      void runAction("live");
-      return;
-    }
-
-    // “contact agent / officer / talk to someone” → Yes/No confirm
-    if (
-      /(live ?chat|contact (an )?(agent|officer|person|someone)|agent|officer|human|representative|call ?back|customer (care|service)|support team|talk to (someone|somebody|a person)|සජීවී|නිලධාරි|නිලධාරී|කතා කරන්න|කතාකරන්න|සම්බන්ධ කර|සම්බන්ධකර)/.test(n)
-    ) {
-      void logEvent("intent_officer", q, 0, sessionRef.current);
-      askOfficer();
-      return;
-    }
 
     if (/(phone|call|දුරකථන|අමතන්න|contact|manager|කළමනාකර)/.test(n)) {
       push({
@@ -2367,8 +2374,8 @@ export function LiveChat() {
                               key={c.kind}
                               onClick={() => {
                                 setMsgs((xs) => xs.map((x) => (x.id === m.id ? { ...x, choices: undefined, chips: undefined } : x)));
-                                if (c.kind === "yes") void runAction("contact");
-                                else declineContact();
+                                if (c.kind === "yes") void runAction("contact", contactReplySi);
+                                else declineContact(contactReplySi);
                               }}
                               className={`flex-1 rounded-xl px-3 py-2 text-[11.5px] font-extrabold transition ${
                                 c.kind === "yes"
@@ -2445,7 +2452,7 @@ export function LiveChat() {
               {panel === "contact" && (
                 <form onSubmit={submitContact} className="shrink-0 border-t border-slate-200 bg-white px-3 pt-2.5 pb-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-black uppercase tracking-wide text-fuchsia-600">{si ? "සජීවී සම්බන්ධතා තොරතුරු" : "Contact details"}</label>
+                    <label className="text-[10px] font-black uppercase tracking-wide text-fuchsia-600">{contactReplySi ? "සජීවී සම්බන්ධතා තොරතුරු" : "Contact details"}</label>
                     <button type="button" onClick={closePanel} className="text-slate-400 hover:text-slate-600" aria-label="Cancel">
                       <X size={13} />
                     </button>
@@ -2456,7 +2463,7 @@ export function LiveChat() {
                       required
                       value={cName}
                       onChange={(e) => setCName(e.target.value)}
-                      placeholder={si ? "ඔබේ නම *" : "Your Name *"}
+                      placeholder={contactReplySi ? "ඔබේ නම *" : "Your Name *"}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] outline-none focus:border-fuchsia-400 focus:bg-white"
                     />
                     <div className="grid grid-cols-2 gap-1.5">
@@ -2464,7 +2471,7 @@ export function LiveChat() {
                         required
                         value={cNic}
                         onChange={(e) => setCNic(e.target.value)}
-                        placeholder={si ? "NIC අංකය *" : "NIC Number *"}
+                        placeholder={contactReplySi ? "NIC අංකය *" : "NIC Number *"}
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] outline-none focus:border-fuchsia-400 focus:bg-white"
                       />
                       <input
@@ -2472,7 +2479,7 @@ export function LiveChat() {
                         value={cPhone}
                         onChange={(e) => setCPhone(e.target.value)}
                         inputMode="tel"
-                        placeholder={si ? "දුරකථන අංකය *" : "Phone Number *"}
+                        placeholder={contactReplySi ? "දුරකථන අංකය *" : "Phone Number *"}
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] outline-none focus:border-fuchsia-400 focus:bg-white"
                       />
                     </div>
@@ -2481,7 +2488,7 @@ export function LiveChat() {
                       disabled={busy || !cName.trim() || !cNic.trim() || !cPhone.trim()}
                       className="w-full rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white py-2.5 text-[12px] font-extrabold disabled:opacity-40 hover:opacity-95 transition flex items-center justify-center gap-1.5"
                     >
-                      {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {si ? "ඉදිරිපත් කරන්න" : "Submit"}
+                      {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} {contactReplySi ? "ඉදිරිපත් කරන්න" : "Submit"}
                     </button>
                   </div>
                 </form>

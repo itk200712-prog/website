@@ -87,6 +87,26 @@ section 12 ට test එකක් එක් කරන්න.
 - `Gallery` බොත්තම / `gallery` / `ඡායාරූප` → published ඡායාරූප **title + tagline
   (description) + ❤️ likes** සමඟ → click කළාම විස්තරය + ගැලරි පිටුවට link
 
+## 👤 නිලධාරියෙකු සම්බන්ධ කරගැනීමේ ඉල්ලීම්
+
+`chatbot.ts` හි `detectOfficerRequest()` එක සිංහල, Singlish සහ English
+ස්වභාවික වාක්‍ය තේරුම් ගනී: `මට ඔෆිස් එකේ කෙනෙක්ව සම්බන්ද කරගන්න ඕන` ·
+`කාර්යාලයේ කෙනෙක්ට කතා කරන්න ඕන` · `mata office eke kenekwa sambanda
+karaganna ona` · `Please connect me to someone at the office`.
+
+- `සම්බන්ධ` / `සම්බන්ද` / `සම්බඳ` කියන අක්ෂර වින්‍යාස තුනම එකම අර්ථයෙන්
+  හඳුනාගනී; `නිලදාරි` වගේ සාමාන්‍ය වැරදි ලිවීම් සහ ඉඩ නොතබා ලියූ වාක්‍යත්
+  තේරුම් ගනී.
+- කෙලින්ම සම්බන්ධ වෙන්න/කතා කරන්න ඉල්ලන විට නිලධාරි flow එකට මුල් තැන
+  ලැබේ. නමුත් කාර්යාල දුරකථන අංකය, නිලධාරියාගේ නම, ලිපිනය හෝ කාර්යාල
+  වේලාවන් වැනි කරුණු ප්‍රශ්න site brain එකෙන්ම පිළිතුරු ලැබේ.
+  `නිලධාරියෙක් සම්බන්ද කරගන්නෙ කොහොමද?` කියා ක්‍රමය අහන විට
+  `officer-contact-process` පිළිතුර ලැබේ.
+- English page එකක හිටියත් සිංහලෙන් ඇහුවොත්, closed-hours notice එක,
+  `ඔව්/නෑ` තේරීම, callback form එක සහ ඉල්ලීම යැවූ පසු පණිවිඩය ඇතුළු
+  සම්පූර්ණ officer flow එකම සිංහලෙන් පැවතේ. කාර්යාල වේලාවෙන් පිටතදී
+  ඉල්ලීම නොයවා ඊළඟ විවෘත වන වේලාව පෙන්වයි.
+
 ## 🕘 Live Chat කාර්යාල වේලාවන්
 
 සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම (Live Chat / Request a Call) පුළුවන්
@@ -119,7 +139,7 @@ Logic එක `src/lib/chatbot.ts` හි `getLiveChatHoursStatus()` එකේ �
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 205 tests — smalltalk + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
+npx -y tsx scripts/test.mts   # 230 tests — smalltalk + Sinhala officer intent + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
 npm run build                 # production build
 ```
 

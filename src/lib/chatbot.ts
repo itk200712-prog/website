@@ -30,9 +30,23 @@ export type SmalltalkHit = {
 export type FuelIntent = { type: "petrol92" | "super_diesel" | "kerosene" | null };
 export type NewsIntent = { category: "vacancy" | "tender" | null };
 
+/**
+ * සිංහල අකුරු ලියන විවිධ ක්‍රම එකම ආකාරයකට හරවයි.
+ * උදා: සම්බන්ධ / සම්බඳ / සම්බන්ද → සම්බන්ද.
+ * දුරකථන keyboard අනුව එන ZWJ/ZWNJ වෙනස්කම් ද මෙයින් ඉවත් වේ.
+ */
+export function normalizeSinhalaText(raw: string): string {
+  return String(raw ?? "")
+    .normalize("NFC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/සම්බන්ධ/g, "සම්බන්ද")
+    .replace(/සම්බඳ/g, "සම්බන්ද")
+    .replace(/සබඳ/g, "සම්බන්ද");
+}
+
 /** intent matching සඳහා පණිවිඩය පිරිසිදු කිරීම — lowercase, punctuation නැතුව */
 export function cleanText(raw: string): string {
-  return raw
+  return normalizeSinhalaText(raw)
     .toLowerCase()
     .replace(/[.,!?;:"'()[\]{}|\\@#*_~`^$%+=<>]/g, " ")
     .replace(/-/g, " ")
@@ -41,7 +55,7 @@ export function cleanText(raw: string): string {
 }
 
 const SINGLISH_WORDS =
-  /\b(kohomada|kohomadha|komada|ayubowan|aayubowan|hodin|hodai|hondin|hondai|sthuthi|stuthi|bohoma|mage|oyage|oyata|mata|mama|udaw|udawwak|puluwanda|puluvanda|kiyada|monawada|hari|ela|machan|samajika|samajikaya|puwath|thethipola|pinthura|thel|mila|ganan|kiyanna|balanna|pennanna)\b/;
+  /\b(kohomada|kohomadha|komada|ayubowan|aayubowan|hodin|hodai|hondin|hondai|sthuthi|stuthi|bohoma|mage|oyage|oyata|mata|mama|udaw|udawwak|puluwanda|puluvanda|kiyada|monawada|hari|ela|machan|samajika|samajikaya|puwath|thethipola|pinthura|thel|mila|ganan|kiyanna|balanna|pennanna|ona|onee|oona|oni|awashya|awashyai|kenek|kenekwa|kenekta|kenekuta|sambanda|sambandha|sambadha|karaganna|karagannawa|katha|kathakaranna|niladari|niladhari|karyalaya|karyalaye|karunakarala|karunakara)\b/;
 
 /** පණිවිඩය සිංහල/Singlish නම් true — reply සිංහලෙන්ද English වලින්ද තීරණය කරයි */
 export function isSiMessage(raw: string): boolean {
@@ -213,6 +227,107 @@ export function detectGallery(raw: string): boolean {
 export function detectComplaint(raw: string): boolean {
   const c = cleanText(raw);
   return /(complaint|complain|problem|issue|පැමිණිලි|පැමිණිල්ල|ප්‍රශ්නයක් තියෙනවා|ගැටලු|ගැටලුව|prashnayak|pamini)/.test(c);
+}
+
+const SINHALA_INTENT_FOLD: Record<string, string> = {
+  ඛ: "ක",
+  ඝ: "ග",
+  ඡ: "ච",
+  ඣ: "ජ",
+  ඨ: "ට",
+  ඪ: "ඩ",
+  ථ: "ත",
+  ධ: "ද",
+  ඵ: "ප",
+  භ: "බ",
+  ශ: "ස",
+  ෂ: "ස",
+  ණ: "න",
+  ළ: "ල",
+};
+
+/**
+ * Officer intent එකට විතරක් පාවිච්චි කරන පුළුල් සිංහල අකුරු සමාන කිරීම.
+ * උදා: නිලධාරි→නිලදාරි, සම්බඳ→සම්බන්ද. මෙය පොදු පිරිසිදු කිරීමට දාන්නේ
+ * නැත්තේ වෙනත් සුහද වචනවල තේරුම වෙනස් නොවීමටයි.
+ */
+function foldSinhalaForIntent(cleaned: string): string {
+  return cleaned
+    .replace(/ඳ/g, "න්ද")
+    .replace(/ඟ/g, "න්ග")
+    .replace(/ඦ/g, "න්ජ")
+    .replace(/ඬ/g, "න්ඩ")
+    .replace(/ඹ/g, "ම්බ")
+    .replace(/න්ධ/g, "න්ද")
+    .replace(/[ඛඝඡඣඨඪථධඵභශෂණළ]/g, (ch) => SINHALA_INTENT_FOLD[ch] ?? ch);
+}
+
+/**
+ * visitor ඇත්තටම කාර්යාලයේ කෙනෙකු/නිලධාරියෙකු සම්බන්ද කරගන්න කියනවද?
+ *
+ * කාර්යාල අංකය, නිලධාරියාගේ නම, ලිපිනය හෝ වේලාවන් අහන factual
+ * ප්‍රශ්න මෙයට වැටෙන්නේ නෑ — ඒවා site brain එකෙන්ම උත්තර ලැබිය යුතුයි.
+ * කෙලින්ම තර්කය: සම්බන්ද වීම/කතා කිරීම + (කෙනෙක්, නිලධාරියෙක් හෝ
+ * කාර්යාලය) · නැත්නම් කෙනෙක් + "ඕන/අවශ්‍යයි".
+ */
+export function detectOfficerRequest(raw: string): boolean {
+  const c = foldSinhalaForIntent(cleanText(raw));
+  if (!c) return false;
+  const compact = c.replace(/\s+/g, "");
+
+  const asksHow =
+    /(කොහොමද|කෙසේද|ආකාරය|විදිහ|ක්‍රමය|පියවර|හැටි|how (to|do|can)|process|procedure|steps?)/.test(c);
+  const explicitWant =
+    /(ඕන|ඕනා|ඕනෙ|ඕනේ|ඕනෑ|අවශ්‍ය|අවශය|අවස්‍ය|වුවමනා|කරලා දෙන්න|කරල දෙන්න|දෙන්න පුලුවන්ද|දෙන්න පුළුවන්ද|පුලුවන්ද|පුළුවන්ද|want|need|please connect|connect me|call me|\b(ona|onee|oona|oni|awashya|awashyai)\b)/.test(c);
+  // "සම්බන්ද කරගන්නෙ කොහොමද" වගේ ක්‍රමය විතරක් අහන විට දැනුම් පිළිතුරට ඉඩ දෙමු.
+  // "මට ... ඕන" වගේ සෘජු ඉල්ලීමක් නම් කෙලින්ම නිලධාරි flow එකට යමු.
+  if (asksHow && !explicitWant) return false;
+
+  if (/(live\s*chat|live agent|සජීවී|සජීවි|ලයිව්)/.test(c) || compact === "livechat") return true;
+
+  const explicitConnect =
+    /(සම්බන්ද\s*කර|සම්බන්ද\s*වෙන්න|ඇමතුමක්\s*(ඉල්ල|ගන්න|දෙන්න)|අමතන්න ඕන|අමතන්න අවස්‍ය|යොමු\s*කරන්න|call\s*back|callback|connect me|contact me|call me|talk to (a |an )?(human|person|officer|agent)|speak to (a |an )?(human|person|officer|agent)|sambanda\s*kara|sambandha\s*kara|sambada\s*kara)/.test(c) ||
+    compact.includes("සම්බන්දකර") ||
+    compact.includes("sambandakara") ||
+    compact.includes("සම්බන්දවෙන්න") ||
+    compact.includes("ඇමතුමක්ඉල්ල") ||
+    /(මට|මාව)\s+.*(අමතන්න|ඇමතුමක් දෙන්න|කෝල් එකක් දෙන්න)/.test(c);
+  if (explicitConnect) return true;
+
+  // සාමාජිකයෙකු සෙවීම නිලධාරි ඉල්ලීමක් නෙමෙයි.
+  if (/(සාමාජික|member|nic|හැඳුනුම්පත්|හැදුනුම්පත්|සොයන්න|හොයන්න|සොයා|search|find a member)/.test(c)) {
+    return false;
+  }
+
+  // දුරකතන අංකය/නම/ලිපිනය/වේලාව වගේ තොරතුරු විතරක් අහන විට site brain එකට ඉඩ දෙමු.
+  const asksForInfo =
+    /(දුරකතන\s*අංක|දුරකතන\s*අංකය|දුරකතන\s*අංකයක්|නොම්බර|නොම්මර|අංකය (මොකක්ද|මොකද|දෙන්න|ඕන)|ඊමේල්|email|ලිපිනය|ලිපින|කොහෙද|කොහේද|කොතනද|වේලාව|වෙලාව|විවෘත\s*වේලා|කවුද|කව්ද|නම (මොකක්ද|මොකද|දෙන්න|ඕන)|phone number|telephone number|contact number|who is|what is (the )?(phone|number|name|address)|where is|opening hours|office hours|number eka|phone eka|nama mokadda)/.test(c);
+  if (asksForInfo) return false;
+
+  const personTarget =
+    /(නිලදාරි|නිලධාරි|ඔෆිසර්|සේවකයෙක්|සේවක මහත්ම|කාර්ය\s*මණ්ඩල|කාර්ය\s*මන්ඩල|නියෝජිත|උපකාරකයෙක්|සහායකයෙක්|මනුස්සයෙක්|පුද්ගලයෙක්|කෙනෙක්|කෙනෙකු|කෙනෙක්ට|කෙනෙක්ව|කාටහරි|කවුරුහරි|කාහරි|කවුරුන්හරි|මහත්මයෙක්|මහත්මියක්|සර් කෙනෙක්|මැඩම් කෙනෙක්|\b(officer|agent|human|representative|staff member|someone|somebody|real person|niladari|niladhari|kenek|kenekwa|kenekta|kenekuta|kawruhari|katahari)\b)/.test(c);
+  const officeTarget =
+    /(කාර්යාල|කාරියාල|ඔෆිස්|ඔෆීස්|ඕෆිස්|ඔබිස්|ඔපිස්|ආයතනය|office|offis|opis|ofis|karyalaya|karyalaye|kariyalaya)/.test(c);
+  const genericPersonOnlyTarget =
+    /(කෙනෙක්|කෙනෙකු|කාටහරි|කවුරුහරි|කාහරි|කවුරුන්හරි|\b(kenek|kenekwa|kenekta|kenekuta|kawruhari|katahari|someone|somebody)\b)/.test(c);
+  const connectAction =
+    /(සම්බන්ද|කතා|අමත|ඇමතුම|කෝල්|හමුවෙන්න|හම්බවෙන්න|හමුවීමට|යොමු\s*කර|\b(connect|contact|talk|speak|call|chat|sambanda|sambandha|sambada|katha|kathakaranna|amathanna)\b)/.test(c);
+  const desire =
+    /(ඕන|ඕනා|ඕනෙ|ඕනේ|ඕනෑ|අවශ්‍ය|අවශය|අවස්‍ය|වුවමනා|කරගන්න|කරලා දෙන්න|දෙන්න පුලුවන්ද|දෙන්න පුළුවන්ද|පුලුවන්ද|පුළුවන්ද|\b(want|need|please|ona|onee|oona|oni|awashya|awashyai|karaganna)\b)/.test(c);
+
+  if (connectAction && (personTarget || officeTarget)) return true;
+  // "ඔෆිස් එකේ කෙනෙක්ව ඕන" — කෙනෙක් + අවශ්‍යතාවක් ඇත්නම් නිලධාරි flow එකයි.
+  if (desire && personTarget && (!genericPersonOnlyTarget || officeTarget || connectAction)) return true;
+
+  // කෙටිම "නිලධාරියා / officer / human" වගේ වචන වලින් ඇසුවත් කළ යුතු දෙය පැහැදිලියි.
+  if (
+    /^(නිලදාරියා|නිලදාරියෙක්|නිලධාරියා|නිලධාරියෙක්|officer|agent|human|real person|niladari|niladhari)$/.test(c) ||
+    /(නිලදාරියෙක්|නිලධාරියෙක්|live agent|human agent|real person|support (team|agent)|customer (care|service))/.test(c)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /** ණය / ඉතුරුම් / උකස් — ග්‍රාමීය බැංකු සේවා */

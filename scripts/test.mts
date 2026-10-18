@@ -150,6 +150,29 @@ ok("bot: si reply for Singlish", bot.replyIsSi("kohomada", false) === true);
 ok("bot: en reply stays en", bot.replyIsSi("hello there friend", false) === false);
 ok("bot: complaint → officer", bot.detectComplaint("මට පැමිණිල්ලක් තියෙනවා") === true);
 ok("bot: loan → banking", bot.detectBanking("loan ekak ganna oni") === true);
+
+// Screenshot case: English UI එකේ තිබියදී සිංහලෙන් “මට ඔෆිස් එකේ කෙනෙක්ව
+// සම්බන්ද කරගන්න ඕන” කියූ විට officer flow එකට යා යුතුයි — සම්බන්ධ වචනය
+// ලියන තුන් ආකාරයෙන්ම (න්ධ / න්ද / ඳ).
+ok("bot: Sinhala spelling variants fold to සම්බන්ද", bot.normalizeSinhalaText("සම්බන්ධ / සම්බඳ / සබඳ") === "සම්බන්ද / සම්බන්ද / සම්බන්ද");
+ok("bot: cleanText keeps හොඳ unchanged", bot.cleanText("හොඳින්") === "හොඳින්");
+ok("bot: officer request — සම්බන්ධ spelling", bot.detectOfficerRequest("මට ඔෆිස් එකේ කෙනෙක්ව සම්බන්ධ කරගන්න ඕන") === true);
+ok("bot: officer request — සම්බන්ද spelling", bot.detectOfficerRequest("මට ඔෆිස් එකේ කෙනෙක්ව සම්බන්ද කරගන්න ඕන") === true);
+ok("bot: officer request — සම්බඳ spelling", bot.detectOfficerRequest("මට ඔෆිස් එකේ කෙනෙක්ව සම්බඳ කරගන්න ඕන") === true);
+ok("bot: officer request — no spaces", bot.detectOfficerRequest("මටඔෆිස්එකේකෙනෙක්වසම්බන්දකරගන්නඕන") === true);
+ok("bot: officer request — කාර්යාලයේ කෙනෙක්ට කතා", bot.detectOfficerRequest("කාර්යාලයේ කෙනෙක්ට කතා කරන්න ඕන") === true);
+ok("bot: officer request — නිලදාරි misspelling", bot.detectOfficerRequest("නිලදාරියෙක්ට කතා කරන්න ඕන") === true);
+ok("bot: officer request — callback", bot.detectOfficerRequest("මට ඇමතුමක් ඉල්ලන්න ඕන") === true);
+ok("bot: officer request — Singlish", bot.detectOfficerRequest("mata office eke kenekwa sambanda karaganna ona") === true);
+ok("bot: officer request — Singlish talk", bot.detectOfficerRequest("mata office eke kenekta katha karanna ona") === true);
+ok("bot: officer request — English", bot.detectOfficerRequest("Please connect me to someone at the office") === true);
+ok("bot: officer request — si reply language for Singlish", bot.replyIsSi("mata office eke kenekwa sambanda karaganna ona", false) === true);
+ok("bot: office phone question is NOT officer request", bot.detectOfficerRequest("කාර්යාලයේ දුරකථන අංකය මොකක්ද?") === false);
+ok("bot: officer name question is NOT officer request", bot.detectOfficerRequest("නිලධාරියාගේ නම මොකක්ද?") === false);
+ok("bot: office-hours question is NOT officer request", bot.detectOfficerRequest("කාර්යාලය විවෘත වේලාවන් මොනවාද?") === false);
+ok("bot: member search is NOT officer request", bot.detectOfficerRequest("සාමාජික කෙනෙක් සොයන්න ඕන") === false);
+ok("bot: generic help is NOT officer request", bot.detectOfficerRequest("මට උදව්වක් ඕන") === false);
+ok("bot: how-to question stays with site brain", bot.detectOfficerRequest("නිලධාරියෙක් සම්බන්ද කරගන්නෙ කොහොමද?") === false);
 ok("chat: empty history → no Clear chat", bot.hasClearableHistory([]) === false);
 ok("chat: system note only → no Clear chat", bot.hasClearableHistory([{ sender: "system" }]) === false);
 ok("chat: visitor msg → Clear chat shows", bot.hasClearableHistory([{ sender: "system" }, { sender: "visitor" }]) === true);
@@ -212,6 +235,10 @@ ok("brain: society founded date", askSite("When was the society founded?")?.entr
 ok("brain: number of rural branches", askSite("How many Rural Bank branches are there?")?.entry.id === "rural-bank-branches");
 ok("brain: generic 'services' asks for clarification", askSite("services")?.ambiguous === true);
 ok("brain: unrelated question returns no invented answer", askSite("What will the weather be tomorrow?") === null);
+ok("brain: officer-contact process (Sinhala how-to)", askSite("නිලධාරියෙක් සම්බන්ද කරගන්නෙ කොහොමද?")?.entry.id === "officer-contact-process");
+ok("brain: officer-contact process (screenshot wording)", askSite("ඔෆිස් එකේ කෙනෙක්ව සම්බන්ද කරගන්න ඕන")?.entry.id === "officer-contact-process");
+ok("brain: officer-contact process (Singlish)", askSite("niladariyek sambanda karaganne kohomada")?.entry.id === "officer-contact-process");
+ok("brain: officer-contact process mentions Live Chat hours", askSite("නිලධාරියෙක් සම්බන්ද කරගන්නෙ කොහොමද?")?.entry.body_si.includes("සඳුදා–සිකුරාදා") === true);
 
 // Direct identity facts must answer immediately, not ask for clarification.
 const chairman = seed.BOARD.find((p) => p.category === "chairman")!;
@@ -282,6 +309,16 @@ ok("admin: Messages page loads real DB rows (no fake seed)",
   adminMessagesSrc.includes('.from("messages")') && adminMessagesSrc.includes('.select("*")') && !adminMessagesSrc.includes("INDUWARA"));
 ok("admin: Emails page has the Message Box route card",
   adminEmailsSrc.includes("message: Inbox") && adminEmailsSrc.includes("fb.message"));
+ok("bot UI: officer request is routed before the site-brain/fallback path",
+  liveChatSrc.indexOf("if (detectOfficerRequest(q))") > -1 &&
+  liveChatSrc.indexOf("askOfficer(rsi)") > -1 &&
+  liveChatSrc.indexOf("askOfficer(rsi)") < liveChatSrc.indexOf("if (await answerFromKnowledge"));
+ok("bot UI: asked language is kept through officer notice, Yes/No, form and reset",
+  liveChatSrc.includes("const [officerReplySi, setOfficerReplySi]") &&
+  liveChatSrc.includes("showLiveChatClosedNotice(responseSi)") &&
+  liveChatSrc.includes('runAction("contact", contactReplySi)') &&
+  liveChatSrc.includes('contactReplySi ? "ඔබේ නම *"') &&
+  liveChatSrc.includes("setOfficerReplySi(null)"));
 
 console.log("\n── 14) Backup completeness ──");
 const backupSrc = readFileSync(join(root, "src/lib/backup.ts"), "utf8");
