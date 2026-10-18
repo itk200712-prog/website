@@ -1,22 +1,38 @@
 "use client";
 
 // ============================================================================
-//  MPCS Live Chat — v2 (⑳)
+//  MPCS Live Chat — v2 (⑳) + Baymax brain (③)
 //  · 🔎 Find Member      → නම / NIC මගින් Excel registry එකෙන් සොයයි
 //                          + "Apply Membership" → application page
+//  · ⛽ Fuel Prices      → ඉන්ධනය തෝරන්න → ඒ වර්ගයේ අද මිල (③ අලුත්)
+//  · 📰 News             → published පුවත්/නිවේදන cards → සම්පූර්ණ විස්තරය
+//  · 🖼️ Gallery           → published ඡායාරූප + tagline → විස්තරය
 //  · 🏢 Business Managers → එක් එක් අංශය වෙන වෙනම (අංශය + කළමනාකරු නම)
 //  · ☎️ Office Phones     → අධ්‍යක්ෂ මණ්ඩලයේ නම් + දුරකථන
 //  · 📞 Managers Phones   → කළමනාකරු නම + අංශය + දුරකථන
 //  · 📨 Contact Live Chat → නම + NIC + දුරකථන → FormSubmit email + inbox
 //                          → "Wait a few minutes, our officer will contact you"
+//  · 🧠 Smalltalk brain   → hi/hello/කොහොමද ආචාර, නම මතක තබා ගැනීම,
+//                          තේරුණේ නැති පණිවිඩ log කිරීම (src/lib/chatbot.ts)
 // ============================================================================
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Loader2, MessageCircle, Minus, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Fuel, Images, Loader2, MessageCircle, Minus, Newspaper, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { tokens } from "@/lib/search";
-import { SITE } from "@/lib/seed";
+import { FUEL_PRICES, GALLERY, NEWS, SITE } from "@/lib/seed";
+import {
+  detectBanking,
+  detectComplaint,
+  detectFuel,
+  detectGallery,
+  detectNameIntro,
+  detectNews,
+  detectSmalltalk,
+  replyIsSi,
+} from "@/lib/chatbot";
+import type { FuelPrice, GalleryItem, NewsItem } from "@/lib/types";
 
 type MemberRow = {
   member_no?: string;
@@ -29,8 +45,10 @@ type MemberRow = {
   file_name?: string;
 };
 
-type CardType = "members" | "apply" | "waiting" | "choices";
+type CardType = "members" | "apply" | "waiting" | "choices" | "news" | "gallery";
 type ListItem = { label: string; sub?: string; value: string };
+/** news / gallery පෙන්වීමට ඇති rich card අංග — click කළාම සම්පූර්ණ විස්තරය එනවා */
+type RichItem = { id: string; title: string; sub?: string; desc?: string; image?: string; badge?: string };
 
 type LiveMsg = { id: string; sender: "visitor" | "agent" | "system"; sender_name: string; body: string; created_at: string };
 
@@ -46,19 +64,28 @@ type Msg = {
   ref?: string;
   choices?: { label: string; kind: "yes" | "no" }[];
   list?: ListItem[];
-  action?: "biz" | "board";
+  action?: "biz" | "board" | "fuel";
+  items?: RichItem[];
+  link?: { href: string; label: string };
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const ACTIONS = [
   { key: "find", en: "Find Member", si: "සාමාජික සොයන්න", icon: Search },
+  { key: "fuel", en: "Fuel Prices", si: "ඉන්ධන මිල", icon: Fuel },
+  { key: "news", en: "News", si: "නිවේදන හා පුවත්", icon: Newspaper },
+  { key: "gallery", en: "Gallery", si: "ගැලරිය", icon: Images },
   { key: "managers", en: "Business Managers", si: "ව්‍යාපාර කළමනාකරුවන්", icon: Building2 },
   { key: "office", en: "Office Phones", si: "කාර්යාල දුරකථන", icon: PhoneCall },
   { key: "mphone", en: "Managers Phones", si: "කළමනාකරු දුරකථන", icon: Phone },
   { key: "contact", en: "Request a Call", si: "ඇමතුමක් ඉල්ලන්න", icon: MessageCircle },
   { key: "live", en: "Live Chat", si: "සජීවී චැට්", icon: UserRound },
 ] as const;
+
+/** ප්‍රධාන මෙනුව — greeting / help පිළිතුරු යටතේ එන shortcut බොත්තම් */
+const MENU_CHIPS_SI = ["සාමාජික සොයන්න", "ඉන්ධන මිල", "නිවේදන හා පුවත්", "ගැලරිය"];
+const MENU_CHIPS_EN = ["Find Member", "Fuel Prices", "News", "Gallery"];
 
 type ActionKey = (typeof ACTIONS)[number]["key"];
 
@@ -129,6 +156,8 @@ export function LiveChat() {
   const boxRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(1);
   const flowRef = useRef(0);          // flow එකක් අතරමැදි වීම වළක්වයි
+  // ✅ bot "මතකය" — කතාව අතරේ දැනගන්නා දෑ (නම, අන්තිමට ඇසූ දේ) මතක තබා ගැනීම
+  const convoRef = useRef<{ lastIntent?: string; name?: string }>({});
   const [autoScroll, setAutoScroll] = useState(true);
   const started = useRef(false);
   const sessionRef = useRef("");
@@ -175,9 +204,7 @@ export function LiveChat() {
       from: "bot",
       bold: si ? "👋 ආයුබෝවන්!" : "👋 Welcome!",
       text: welcome,
-      chips: si
-        ? ["සාමාජික සොයන්න", "ව්‍යාපාර කළමනාකරුවන්", "කාර්යාල දුරකථන", "සජීවී සම්බන්ධය"]
-        : ["Find Member", "Business Managers", "Office Phones", "Contact Live Chat"],
+      chips: si ? [...MENU_CHIPS_SI, "ව්‍යාපාර කළමනාකරුවන්"] : [...MENU_CHIPS_EN, "Business Managers"],
     });
   }, [si, botName]);
 
@@ -191,7 +218,10 @@ export function LiveChat() {
       }
       setSessionKey(k);
       const n = localStorage.getItem("mpcs_chat_name");
-      if (n) setVisitorName(n);
+      if (n) {
+        setVisitorName(n);
+        convoRef.current.name = n;
+      }
 
       // ✅ refresh කළත් chat එක close වෙන්නේ නෑ
       const t = localStorage.getItem("mpcs_chat_tab");
@@ -400,6 +430,21 @@ export function LiveChat() {
       return;
     }
 
+    if (key === "fuel") {
+      await showFuelPicker();
+      return;
+    }
+
+    if (key === "news") {
+      await showNews(null);
+      return;
+    }
+
+    if (key === "gallery") {
+      await showGallery();
+      return;
+    }
+
     if (key === "contact") {
       setTab("chat");
       setPanel("contact");
@@ -414,9 +459,227 @@ export function LiveChat() {
     }
   }
 
-  // ── business / board button එකක් එබුවම ──
-  async function pickFromList(action: "biz" | "board", value: string, label: string) {
+  // ─────────────────────────────────────────────────────────────────────────
+  //  FUEL · NEWS · GALLERY (③) — තෝරන්න → විස්තරය එන interactive flows
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** fuel_prices (live DB) + seed fallback — data.ts getFuelPrices() වගෙම merge එකක් */
+  async function loadFuelPrices(): Promise<FuelPrice[]> {
+    try {
+      const sb = createAnonClient();
+      const { data, error } = await sb.from("fuel_prices").select("*").limit(10);
+      if (error || !data || !data.length) return FUEL_PRICES;
+      const byType = new Map<string, number>();
+      for (const r of data as { type?: string; fuel_type?: string; price?: number | string }[]) {
+        const t = r.type ?? r.fuel_type;
+        if (t && r.price != null) byType.set(String(t), Number(r.price));
+      }
+      return FUEL_PRICES.map((f) => (byType.has(f.type) ? { ...f, price: byType.get(f.type)! } : f));
+    } catch {
+      return FUEL_PRICES;
+    }
+  }
+
+  const fmtRs = (v: number) => `රු. ${Number(v).toLocaleString("en-LK")}`;
+  const fmtRsEn = (v: number) => `Rs. ${Number(v).toLocaleString("en-LK")}`;
+
+  function fmtDate(d?: string): string {
+    if (!d) return "";
+    try {
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return d;
+      return dt.toLocaleDateString(si ? "si-LK" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
+    } catch {
+      return d;
+    }
+  }
+
+  /** ⛽ "fuel prices" ගැහුවාම — මුලින්ම ඉන්ධනය තෝරන මෙනුව, මිල පෙන්වන්නේ තේරුවට පස්සේ */
+  async function showFuelPicker() {
+    setTyping(true);
+    const prices = await loadFuelPrices();
+    setTyping(false);
+    const list: ListItem[] = prices.map((p) => ({
+      label: (si ? p.name_si || p.name_en : p.name_en) ?? p.type,
+      sub: si ? `${p.tag}${p.name_en && p.name_en !== p.tag ? ` · ${p.name_en}` : ""}` : p.tag,
+      value: p.type,
+    }));
+    list.push({
+      label: si ? "සියලුම මිල ගණන් එකවර" : "All prices at once",
+      sub: si ? "ඉන්ධන වර්ග සියල්ලම" : "Every fuel type",
+      value: "__all",
+    });
+    push({
+      from: "bot",
+      bold: si ? "⛽ ඉන්ධන මිල ගණන්" : "⛽ Fuel Prices",
+      text: si
+        ? "ඔබට මිල බලන්න ඕන ඉන්ධන වර්ගය තෝරන්න 👇\nතෝරාපු ගමන් අද මිල එවන්නම්."
+        : "Choose the fuel type you want 👇\nI'll show today's price as soon as you pick one.",
+      card: "choices",
+      list,
+      action: "fuel",
+    });
+    convoRef.current.lastIntent = "fuel";
+    void logEvent("fuel_picker", "", prices.length, sessionRef.current);
+  }
+
+  /** තෝරපු ඉන්ධන වර්ගයක මිල */
+  async function showFuelPrice(type: FuelPrice["type"]) {
+    setTyping(true);
+    const prices = await loadFuelPrices();
+    setTyping(false);
+    const p = prices.find((x) => x.type === type);
+    if (!p) {
+      await showFuelPicker();
+      return;
+    }
+    const name = (si ? p.name_si || p.name_en : p.name_en) ?? p.type;
+    const others = prices.filter((x) => x.type !== type);
+    push({
+      from: "bot",
+      bold: `⛽ ${name} (${p.tag})`,
+      text: si
+        ? `💰 අද මිල: ${fmtRs(p.price)} / ලීටරය\n📍 අපේ හෙට්ටිපොල සමූපකාර ඉන්ධන පිරවුම්හලේ නිල සිල්ලර මිලයි.\nℹ️ මිල ගණන් වෙනස් විය හැක — තහවුරු කිරීමට ${SITE.phones[0]} අමතන්න.`
+        : `💰 Today's price: ${fmtRsEn(p.price)} / litre\n📍 Official retail price at our Hettipola Co-operative Fuel Station.\nℹ️ Prices may change — call ${SITE.phones[0]} to confirm.`,
+      chips: [...others.map((x) => (si ? x.name_si || x.name_en : x.name_en)), si ? "ඉන්ධන මිල" : "Fuel Prices"],
+      link: { href: "/businesses/fuel-station", label: si ? "ඉන්ධන පිරවුම්හල පිටුව අරින්න" : "Open the Fuel Station page" },
+    });
+    convoRef.current.lastIntent = "fuel";
+    void logEvent("fuel_price", type, 1, sessionRef.current);
+  }
+
+  /** ඉන්ධන මිල සියල්ලම එකවර */
+  async function showAllFuelPrices() {
+    setTyping(true);
+    const prices = await loadFuelPrices();
+    setTyping(false);
+    push({
+      from: "bot",
+      bold: si ? "⛽ අද ඉන්ධන මිල ගණන්" : "⛽ Today's Fuel Prices",
+      text:
+        prices.map((p) => `• ${si ? p.name_si || p.name_en : p.name_en} — ${si ? fmtRs(p.price) : fmtRsEn(p.price)} / ${si ? "ලීටරය" : "L"}`).join("\n") +
+        (si ? `\n\n📍 හෙට්ටිපොල සමූපකාර ඉන්ධන පිරවුම්හල · ${SITE.phones[0]}` : `\n\n📍 Hettipola Co-operative Fuel Station · ${SITE.phones[0]}`),
+      chips: si ? ["ඉන්ධන මිල", "නිවේදන හා පුවත්"] : ["Fuel Prices", "News"],
+      link: { href: "/businesses/fuel-station", label: si ? "ඉන්ධන පිරවුම්හල පිටුව අරින්න" : "Open the Fuel Station page" },
+    });
+    convoRef.current.lastIntent = "fuel";
+    void logEvent("fuel_all", "", prices.length, sessionRef.current);
+  }
+
+  const NEWS_CAT: Record<string, { en: string; si: string; emoji: string }> = {
+    vacancy: { en: "Job Vacancy", si: "රැකියා නිවේදන", emoji: "💼" },
+    notice: { en: "Special Notice", si: "විශේෂ නිවේදන", emoji: "📢" },
+    tender: { en: "Tender", si: "ටෙන්ඩර්", emoji: "📄" },
+    general: { en: "News & Updates", si: "පුවත් හා යාවත්කාලීන", emoji: "📰" },
+  };
+
+  /** 📰 publish වුණු (published=true) නිවේදන හා පුවත් — pinned මුලින්ම, අලුත්ම මුලින් */
+  async function showNews(category: "vacancy" | "tender" | null) {
+    setTyping(true);
+    let rows: NewsItem[] = [];
+    try {
+      const sb = createAnonClient();
+      let q = sb.from("news").select("*").eq("published", true);
+      if (category) q = q.eq("category", category);
+      const { data, error } = await q.order("pinned", { ascending: false }).order("date", { ascending: false }).limit(6);
+      if (error || !data) throw new Error(error?.message ?? "no data");
+      rows = data as unknown as NewsItem[];
+    } catch {
+      rows = NEWS.filter((n) => n.published && (!category || n.category === category));
+    }
+    setTyping(false);
+    const catLabel = category ? (si ? NEWS_CAT[category].si : NEWS_CAT[category].en) : si ? "නිවේදන හා පුවත්" : "News & Notices";
+    if (!rows.length) {
+      push({
+        from: "bot",
+        bold: si ? "📰 පුවත් නොමැත" : "📰 No news yet",
+        text: si
+          ? `දැනට “${catLabel}” යටතේ ප්‍රකාශ කළ (published) අයිතම නැත. අලුත් එකක් දාපු ගමන් මෙතන පේනවා.`
+          : `There are no published items under “${catLabel}” right now. New posts will appear here as soon as they go live.`,
+        chips: si ? ["නිවේදන හා පුවත්", "ගැලරිය"] : ["News", "Gallery"],
+        link: { href: "/news", label: si ? "පුවත් පිටුව අරින්න" : "Open the News page" },
+      });
+      void logEvent("news", category ?? "all", 0, sessionRef.current);
+      return;
+    }
+    const items: RichItem[] = rows.slice(0, 6).map((n) => {
+      const cat = NEWS_CAT[n.category] ?? NEWS_CAT.general;
+      const badge = si ? cat.si : n.badge_text || cat.en;
+      return {
+        id: String(n.id),
+        title: (si ? n.title_si || n.title_en : n.title_en || n.title_si) ?? "—",
+        sub: `${cat.emoji} ${badge}${n.date ? ` · 📅 ${fmtDate(n.date)}` : ""}${n.pinned ? (si ? " · 📌 ඉහළින්ම" : " · 📌 Pinned") : ""}`,
+        desc: (si ? n.desc_si || n.desc_en : n.desc_en || n.desc_si) ?? "",
+        image: n.image || "",
+        badge,
+      };
+    });
+    push({
+      from: "bot",
+      bold: `📰 ${catLabel}`,
+      text: si
+        ? `ප්‍රකාශ කළ (published) අලුත්ම අයිතම ${items.length}ක් 👇\nසම්පූර්ණ විස්තරය බලන්න එකක් ඔබන්න.`
+        : `The latest ${items.length} published item${items.length > 1 ? "s" : ""} 👇\nTap one to read the full details.`,
+      card: "news",
+      items,
+      link: { href: "/news", label: si ? "සියලුම පුවත් — පුවත් පිටුව අරින්න" : "All news — open the News page" },
+    });
+    convoRef.current.lastIntent = "news";
+    void logEvent("news", category ?? "all", items.length, sessionRef.current);
+  }
+
+  /** 🖼️ publish කළ ගැලරි ඡායාරූප — tagline (title + description) සමඟ */
+  async function showGallery() {
+    setTyping(true);
+    let rows: GalleryItem[] = [];
+    try {
+      const sb = createAnonClient();
+      const { data, error } = await sb.from("gallery_items").select("*").limit(8);
+      if (error || !data || !data.length) throw new Error(error?.message ?? "no data");
+      rows = data as unknown as GalleryItem[];
+    } catch {
+      rows = GALLERY;
+    }
+    setTyping(false);
+    if (!rows.length) {
+      push({
+        from: "bot",
+        bold: si ? "🖼️ ගැලරිය" : "🖼️ Gallery",
+        text: si ? "දැනට ගැලරියේ ප්‍රකාශ කළ ඡායාරූප නැත." : "No published gallery photos right now.",
+        link: { href: "/gallery", label: si ? "ගැලරි පිටුව අරින්න" : "Open the Gallery page" },
+      });
+      void logEvent("gallery", "", 0, sessionRef.current);
+      return;
+    }
+    const items: RichItem[] = rows.slice(0, 8).map((g) => ({
+      id: String(g.id),
+      title: g.title || "—",
+      desc: g.description || "",
+      image: g.image || "",
+      sub: typeof g.likes === "number" && g.likes > 0 ? `❤️ ${g.likes}` : "",
+    }));
+    push({
+      from: "bot",
+      bold: si ? "🖼️ අපේ ගැලරිය" : "🖼️ Our Gallery",
+      text: si
+        ? `ප්‍රකාශ කළ ඡායාරූප ${items.length}ක් — මාතෘකාව සහ විස්තරය සමඟ 👇\nවිස්තරය බලන්න ඡායාරූපයක් ඔබන්න.`
+        : `${items.length} published photo${items.length > 1 ? "s" : ""} with their captions 👇\nTap a photo to see its details.`,
+      card: "gallery",
+      items,
+      link: { href: "/gallery", label: si ? "සියලුම ඡායාරූප — ගැලරි පිටුව අරින්න" : "All photos — open the Gallery page" },
+    });
+    convoRef.current.lastIntent = "gallery";
+    void logEvent("gallery", "", items.length, sessionRef.current);
+  }
+
+  // ── business / board / fuel button එකක් එබුවම ──
+  async function pickFromList(action: "biz" | "board" | "fuel", value: string, label: string) {
     push({ from: "me", text: label });
+    if (action === "fuel") {
+      if (value === "__all") await showAllFuelPrices();
+      else await showFuelPrice(value as FuelPrice["type"]);
+      return;
+    }
     setTyping(true);
     try {
       const sb = createAnonClient();
@@ -906,6 +1169,220 @@ export function LiveChat() {
       return;
     }
 
+    // ───────────────────────────────────────────────────────────────────────
+    //  Baymax brain (④) — smalltalk, නම මතක තබා ගැනීම, fuel/news/gallery
+    //  patterns ඔක්කොම src/lib/chatbot.ts එකේ — අලුත් වචන එතැනින් ට්‍රේන් කරන්න
+    // ───────────────────────────────────────────────────────────────────────
+    const rsi = replyIsSi(q, si);
+    const myName = (visitorName.trim() || convoRef.current.name || "").trim();
+    const firstName = myName ? myName.split(/\s+/)[0] : "";
+    const menuChips = rsi ? MENU_CHIPS_SI : MENU_CHIPS_EN;
+
+    // "මගේ නම ..." කියූ විට — නම මතක තබා, පස්සේ නමින් අමතන්න
+    const introName = detectNameIntro(q);
+    if (introName) {
+      convoRef.current.name = introName;
+      convoRef.current.lastIntent = "how_are_you";
+      setVisitorName(introName);
+      try {
+        localStorage.setItem("mpcs_chat_name", introName);
+      } catch {
+        /* ignore */
+      }
+      push({
+        from: "bot",
+        bold: rsi ? `😊 හඳුනාගැනීම සතුටුයි, ${introName}!` : `😊 Nice to meet you, ${introName}!`,
+        text: rsi
+          ? `මම ${botName} — ${SITE.short_si} එකේ සජීවී සහායකයා.\nකොහොමද ඉන්නේ?`
+          : `I'm ${botName} — the live assistant of ${SITE.short_en}.\nHow are you doing?`,
+      });
+      void logEvent("intent_name_intro", "", 0, sessionRef.current);
+      return;
+    }
+
+    const talk = detectSmalltalk(q);
+    if (talk) {
+      const wasAsked = convoRef.current.lastIntent === "how_are_you";
+      void logEvent(`intent_${talk.intent}`, q, 0, sessionRef.current);
+      switch (talk.intent) {
+        case "hi":
+          convoRef.current.lastIntent = "how_are_you";
+          push({
+            from: "bot",
+            text: rsi ? `Hi${firstName ? ` ${firstName}` : ""}! 👋 කොහොමද ඉන්නේ?` : `Hi${firstName ? ` ${firstName}` : ""}! 👋 How are you doing?`,
+            chips: menuChips,
+          });
+          return;
+        case "hello":
+          convoRef.current.lastIntent = "greeted";
+          push({
+            from: "bot",
+            text: rsi
+              ? `Hello${firstName ? ` ${firstName}` : ""}! 👋\nමම ${botName} බොට් — ${SITE.short_si} එකේ සජීවී සහායකයා.\nමම කොහොමද ඔබට උදව් කරන්න ඕනෙ?`
+              : `Hello${firstName ? ` ${firstName}` : ""}! 👋\nI'm ${botName}, the live assistant of ${SITE.short_en}.\nHow may I help you?`,
+            chips: menuChips,
+          });
+          return;
+        case "ayubowan":
+          convoRef.current.lastIntent = "greeted";
+          push({
+            from: "bot",
+            text: rsi
+              ? `ආයුබෝවන්${firstName ? ` ${firstName}` : ""}! 🙏\n${SITE.short_si} වෙත සාදරයෙන් පිළිගනිමු. මම ${botName} — ඔබට කොහොමද උදව් කරන්න ඕනෙ?`
+              : `Ayubowan${firstName ? ` ${firstName}` : ""}! 🙏\nWelcome to ${SITE.short_en}. I'm ${botName} — how may I help you?`,
+            chips: menuChips,
+          });
+          return;
+        case "daypart": {
+          convoRef.current.lastIntent = "greeted";
+          const greetSi = { morning: "සුබ උදෑසනක්! ☀️", afternoon: "සුබ දහවලක්! 🌤️", evening: "සුබ සැන්දෑවක්! 🌇", night: "සුබ රාත්‍රියක්! 🌙" }[talk.part ?? "morning"];
+          const greetEn = { morning: "Good morning! ☀️", afternoon: "Good afternoon! 🌤️", evening: "Good evening! 🌇", night: "Good night! 🌙" }[talk.part ?? "morning"];
+          push({
+            from: "bot",
+            text: rsi
+              ? `${greetSi}${firstName ? ` ${firstName}` : ""}\nමම ${botName} — අද ඔබට කොහොමද උදව් කරන්න ඕනෙ?`
+              : `${greetEn}${firstName ? ` ${firstName}` : ""}\nI'm ${botName} — how may I help you today?`,
+            chips: menuChips,
+          });
+          return;
+        }
+        case "how_are_you":
+          convoRef.current.lastIntent = "how_are_you";
+          push({
+            from: "bot",
+            text: rsi ? "මම හොඳින් ඉන්නවා, ස්තූතියි! 😊 ඔයාට කොහොමද?" : "I'm doing well, thank you! 😊 How about you?",
+          });
+          return;
+        case "wellbeing_good":
+          convoRef.current.lastIntent = "greeted";
+          push({
+            from: "bot",
+            text: rsi
+              ? wasAsked
+                ? "අහන්න ලැබීම ගොඩක් සතුටුයි! 😊\nකියන්න, මම අද ඔබට උදව් කරන්නේ කොහොමද?"
+                : "නියමයි! 😊 කියන්න, මම ඔබට උදව් කරන්නේ කොහොමද?"
+              : wasAsked
+                ? "Glad to hear that! 😊\nTell me — how may I help you today?"
+                : "Great! 😊 Tell me — how may I help you?",
+            chips: menuChips,
+          });
+          return;
+        case "wellbeing_bad":
+          convoRef.current.lastIntent = "greeted";
+          push({
+            from: "bot",
+            text: rsi
+              ? "අයියෝ, ඒක අහන්න කණගාටුයි 🫂\nසමිති කාර්යාලයෙන් උදව්වක් අවශ්‍ය නම් නිලධාරියෙක් සම්බන්ධ කරලා දෙන්නම් — පහත “ඇමතුමක් ඉල්ලන්න” ඔබන්න."
+              : "I'm sorry to hear that 🫂\nIf you need help from our office, I can connect you with an officer — tap “Request a Call” below.",
+            chips: rsi ? ["ඇමතුමක් ඉල්ලන්න", "සජීවී චැට්"] : ["Request a Call", "Live Chat"],
+          });
+          return;
+        case "thanks":
+          convoRef.current.lastIntent = "greeted";
+          push({
+            from: "bot",
+            text: rsi ? "ඔබව සාදරයෙන් පිළිගන්නවා! 🙏\nතවත් මොනවා හරි උදව්වක් ඕනෙද?" : "You're most welcome! 🙏\nIs there anything else I can help you with?",
+            chips: menuChips,
+          });
+          return;
+        case "bye":
+          convoRef.current.lastIntent = "closed";
+          push({
+            from: "bot",
+            text: rsi
+              ? `ගිහිල්ලා එන්න${firstName ? ` ${firstName}` : ""}! 👋\nඅපව විශ්වාස කළාට ස්තූතියි — ඕනෑම වෙලාවක ආයෙත් එන්න. සුබ දවසක්! 🙏`
+              : `Goodbye${firstName ? ` ${firstName}` : ""}! 👋\nThank you for visiting us — please come back anytime. Have a great day! 🙏`,
+          });
+          return;
+        case "who_are_you":
+          convoRef.current.lastIntent = "greeted";
+          push({
+            from: "bot",
+            bold: `🤖 ${botName}`,
+            text: rsi
+              ? `මම ${botName} — ${SITE.short_si} එකේ සජීවී චැට් සහායකයා.\nමට පුළුවන්: සාමාජිකයන් සොයන්න, ඉන්ධන මිල කියන්න, පුවත් හා ගැලරි පෙන්වන්න, කළමනාකරුවන්ගේ දුරකථන දෙන්න සහ නිලධාරියෙක් සම්බන්ධ කරන්න.\nඋත්සාහ කරන්න: “fuel prices” කියලා ලියන්න 😊`
+              : `I'm ${botName} — the live chat assistant of ${SITE.short_en}.\nI can find members, share fuel prices, show news and the gallery, give managers' phone numbers and connect you with an officer.\nTry typing “fuel prices” 😊`,
+            chips: menuChips,
+          });
+          return;
+        case "help":
+          convoRef.current.lastIntent = "greeted";
+          push({
+            from: "bot",
+            bold: rsi ? "🧭 මට ඔබට උදව් කරන්න පුළුවන් දෑ" : "🧭 Here's how I can help",
+            text: rsi
+              ? "🔎 සාමාජික සොයන්න — නම/NIC/සාමාජික අංකය (උදා: 41/01)\n⛽ ඉන්ධන මිල — “fuel prices” ලියන්න\n📰 පුවත් හා නිවේදන · 🖼️ ගැලරිය\n🏢 ව්‍යාපාර කළමනාකරුවන් සහ දුරකථන\n📞 නිලධාරියෙකුගේ ඇමතුමක් ඉල්ලන්න\n\nපහත බොත්තමක් ඔබන්න, නැත්නම් ඔබේ ප්‍රශ්නය මෙතැන ලියන්න."
+              : "🔎 Find a member — name / NIC / member No. (e.g. 41/01)\n⛽ Fuel prices — type “fuel prices”\n📰 News & notices · 🖼️ Gallery\n🏢 Business managers and phone numbers\n📞 Request a call from an officer\n\nTap an option below, or just type your question here.",
+            chips: [...menuChips, rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
+          });
+          return;
+        case "ok":
+          convoRef.current.lastIntent = "greeted";
+          push({
+            from: "bot",
+            text: rsi ? "හරි! 👍 තවත් දෙයක් ඕනෙද?" : "Great! 👍 Anything else you need?",
+            chips: menuChips,
+          });
+          return;
+      }
+    }
+
+    // ⛽ ඉන්ධන — වර්ගයක් සඳහන් නම් ඒ මිලම, නැත්නම් තෝරන මෙනුව
+    const fuelHit = detectFuel(q);
+    if (fuelHit) {
+      if (fuelHit.type) await showFuelPrice(fuelHit.type);
+      else await showFuelPicker();
+      return;
+    }
+
+    // 📰 පුවත් / නිවේදන (රැකියා / ටෙන්ඩර් filter සමඟ)
+    const newsHit = detectNews(q);
+    if (newsHit) {
+      await showNews(newsHit.category);
+      return;
+    }
+
+    // 🖼️ ගැලරිය
+    if (detectGallery(q)) {
+      await showGallery();
+      return;
+    }
+
+    // පැමිණිල්ලක් → නිලධාරියකුට භාරදීම (වඩාත් වෘත්තීයයි)
+    if (detectComplaint(q)) {
+      void logEvent("intent_complaint", q, 0, sessionRef.current);
+      askOfficer();
+      return;
+    }
+
+    // ණය / ඉතුරුම් / උකස් → ග්‍රාමීය බැංකුව
+    if (detectBanking(q)) {
+      convoRef.current.lastIntent = "banking";
+      push({
+        from: "bot",
+        bold: rsi ? "🏦 ග්‍රාමීය බැංකුව — ණය සහ ඉතුරුම්" : "🏦 Rural Bank — Loans & Savings",
+        text: rsi
+          ? "අපේ ග්‍රාමීය බැංකු අංශයෙන් ඉතුරුම් ගිණුම්, සාමාජික ණය සහ රන් උකස් සේවා ලබාගන්න පුළුවන්.\nසේවා විස්තර සහ ශාඛා 22ම පිටුවෙන් බලන්න පුළුවන්."
+          : "Our Rural Bank offers savings accounts, member loans and gold pawning services.\nSee the page below for services and all 22 branches.",
+        chips: rsi ? ["ව්‍යාපාර කළමනාකරුවන්", "කාර්යාල දුරකථන"] : ["Business Managers", "Office Phones"],
+        link: { href: "/businesses/rural-bank", label: rsi ? "ග්‍රාමීය බැංකු පිටුව අරින්න" : "Open the Rural Bank page" },
+      });
+      void logEvent("intent_banking", q, 0, sessionRef.current);
+      return;
+    }
+
+    // අධ්‍යක්ෂ මණ්ඩලය / සභාපති → නම අනුව දුරකථන ලැයිස්තුව
+    if (/(chairman|board of directors|directors?|සභාපති|අධ්‍යක්ෂ මණ්ඩල|අධ්‍යක්ෂ)/.test(n)) {
+      void runAction("office");
+      return;
+    }
+
+    // ව්‍යාපාර අංශ / සේවා (දුරකථන අසන්නේ නැත්නම්) → අංශ ලැයිස්තුව
+    if (/(business|businesses|divisions?|ව්‍යාපාර|අංශ|සේවා|services)/.test(n) && !/(phone|දුරකථන|number|අංක)/.test(n)) {
+      void runAction("managers");
+      return;
+    }
+
     if (/(hour|time|වේලා|open|විවෘත|close|වහන)/.test(n)) {
       push({ from: "bot", bold: si ? "🕘 කාර්යාල වේලාවන්" : "🕘 Office Hours", text: (si ? SITE.hours_si : SITE.hours_en).join("\n") });
       return;
@@ -925,24 +1402,7 @@ export function LiveChat() {
       return;
     }
 
-    if (/(fuel|petrol|diesel|kerosene|ඉන්ධන|පෙට්‍රල්|ඩීසල්)/.test(n)) {
-      setTyping(true);
-      try {
-        const sb = createAnonClient();
-        const { data } = await sb.from("fuel_prices").select("*").limit(10);
-        setTyping(false);
-        const rows = (data ?? []) as { type?: string; fuel_type?: string; price?: number | string }[];
-        push({
-          from: "bot",
-          bold: si ? "⛽ ඉන්ධන මිල" : "⛽ Fuel Prices",
-          text: rows.length ? rows.map((r) => `• ${r.type ?? r.fuel_type}: Rs. ${r.price}`).join("\n") : si ? `දැනට නොමැත — අමතන්න ${SITE.phones[0]}` : `Unavailable — call ${SITE.phones[0]}`,
-        });
-      } catch {
-        setTyping(false);
-        push({ from: "bot", text: SITE.phones.join(" | ") });
-      }
-      return;
-    }
+    // ⛽ fuel / 📰 news / 🖼️ gallery / greeting intents — උඩ Baymax brain එකෙන් හසුරුවනවා
 
     // “live chat / සජීවී චැට්” → කෙලින්ම live chat tab එකට
     if (/^(live ?chat|live agent|සජීවී ?චැට්|සජීවී|ලයිව් ?චැට්)$/.test(n)) {
@@ -969,21 +1429,16 @@ export function LiveChat() {
       return;
     }
 
-    if (/(hello|hi|hey|ayubowan|ආයුබෝ|හෙලෝ|කොහොමද)/.test(n)) {
-      push({
-        from: "bot",
-        text: si ? "ආයුබෝවන්! 😊 පහත බොත්තමක් තෝරන්න හෝ සාමාජික අංකයක් (41/01) යවන්න." : "Hello! 😊 Pick an option below or send a member number (41/01).",
-        chips: si ? ["සාමාජික සොයන්න", "සජීවී සම්බන්ධය"] : ["Find Member", "Contact Live Chat"],
-      });
-      return;
-    }
-
+    // ✅ තේරුණේ නැති පණිවිඩය — bot එක ට්‍රේන් කිරීමට log කර, මෙනුව පෙන්වයි
+    void logEvent("unmatched", q, 0, sessionRef.current);
+    convoRef.current.lastIntent = "unmatched";
     push({
       from: "bot",
-      text: si
-        ? "පහත විකල්ප වලින් එකක් තෝරන්න 👇"
-        : "Please pick one of the options below 👇",
-      chips: si ? ["සාමාජික සොයන්න", "ව්‍යාපාර කළමනාකරුවන්", "කාර්යාල දුරකථන", "සජීවී සම්බන්ධය"] : ["Find Member", "Business Managers", "Office Phones", "Contact Live Chat"],
+      bold: rsi ? "🙏 සමාවෙන්න, ඒක මට හරියට තේරුණේ නෑ" : "🙏 Sorry, I didn't quite get that",
+      text: rsi
+        ? "මම තාම ඉගෙන ගන්නවා — ඔබේ පණිවිඩය සටහන් කර ගත්තා, ඉක්මනින් මට මේකටත් උත්තර දෙන්න පුළුවන් වෙයි.\nමේ අතරේ පහත විකල්පයකින් තෝරන්න, නැත්නම් නිලධාරියෙක් සම්බන්ධ කරලා දෙන්නම්."
+        : "I'm still learning — I've noted your message so I can do better next time.\nMeanwhile, pick an option below or let me connect you with an officer.",
+      chips: [...menuChips, rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
     });
   }
 
@@ -1216,7 +1671,13 @@ export function LiveChat() {
                           ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                           : a.key === "contact"
                             ? "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100"
-                            : "border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                            : a.key === "fuel"
+                              ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                              : a.key === "news"
+                                ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                                : a.key === "gallery"
+                                  ? "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                                  : "border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
                       }`}
                     >
                       <a.icon size={12} />
@@ -1269,6 +1730,86 @@ export function LiveChat() {
                                 >
                                   <span className="block text-[11.5px] font-extrabold text-slate-800 leading-tight">{it.label}</span>
                                   {it.sub && <span className="block text-[9.5px] text-slate-500 truncate">{it.sub}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* news cards — published items, click → full story */}
+                          {m.card === "news" && m.items && (
+                            <div className="mt-2 space-y-1.5">
+                              {m.items.map((it) => (
+                                <button
+                                  key={it.id}
+                                  onClick={() => {
+                                    push({ from: "me", text: it.title });
+                                    push({
+                                      from: "bot",
+                                      bold: it.title,
+                                      text: `${it.sub ?? ""}\n\n${(it.desc ?? "").length > 600 ? `${(it.desc ?? "").slice(0, 600).trim()}…` : it.desc ?? ""}`,
+                                      chips: si ? ["නිවේදන හා පුවත්", "ගැලරිය"] : ["News", "Gallery"],
+                                      link: { href: "/news", label: si ? "සම්පූර්ණ පුවත පිටුවෙන් කියවන්න" : "Read the full story on the News page" },
+                                    });
+                                  }}
+                                  className="w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left transition hover:border-indigo-300 hover:bg-white"
+                                >
+                                  <span className="flex gap-2.5 p-2">
+                                    {it.image ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={it.image} alt="" className="h-14 w-[4.5rem] shrink-0 rounded-lg object-cover" />
+                                    ) : (
+                                      <span className="flex h-14 w-[4.5rem] shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                                        <Newspaper size={20} />
+                                      </span>
+                                    )}
+                                    <span className="min-w-0 flex-1">
+                                      {it.badge && (
+                                        <span className="mb-0.5 inline-block rounded-md bg-indigo-600 px-1.5 py-px text-[8.5px] font-black uppercase tracking-wide text-white">{it.badge}</span>
+                                      )}
+                                      <span className="block text-[11.5px] font-extrabold leading-snug text-slate-900 line-clamp-2">{it.title}</span>
+                                      {it.sub && <span className="mt-0.5 block truncate text-[9px] font-semibold text-slate-500">{it.sub}</span>}
+                                      <span className="mt-1 block text-[9.5px] font-bold text-indigo-600">{si ? "සම්පූර්ණ විස්තරය කියවන්න →" : "Read full details →"}</span>
+                                    </span>
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* gallery cards — photo + tagline, click → details */}
+                          {m.card === "gallery" && m.items && (
+                            <div className="mt-2 space-y-2">
+                              {m.items.map((it) => (
+                                <button
+                                  key={it.id}
+                                  onClick={() => {
+                                    push({ from: "me", text: it.title });
+                                    push({
+                                      from: "bot",
+                                      bold: `🖼️ ${it.title}`,
+                                      text: `${it.desc || (si ? "විස්තරයක් නැත." : "No description.")}${it.sub ? `\n${it.sub}` : ""}`,
+                                      chips: si ? ["ගැලරිය", "නිවේදන හා පුවත්"] : ["Gallery", "News"],
+                                      link: { href: "/gallery", label: si ? "ගැලරියෙන් ලොකු කර බලන්න" : "View it in the Gallery" },
+                                    });
+                                  }}
+                                  className="w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50 text-left transition hover:border-indigo-300 hover:bg-white"
+                                >
+                                  {it.image ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={it.image} alt={it.title} className="h-28 w-full object-cover" />
+                                  ) : (
+                                    <span className="flex h-28 w-full items-center justify-center bg-indigo-100 text-indigo-500">
+                                      <Images size={26} />
+                                    </span>
+                                  )}
+                                  <span className="block p-2.5">
+                                    <span className="flex items-start justify-between gap-2">
+                                      <span className="block text-[12px] font-extrabold leading-tight text-slate-900">{it.title}</span>
+                                      {it.sub && <span className="shrink-0 text-[10px] font-bold text-rose-500">{it.sub}</span>}
+                                    </span>
+                                    {it.desc && <span className="mt-1 block text-[10.5px] leading-relaxed text-slate-500 line-clamp-2">{it.desc}</span>}
+                                    <span className="mt-1.5 block text-[9.5px] font-bold text-indigo-600">{si ? "විස්තරය බලන්න →" : "View details →"}</span>
+                                  </span>
                                 </button>
                               ))}
                             </div>
@@ -1338,6 +1879,16 @@ export function LiveChat() {
                                 <CheckCircle2 size={11} /> {si ? "කාර්යාලයට ලැබුණි" : "Received by the office"}
                               </div>
                             </div>
+                          )}
+
+                          {/* page link CTA (news / gallery / fuel) */}
+                          {m.link && (
+                            <a
+                              href={m.link.href}
+                              className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 py-2 text-[11.5px] font-extrabold text-white transition hover:bg-indigo-700"
+                            >
+                              {m.link.label} <ArrowRight size={13} />
+                            </a>
                           )}
                         </div>
                       </div>
@@ -1488,7 +2039,7 @@ export function LiveChat() {
                           send();
                         }
                       }}
-                      placeholder={si ? "සාමාජික අංකයක් හෝ ප්‍රශ්නයක් ලියන්න…" : "Type a member number or ask anything…"}
+                      placeholder={si ? "“Hi”, “කොහොමද”, “fuel prices”, “news”… ලියන්න" : "Try “Hi”, “Hello”, “fuel prices”, “news”, “gallery”…"}
                       className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
                     />
                     <button onClick={() => send()} disabled={!input.trim()} className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center disabled:opacity-40 hover:bg-indigo-700 transition">
