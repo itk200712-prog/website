@@ -1227,7 +1227,3 @@ drop policy if exists notify_emails_admin on public.notify_emails;
 create policy notify_emails_admin on public.notify_emails for all using (public.is_admin()) with check (public.is_admin());
 
 notify pgrst, 'reload schema';
-y_emails;
-create policy notify_emails_admin on public.notify_emails for all using (public.is_admin()) with check (public.is_admin());
-
-notify pgrst, 'reload schema';
