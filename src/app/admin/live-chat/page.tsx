@@ -9,13 +9,37 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Activity, ArrowUpRight, Bot, CheckCircle2, Clock, Mail, MessageCircle, Phone,
-  RefreshCw, Save, Search, Send, TrendingUp, Upload, UserRound, X as XIcon,
+  Activity, ArrowUpRight, Bot, CheckCircle2, Clock, KeyRound, Mail, MessageCircle, Phone,
+  RefreshCw, Save, Search, Send, Sparkles, Trash2, TrendingUp, Upload, UserRound, X as XIcon,
 } from "lucide-react";
 import { AdminStatCard, AdminTopbar, dbUpdate, useNotice } from "@/components/admin";
 import { AdminLiveChats } from "@/components/admin-live-chats";
 import { authedClient } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
+import { logActivity } from "@/lib/activity";
+import {
+  DEFAULT_GEMINI_MODEL, GEMINI_MODEL_OPTIONS, isAiEnabledValue, maskSecret, normalizeGeminiModel,
+} from "@/lib/baymax-ai";
+
+/** /api/baymax-ai එකෙන් එන reason එක admin ට තේරෙන වාක්‍යයකට */
+function aiReasonText(reason?: string, status?: number): string {
+  switch (reason) {
+    case "server_not_configured":
+      return "Server setup එක අඩුයි — Vercel එකට SUPABASE_SERVICE_ROLE_KEY env එක දාලා redeploy කරන්න (පහත පියවර බලන්න).";
+    case "not_configured":
+      return "තාම Gemini API key එකක් save කරලා නෑ — key එක paste කරලා Save කරන්න.";
+    case "disabled":
+      return "AI එක off කරලා තියෙන්නේ — උඩින් enable කරලා Save කරන්න.";
+    case "invalid_key":
+      return "Gemini API key එක වැරදියි වගේ (Google එකෙන් reject වුණා) — key එක ආයේ check කරලා save කරන්න.";
+    case "invalid_model":
+      return "තෝරපු model එක හමු නොවීය — වෙනත් model එකක් තෝරලා Save කරන්න.";
+    case "rate_limited":
+      return "විනාඩියක් තුළ ප්‍රශ්න ගොඩක් ආවා — ටිකක් ඉඳලා ආයේ උත්සාහ කරන්න.";
+    default:
+      return `Gemini එකෙන් පිළිතුරක් ලැබුණේ නෑ${status ? ` (status ${status})` : ""} — ටිකකින් ආයේ උත්සාහ කරන්න.`;
+  }
+}
 
 type Event = { id: string; event_type: string; query: string; matched: number; session_id: string; created_at: string };
 type Msg = {
@@ -36,6 +60,7 @@ const TYPE_META: Record<string, { label: string; tone: string; icon: typeof Acti
   intent_officer: { label: "Asked for an officer", tone: "bg-fuchsia-50 text-fuchsia-700", icon: MessageCircle },
   ask_officer: { label: "Officer Yes/No prompt", tone: "bg-fuchsia-50 text-fuchsia-700", icon: MessageCircle },
   decline_officer: { label: "Officer — declined", tone: "bg-slate-100 text-slate-600", icon: XIcon },
+  ai_answer: { label: "AI answer (Gemini)", tone: "bg-indigo-50 text-indigo-700", icon: Sparkles },
 };
 
 export default function AdminLiveChatPage() {
@@ -52,14 +77,47 @@ export default function AdminLiveChatPage() {
   const [view, setView] = useState<"overview" | "chats">("overview");
   const [chatCount, setChatCount] = useState({ active: 0, unread: 0 });
 
+  // ✨ Baymax AI (Gemini) — enable/model එක public settings, key එක backup_secrets (superadmin-only)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiModel, setAiModel] = useState<string>(DEFAULT_GEMINI_MODEL);
+  const [aiKeyInput, setAiKeyInput] = useState("");
+  const [aiKeyMask, setAiKeyMask] = useState("");
+  const [savingAi, setSavingAi] = useState(false);
+  const [testingAi, setTestingAi] = useState(false);
+  const [aiStatus, setAiStatus] = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const sb = await authedClient();
-      const { data: st } = await sb.from("system_settings").select("key,value").in("key", ["chat_bot_name", "chat_bot_avatar"]);
+      const { data: st } = await sb
+        .from("system_settings")
+        .select("key,value")
+        .in("key", ["chat_bot_name", "chat_bot_avatar", "chat_ai_enabled", "chat_ai_model"]);
       const map = new Map(((st ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
       setBotName((map.get("chat_bot_name") || "Baymax").trim() || "Baymax");
       setBotAvatar((map.get("chat_bot_avatar") || "").trim());
+      setAiEnabled(isAiEnabledValue(map.get("chat_ai_enabled")));
+      setAiModel(normalizeGeminiModel(map.get("chat_ai_model")));
+
+      // Gemini key එක superadmin ට විතරයි (backup_secrets RLS) — mask එක විතරක් තබා ගනී
+      const { data: u } = await sb.auth.getUser();
+      let superAdmin = false;
+      if (u?.user) {
+        const { data: prof } = await sb.from("profiles").select("role").eq("id", u.user.id).maybeSingle();
+        superAdmin = (prof as { role?: string } | null)?.role === "superadmin";
+      }
+      setIsSuperAdmin(superAdmin);
+      if (superAdmin) {
+        const { data: keyRow } = await sb
+          .from("backup_secrets")
+          .select("value")
+          .eq("key", "gemini_api_key")
+          .maybeSingle();
+        setAiKeyMask(maskSecret((keyRow as { value?: string } | null)?.value));
+      }
+      void refreshAiStatus();
 
       const { data: ev, error: evErr } = await sb
         .from("live_chat_events")
@@ -126,6 +184,114 @@ export default function AdminLiveChatPage() {
     if (error) return show(`⚠ ${error.message}`);
     setBotName(name);
     show("✅ Chat bot settings saved — Live Chat එකේ වහාම පේනවා");
+  }
+
+  /** server එකට key එක පේනවද කියා බලනවා (key එක ආපසු එන්නේ නෑ — status එක විතරයි) */
+  async function refreshAiStatus() {
+    try {
+      const r = await fetch("/api/baymax-ai", { cache: "no-store" });
+      const j = (await r.json()) as { ok?: boolean; serverConfigured?: boolean; configured?: boolean; enabled?: boolean };
+      if (!j.ok) return;
+      setAiStatus(
+        !j.serverConfigured
+          ? "🔴 Server setup එක අඩුයි — Vercel එකට SUPABASE_SERVICE_ROLE_KEY env එක දාලා redeploy කරන්න (පහත පියවර බලන්න)."
+          : j.configured
+            ? `🟢 Server ready — Gemini key එක server එකට පේනවා${j.enabled ? " · AI on කරලා තියෙන්නේ" : " · AI තාම off"}`
+            : "🟡 Server ready — තාම Gemini API key එකක් save කරලා නෑ."
+      );
+    } catch {
+      setAiStatus("⚠ AI server status එක ගන්න බැරි වුණා — site එක deploy වුණාට පස්සේ ආයේ බලන්න.");
+    }
+  }
+
+  async function saveAi() {
+    setSavingAi(true);
+    const sb = await authedClient();
+    const model = normalizeGeminiModel(aiModel);
+    const { error } = await sb.from("system_settings").upsert(
+      [
+        { key: "chat_ai_enabled", value: aiEnabled ? "1" : "0" },
+        { key: "chat_ai_model", value: model },
+      ],
+      { onConflict: "key" }
+    );
+    if (error) {
+      setSavingAi(false);
+      return show(`⚠ ${error.message}`);
+    }
+
+    let keyUpdated = false;
+    const newKey = aiKeyInput.trim();
+    if (newKey) {
+      if (!isSuperAdmin) {
+        setSavingAi(false);
+        return show("⚠ API key එක save කරන්න superadmin ගිණුමෙන් login වෙන්න ඕනේ");
+      }
+      if (newKey.length < 12) {
+        setSavingAi(false);
+        return show("⚠ මේක හරි Gemini API key එකක් වගේ නැහැ — ආයේ check කරන්න");
+      }
+      const { error: keyErr } = await sb
+        .from("backup_secrets")
+        .upsert({ key: "gemini_api_key", value: newKey }, { onConflict: "key" });
+      if (keyErr) {
+        setSavingAi(false);
+        return show(`⚠ ${keyErr.message}`);
+      }
+      setAiKeyMask(maskSecret(newKey));
+      setAiKeyInput("");
+      keyUpdated = true;
+    }
+
+    setAiModel(model);
+    setSavingAi(false);
+    void logActivity(
+      "AI_SETTINGS",
+      `Baymax Gemini AI ${aiEnabled ? "enabled" : "disabled"} · model ${model}${keyUpdated ? " · API key updated" : ""}`
+    );
+    show("✅ Gemini AI settings saved — Baymax එකේ වහාම බලපානවා");
+    void refreshAiStatus();
+  }
+
+  async function clearAiKey() {
+    if (!isSuperAdmin) return;
+    setSavingAi(true);
+    const sb = await authedClient();
+    const { error } = await sb
+      .from("backup_secrets")
+      .upsert({ key: "gemini_api_key", value: "" }, { onConflict: "key" });
+    setSavingAi(false);
+    if (error) return show(`⚠ ${error.message}`);
+    setAiKeyMask("");
+    setAiKeyInput("");
+    void logActivity("AI_SETTINGS", "Baymax Gemini API key cleared");
+    show("✅ Gemini API key එක ඉවත් කළා");
+    void refreshAiStatus();
+  }
+
+  /** සජීවී test එකක් — "සමූපකාරයක් යනු කුමක්ද?" කියා ඇත්තටම අහලා බලනවා */
+  async function testAi() {
+    setTestingAi(true);
+    setAiStatus("⏳ Test කරනවා… Gemini එකෙන් සිංහල උත්තරයක් ඉල්ලනවා");
+    try {
+      const r = await fetch("/api/baymax-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: "සමූපකාරයක් යනු කුමක්ද? වාක්‍ය දෙකකින් කෙටියෙන් කියන්න.",
+          language: "si",
+        }),
+      });
+      const j = (await r.json()) as { ok?: boolean; answer?: string; reason?: string; status?: number };
+      if (j.ok && j.answer) {
+        setAiStatus(`✅ වැඩ කරනවා! උදාහරණ පිළිතුර:\n${String(j.answer).slice(0, 260)}`);
+      } else {
+        setAiStatus(`⚠ ${aiReasonText(j.reason, j.status)}`);
+      }
+    } catch {
+      setAiStatus("⚠ Test එක යවන්න බැරි වුණා — network එක check කරලා ආයේ උත්සාහ කරන්න.");
+    }
+    setTestingAi(false);
   }
 
   async function markHandled(m: Msg) {
@@ -303,6 +469,101 @@ export default function AdminLiveChatPage() {
           <button onClick={() => void saveBot()} disabled={savingBot} className="btn btn-primary !py-2.5 !px-4 !text-[12px]">
             <Save size={13} /> {savingBot ? "Saving…" : "Save"}
           </button>
+        </div>
+      </div>
+
+      {/* ✨ Baymax AI (Gemini) settings */}
+      <div className="mb-5 rounded-2xl border border-indigo-200 bg-white p-4 sm:p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-[13px] font-extrabold text-slate-900">
+              <Sparkles size={15} className="text-indigo-600" /> Baymax AI — Gemini (පොදු දැනුම් ප්‍රශ්න)
+            </div>
+            <p className="mt-0.5 max-w-2xl text-[11.5px] leading-relaxed text-slate-500">
+              Site එකේ තොරතුරු වලින් උත්තර නැති පොදු ප්‍රශ්නවලට (උදා: “සමූපකාරයක් යනු කුමක්ද?”)
+              Gemini AI එක Google Search එකත් බලලා උත්තර දෙයි. අහන භාෂාවෙන්මයි — සිංහලෙන් ඇහුවොත් සිංහලෙන්ම.
+              Site එකේ ඇත්ත තොරතුරු (අංක, මිල, නම්) කලින් වගේම site brain එකෙන්මයි; AI එක ඒවා හදලා කියන්නේ නෑ.
+            </p>
+          </div>
+          <span className={`rounded-full text-[10px] font-black px-2 py-1 ${aiEnabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+            {aiEnabled ? "AI ON" : "AI OFF"}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={aiEnabled} onChange={(e) => setAiEnabled(e.target.checked)} />
+            <span><b>Gemini AI එක on කරන්න</b><br /><span className="text-slate-500">Site brain එකට උත්තර නැති ප්‍රශ්නවලට විතරයි AI එක කැඳවන්නේ.</span></span>
+          </label>
+
+          <div>
+            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Gemini model එක</label>
+            <select
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
+            >
+              {!GEMINI_MODEL_OPTIONS.some((o) => o.value === aiModel) && <option value={aiModel}>{aiModel}</option>}
+              {GEMINI_MODEL_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">
+              <KeyRound size={11} /> Gemini API key එක
+            </label>
+            <input
+              type="password"
+              value={aiKeyInput}
+              onChange={(e) => setAiKeyInput(e.target.value)}
+              disabled={!isSuperAdmin}
+              autoComplete="new-password"
+              placeholder={aiKeyMask ? "අලුත් key එකක් දාන්න නම් මෙතැන paste කරන්න (හිස් තිබ්බොත් පරණ එකම තියේවි)" : "Gemini API key එක මෙතැන paste කරන්න…"}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white disabled:opacity-50"
+            />
+            <div className="mt-1.5 text-[11px] text-slate-500">
+              {!isSuperAdmin
+                ? "🔒 API key එක බලන්න/වෙනස් කරන්න superadmin ගිණුමෙන් login වෙන්න ඕනේ."
+                : aiKeyMask
+                  ? <>🔒 දැනට save වී ඇති key එක: <b>{aiKeyMask}</b> (සම්පූර්ණ එක ආයෙත් පෙන්වන්නේ නෑ)</>
+                  : "තාම key එකක් save කරලා නෑ."}{" "}
+              Key එකක් නැත්නම්{" "}
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="font-bold text-indigo-700 hover:underline">
+                Google AI Studio එකෙන් නොමිලේ ගන්න →
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button onClick={() => void saveAi()} disabled={savingAi} className="btn btn-primary !py-2.5 !px-4 !text-[12px]">
+            <Save size={13} /> {savingAi ? "Saving…" : "Save AI settings"}
+          </button>
+          <button onClick={() => void testAi()} disabled={testingAi || savingAi} className="btn btn-outline !py-2.5 !px-4 !text-[12px]">
+            <Sparkles size={13} /> {testingAi ? "Testing…" : "Test කරන්න"}
+          </button>
+          {aiKeyMask && isSuperAdmin && (
+            <button onClick={() => void clearAiKey()} disabled={savingAi} className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-rose-600 hover:underline">
+              <Trash2 size={12} /> Key එක ඉවත් කරන්න
+            </button>
+          )}
+        </div>
+
+        {aiStatus && (
+          <div className="mt-3 whitespace-pre-line rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] leading-relaxed text-slate-700">
+            {aiStatus}
+          </div>
+        )}
+
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11.5px] leading-relaxed text-amber-800">
+          <b>⚠ එක වරක් කරන server setup එක (අනිවාර්යයි):</b> API key එක visitor ට පේන්නේ නැතිව server එකට කියවන්න
+          පුළුවන් වෙන්න — ① Supabase → Project Settings → API Keys එකෙන් <b>service_role</b> secret එක copy කරන්න
+          (කාටවත් එවන්න එපා) · ② Vercel → Project → Settings → Environment Variables එකට නම{" "}
+          <code className="rounded bg-white/70 px-1 font-bold">SUPABASE_SERVICE_ROLE_KEY</code> කියා ඒක දාන්න
+          (<b>NEXT_PUBLIC_</b> කියා පටන් ගන්න එපා!) · ③ Vercel එකෙන් <b>Redeploy</b> කරන්න · ④ ඊට පස්සේ මෙතැනින්
+          Gemini key එක paste කරලා, AI on කරලා Save → Test කරන්න.
         </div>
       </div>
 

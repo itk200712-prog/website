@@ -372,6 +372,47 @@ ok("scheduled backup: Edge Function + pg_cron SQL in repo",
   readFileSync(join(root, "supabase/functions/scheduled-backup/index.ts"), "utf8").includes("Deno.serve") &&
   readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("cron.schedule"));
 
+console.log("\n── 16) Baymax Gemini AI fallback (server-side only key) ──");
+const baymaxAi = await import("../src/lib/baymax-ai.ts");
+ok("ai: model id normalizes models/ prefix + case", baymaxAi.normalizeGeminiModel("models/Gemini-3.8-Flash") === "gemini-3.8-flash");
+ok("ai: blank model falls back to default", baymaxAi.normalizeGeminiModel("  ") === baymaxAi.DEFAULT_GEMINI_MODEL);
+ok("ai: enabled only for explicit on values", baymaxAi.isAiEnabledValue("1") === true && baymaxAi.isAiEnabledValue("true") === true && baymaxAi.isAiEnabledValue("0") === false && baymaxAi.isAiEnabledValue("") === false);
+ok("ai: secret mask never reveals the full key", baymaxAi.maskSecret("prod-secret-123456abcd") === "prod…abcd" && baymaxAi.maskSecret("short") === "••••••••" && baymaxAi.maskSecret("") === "");
+ok("ai: question is trimmed/collapsed and capped", baymaxAi.normalizeAiQuestion("  hello\n\n world  ") === "hello world" && baymaxAi.normalizeAiQuestion("x".repeat(900)).length === 600);
+const siInstruction = baymaxAi.baymaxAiSystemInstruction("si");
+ok("ai: Sinhala instruction + no invented society facts", siInstruction.includes("Sinhala script") && siInstruction.includes("Never invent facts") && siInstruction.includes("Google Search"));
+const groundedReq = baymaxAi.buildGeminiRequest("සමූපකාරයක් යනු කුමක්ද?", "si", true) as { tools?: unknown; contents: { parts: { text: string }[] }[] };
+ok("ai: Gemini request uses Google Search grounding", JSON.stringify(groundedReq.tools) === JSON.stringify([{ google_search: {} }]) && groundedReq.contents[0].parts[0].text.includes("සමූපකාරයක්"));
+const plainReq = baymaxAi.buildGeminiRequest("hello", "en", false) as { tools?: unknown };
+ok("ai: Gemini request can retry without search tool", plainReq.tools === undefined);
+ok("ai: Gemini response text extraction", baymaxAi.extractGeminiText({ candidates: [{ content: { parts: [{ text: "ආයුබෝවන්" }, { text: "world" }] } }] }) === "ආයුබෝවන්\nworld" && baymaxAi.extractGeminiText({}) === "");
+const adminLiveChatSrc = readFileSync(join(root, "src/app/admin/live-chat/page.tsx"), "utf8");
+const baymaxAiRouteSrc = readFileSync(join(root, "src/app/api/baymax-ai/route.ts"), "utf8");
+ok("ai: Admin saves key to private backup_secrets, enable/model to public settings",
+  adminLiveChatSrc.includes('.from("backup_secrets")') &&
+  adminLiveChatSrc.includes('key: "gemini_api_key"') &&
+  adminLiveChatSrc.includes('key: "chat_ai_enabled"') &&
+  adminLiveChatSrc.includes('key: "chat_ai_model"') &&
+  adminLiveChatSrc.includes("SUPABASE_SERVICE_ROLE_KEY"));
+ok("ai: browser widget never touches the API key or secrets table",
+  liveChatSrc.includes('fetch("/api/baymax-ai"') &&
+  liveChatSrc.includes('"chat_ai_enabled"') &&
+  liveChatSrc.includes("setAiEnabled") &&
+  !liveChatSrc.includes("gemini_api_key") &&
+  !liveChatSrc.includes("backup_secrets") &&
+  !liveChatSrc.includes("SUPABASE_SERVICE_ROLE_KEY"));
+ok("ai: server route reads secret with service role + sends x-goog-api-key",
+  baymaxAiRouteSrc.includes("process.env.SUPABASE_SERVICE_ROLE_KEY") &&
+  baymaxAiRouteSrc.includes("backup_secrets?select=value&key=eq.gemini_api_key") &&
+  baymaxAiRouteSrc.includes('"x-goog-api-key"') &&
+  baymaxAiRouteSrc.includes("sameOrigin") &&
+  baymaxAiRouteSrc.includes("server_not_configured"));
+ok("ai: widget tries AI only after site brain, before unmatched fallback",
+  liveChatSrc.indexOf("answerFromAI(q, rsi)") > liveChatSrc.indexOf("answerFromKnowledge(q, rsi)") &&
+  liveChatSrc.indexOf("answerFromAI(q, rsi)") < liveChatSrc.indexOf('logEvent("unmatched"'));
+ok("ai: schema has private key slot + public defaults",
+  schema.includes("('gemini_api_key','')") && schema.includes("('chat_ai_enabled', '0')") && schema.includes("('chat_ai_model', 'gemini-3.8-flash')"));
+
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
 console.log(`══════════════════════════════════════\n`);

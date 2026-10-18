@@ -107,6 +107,25 @@ karaganna ona` · `Please connect me to someone at the office`.
   සම්පූර්ණ officer flow එකම සිංහලෙන් පැවතේ. කාර්යාල වේලාවෙන් පිටතදී
   ඉල්ලීම නොයවා ඊළඟ විවෘත වන වේලාව පෙන්වයි.
 
+## ✨ Gemini AI fallback — පොදු දැනුම් ප්‍රශ්න
+
+Site brain එකට සහ පැරණි intent වලට උත්තරයක් නැති **පොදු දැනුම් ප්‍රශ්නවලට
+විතරක්** (උදා: `සමූපකාරයක් යනු කුමක්ද?`) Baymax දැන් Gemini AI එකෙන් —
+Google Search grounding එකත් එක්ක — උත්තර දෙන්න පුළුවන්. පිළිතුරු භාෂාව
+ප්‍රශ්නයේ භාෂාවමයි: සිංහල/Singlish ඇහුවොත් සිංහල අකුරෙන්, English ඇහුවොත්
+English වලින්. සමිතියට අදාළ ඇත්ත තොරතුරු (නම්, දුරකථන, මිල, සාමාජික වාර්තා)
+AI එක හදලා කියන්නේ නෑ — ඒවා site brain/officer flow එකෙන්මයි.
+
+- **Settings:** Admin → Live Chat → “Baymax AI — Gemini” card එකෙන් on/off,
+  model එක සහ API key එක save කරන්න පුළුවන් (superadmin විතරයි key එක).
+- **ආරක්ෂාව:** key එක `backup_secrets` (superadmin-only) එකේ; browser එකට
+  එන්නේ නෑ. `/api/baymax-ai` server route එක Vercel env එකේ ඇති
+  `SUPABASE_SERVICE_ROLE_KEY` එකෙන් විතරයි එය කියවන්නේ. ඒ env එක නැත්නම්
+  AI එක නිහඬව off වෙලා පරණ fallback එකම වැඩ කරයි.
+- **එක වරක් setup:** Vercel → Settings → Environment Variables එකට
+  `SUPABASE_SERVICE_ROLE_KEY` දාලා redeploy කරන්න ඕනේ (Admin card එකෙත්
+  පියවර තියෙනවා). ඊට පස්සේ Gemini key එක save කරලා **Test** ඔබන්න.
+
 ## 🕘 Live Chat කාර්යාල වේලාවන්
 
 සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම (Live Chat / Request a Call) පුළුවන්
@@ -139,10 +158,11 @@ Logic එක `src/lib/chatbot.ts` හි `getLiveChatHoursStatus()` එකේ �
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 230 tests — smalltalk + Sinhala officer intent + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
+npx -y tsx scripts/test.mts   # 244 tests — smalltalk + Sinhala officer intent + Gemini AI fallback + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
 npm run build                 # production build
 ```
 
-ඉදිරි අදහසක්: අවශ්‍ය නම් පසුව පිටත LLM API එකක් (API key එකක් සමඟ) මෙම
-site brain එකටම සම්බන්ධ කර භාෂාව වඩාත් ස්වාභාවික කළ හැක. එසේ කළත්
-උත්තර සඳහා මූලාශ්‍රය විය යුත්තේ මෙම verified site knowledge එකමයි.
+සටහන: Gemini AI එක දැන් **විකල්ප fallback එකක්** විදිහට සම්බන්ධ කරලා
+තිබුණාත්, සමිතිය ගැන උත්තර සඳහා ප්‍රධාන මූලාශ්‍රය හැමවිටම මෙම verified
+site knowledge එකමයි — AI එක පාවිච්චි වෙන්නේ එහි උත්තරයක් නැති පොදු
+ප්‍රශ්නවලට විතරයි.

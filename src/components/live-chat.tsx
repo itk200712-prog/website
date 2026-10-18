@@ -156,6 +156,8 @@ export function LiveChat() {
   // ✅ Bot identity — admin Settings එකෙන් වෙනස් කළ හැකි නම + පින්තූරය
   const [botName, setBotName] = useState("Baymax");
   const [botAvatar, setBotAvatar] = useState("");
+  // ✨ Admin → Live Chat එකෙන් on කළොත් විතරයි Gemini AI fallback එක කැඳවන්නේ
+  const [aiEnabled, setAiEnabled] = useState(false);
   const [liveMsgs, setLiveMsgs] = useState<LiveMsg[]>([]);
   const [liveStatus, setLiveStatus] = useState<"open" | "joined" | "closed">("open");
   const [agentName, setAgentName] = useState("");
@@ -235,7 +237,7 @@ export function LiveChat() {
     setAutoScroll(true);
   }
 
-  // ── bot නම + avatar (system_settings → public read) ──
+  // ── bot නම + avatar + AI on/off (system_settings → public read; API key එක මෙතැන නෑ) ──
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -244,12 +246,13 @@ export function LiveChat() {
         const { data } = await sb
           .from("system_settings")
           .select("key,value")
-          .in("key", ["chat_bot_name", "chat_bot_avatar"]);
+          .in("key", ["chat_bot_name", "chat_bot_avatar", "chat_ai_enabled"]);
         const map = new Map(((data ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
         if (!alive) return;
         const n = (map.get("chat_bot_name") || "").trim();
         if (n) setBotName(n);
         setBotAvatar((map.get("chat_bot_avatar") || "").trim());
+        setAiEnabled(["1", "true", "yes", "on"].includes((map.get("chat_ai_enabled") || "").trim().toLowerCase()));
       } catch {
         /* default Baymax */
       }
@@ -1557,6 +1560,46 @@ export function LiveChat() {
     }
   }
 
+  /**
+   * ✨ Gemini AI fallback — site brain එකට උත්තරයක් නැති පොදු දැනුම් ප්‍රශ්නවලට.
+   * API key එක browser එකට එන්නේ නෑ: /api/baymax-ai server route එක හරහායි යන්නේ.
+   * AI off නම් / key එක නැත්නම් / error එකක් නම් false → පරණ fallback එකමයි.
+   */
+  async function answerFromAI(q: string, rsi: boolean): Promise<boolean> {
+    if (!aiEnabled || detectOfficerRequest(q)) return false;
+    const myFlow = flowRef.current;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25_000);
+    setTyping(true);
+    try {
+      const res = await fetch("/api/baymax-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q, language: rsi ? "si" : "en" }),
+        signal: controller.signal,
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; answer?: string } | null;
+      setTyping(false);
+      if (flowRef.current !== myFlow) return true; // conversation reset වුණා — නිහඬව ඉන්නවා
+      const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
+      if (!res.ok || !data?.ok || !answer) return false;
+      push({
+        from: "bot",
+        bold: rsi ? "✨ Baymax AI පිළිතුර" : "✨ Baymax AI answer",
+        text: answer,
+        chips: [...(rsi ? MENU_CHIPS_SI : MENU_CHIPS_EN), rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
+      });
+      convoRef.current.lastIntent = "ai";
+      void logEvent("ai_answer", q, 0, sessionRef.current);
+      return true;
+    } catch {
+      setTyping(false);
+      return flowRef.current !== myFlow;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function botReply(raw: string) {
     const q = raw.trim();
     const n = norm(q);
@@ -1867,6 +1910,9 @@ export function LiveChat() {
       });
       return;
     }
+
+    // ✨ Site brain එකට උත්තර නැති පොදු ප්‍රශ්න — Admin on කරලා ඇත්නම් Gemini AI එකෙන් අහනවා
+    if (await answerFromAI(q, rsi)) return;
 
     // ✅ තේරුණේ නැති පණිවිඩය — bot එක ට්‍රේන් කිරීමට log කර, මෙනුව පෙන්වයි
     void logEvent("unmatched", q, 0, sessionRef.current);

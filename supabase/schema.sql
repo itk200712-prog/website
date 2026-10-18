@@ -670,7 +670,8 @@ create policy site_images_backup_super on public.site_images_backup for all
   with check (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'));
 insert into public.backup_secrets (key, value) values
   ('backup_download_password','MPCS@Backup#2026'),
-  ('backup_import_password','MPCS@Restore#2026')
+  ('backup_import_password','MPCS@Restore#2026'),
+  ('gemini_api_key','')
 on conflict (key) do nothing;
 
 -- ===========================================================================
@@ -841,9 +842,12 @@ insert into public.system_settings (key, value) values
 on conflict (key) do nothing;
 
 -- ✅ Chat bot identity (Baymax) — admin → Live Chat → Chat bot card එකෙන් වෙනස් කරන්න
+-- ✨ Gemini AI: enable/model එක මෙහි (public), API key එක උඩ backup_secrets (superadmin-only) එකේ
 insert into public.system_settings (key, value) values
 ('chat_bot_name', 'Baymax'),
-('chat_bot_avatar', '')
+('chat_bot_avatar', ''),
+('chat_ai_enabled', '0'),
+('chat_ai_model', 'gemini-3.8-flash')
 on conflict (key) do nothing;
 
 -- ---------------------------------------------------------------------------
@@ -1043,6 +1047,10 @@ create policy notify_emails_read on public.notify_emails for select using (true)
 
 -- ලියන්න admin ට විතරයි
 drop policy if exists notify_emails_admin on public.notify_emails;
+create policy notify_emails_admin on public.notify_emails for all using (public.is_admin()) with check (public.is_admin());
+
+notify pgrst, 'reload schema';
+y_emails;
 create policy notify_emails_admin on public.notify_emails for all using (public.is_admin()) with check (public.is_admin());
 
 notify pgrst, 'reload schema';
