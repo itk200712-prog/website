@@ -100,12 +100,12 @@ const STOPWORDS = new Set([
   "know", "find", "get", "make", "into", "our", "us", "be", "am", "one",
   // Sinhala-script function words / question endings
   "මොකක්ද", "මොනවාද", "මොනවද", "කොහොමද", "කවුද", "කව්ද", "කොහෙද", "කවදාද", "ඇයි", "කීයද",
-  "මට", "මම", "ඔබ", "ඔයා", "අපි", "දෙන්න", "දෙනවද", "කියන්න", "ගැන", "එක", "එකේ", "එකක්",
+  "මට", "මම", "ඔබ", "ඔයා", "ඔයාලා", "ඔයාලගේ", "ඔයාලාගේ", "අපි", "දෙන්න", "දෙනවද", "කියන්න", "ගැන", "එක", "එකේ", "එකක්",
   "සහ", "හෝ", "හි", "හිද", "තියෙනවද", "තියෙනවාද", "පුළුවන්ද", "පුලුවන්ද", "කරන්නේ", "කරන්න",
   "ගන්නේ", "ගන්න", "වෙන්නේ", "වේද", "ද", "දැයි", "අද", "තව", "විස්තර", "ටිකක්", "ලැබෙන්නේ",
   // Romanised Sinhala function words
   "mokakda", "monawada", "monawada", "kohomada", "kawuda", "kauda", "koheda", "kawadada",
-  "ai", "mata", "mama", "oyata", "oya", "api", "dena", "denawada", "kiyanna", "gena",
+  "ai", "mata", "mama", "oyata", "oya", "oyala", "oyalage", "oyaalage", "api", "dena", "denawada", "kiyanna", "gena",
   "eka", "eke", "ekak", "saha", "ho", "thiyenawada", "thiyenawada", "puluwanda",
   "karanna", "karanne", "ganna", "ganne", "wenne", "weda", "da", "thawa", "visthara",
   "tikak", "ona", "one", "labenne", "kiyada", "keeyada",
@@ -114,10 +114,21 @@ const STOPWORDS = new Set([
 // Frequent romanised Sinhala / alternate spellings are folded onto the word
 // used in the site's English copy, so one index can answer in all three forms.
 const SYNONYMS: Record<string, string> = {
+  // Romanised Sinhala → the English word used in the site copy
   samajika: "member",
   samajikathwaya: "membership",
   samajikatwaya: "membership",
   samajikatvaya: "membership",
+  samithi: "society",
+  samithiya: "society",
+  samithiye: "society",
+  samitiye: "society",
+  samithiyage: "society",
+  samitiyage: "society",
+  nama: "name",
+  nameka: "name",
+  sampurna: "full",
+  sampoorna: "full",
   liyapadinchi: "register",
   lipadinchi: "register",
   ayadumpatha: "application",
@@ -142,11 +153,21 @@ const SYNONYMS: Record<string, string> = {
   indhana: "fuel",
   sabhapathi: "chairman",
   sabapati: "chairman",
+  sabapathi: "chairman",
+  sabapathige: "chairman",
+  sabhapatige: "chairman",
+  chaiman: "chairman",
+  charman: "chairman",
+  chairmans: "chairman",
   lekam: "secretary",
   adyaksha: "director",
   adyakshaka: "director",
   kalamanakarua: "manager",
   kalamanakaru: "manager",
+  kalamanakaruge: "manager",
+  manajar: "manager",
+  manejer: "manager",
+  jeneral: "general",
   chanda: "voter",
   chandaya: "voter",
   puwath: "news",
@@ -170,13 +191,47 @@ const SYNONYMS: Record<string, string> = {
   nomberaya: "number",
   nombare: "number",
   ganana: "count",
- keeyak: "count",
+  keeyak: "count",
   kiyak: "count",
   wastawa: "about",
   unilever: "uniliver",
   restbury: "ristbury",
   restberry: "ristbury",
-  super: "supermarket",
+  risbury: "ristbury",
+  malibun: "maliban",
+  malibon: "maliban",
+  meliban: "maliban",
+  baliban: "maliban",
+  bisket: "biscuit",
+  biscket: "biscuit",
+  biscuts: "biscuit",
+  suparmarket: "supermarket",
+  suppermarket: "supermarket",
+  insuarance: "insurance",
+  insurence: "insurance",
+
+  // Common Sinhala-script spelling/inflection variants → canonical site word
+  "සබාපති": "සභාපති",
+  "සබාපතිගේ": "සභාපති",
+  "සභාපතිගේ": "සභාපති",
+  "සබාපතිවරයා": "සභාපති",
+  "සභාපතිවරයා": "සභාපති",
+  "සබාපතිතුමා": "සභාපති",
+  "සභාපතිතුමා": "සභාපති",
+  "උපසබාපති": "උප සභාපති",
+  "උපසභාපති": "උප සභාපති",
+  "සමිතියේ": "සමිතිය",
+  "සමිතියෙ": "සමිතිය",
+  "සමිතියගේ": "සමිතිය",
+  "කළමනාකරුගේ": "කළමනාකරු",
+  "කළමනාකරුවා": "කළමනාකරු",
+  "අධ්‍යක්ෂවරයා": "අධ්‍යක්ෂ",
+  "අධ්‍යක්ෂවරුන්": "අධ්‍යක්ෂ",
+  "මැලිබන්": "මාලිබන්",
+  "බැලිබන්": "මාලිබන්",
+  "මාලිබ්න්": "මාලිබන්",
+  "සූපර්": "සුපර්",
+  "මාකට්": "මාර්කට්",
 };
 
 function stemLatin(token: string): string {
@@ -278,20 +333,61 @@ function businessChips(si: boolean): string[] {
 }
 
 const BUSINESS_ALIASES: Record<string, string[]> = {
-  "ristbury-tiara": ["ristbury", "tiara", "restbury", "confectionery", "chocolate", "sweets", "රිස්බරි", "ටියාරා", "රසකැවිලි", "චොකලට්"],
-  "coop-city": ["co-op city", "coop city", "supermarket", "super market", "grocery", "groceries", "කෝ ඔප් සිටි", "සුපිරි වෙළඳසැල", "සිල්ලර බඩු", "වෙළඳසැල"],
-  transport: ["transport", "distribution", "delivery", "lorry", "vehicle", "ප්‍රවාහනය", "බෙදාහැරීම", "ලොරි", "වාහන"],
-  fertilizer: ["fertilizer", "fertiliser", "pohora", "agricultural fertilizer depot", "පොහොර", "කෘෂි පොහොර", "පොහොර ගබඩාව"],
-  insurance: ["insurance", "co-op insurance", "රක්ෂණය", "රක්ෂණ", "ඉන්ෂුවරන්ස්"],
-  "rural-bank": ["rural bank", "bank", "bankuwa", "gramiya bankuwa", "ග්‍රාමීය බැංකුව", "බැංකුව", "බැංකු", "savings", "ඉතුරුම්", "ණය", "naya"],
-  consumer: ["consumer section", "consumer", "wholesale", "village shops", "පාරිභෝගික අංශය", "තොග", "ග්‍රාමීය වෙළඳසැල්"],
-  "maliban-biscuits": ["maliban biscuits", "maliban biscuit", "biscuits", "බිස්කට්", "මාලිබන් බිස්කට්"],
-  "maliban-kiri": ["maliban milk", "maliban kiri", "milk", "කිරි", "මාලිබන් කිරි"],
-  "natures-secrets": ["nature's secrets", "natures secrets", "nature secrets", "cosmetics", "නේචර්ස් සීක්රට්ස්", "රූපලාවණ්‍ය"],
-  hemas: ["hemas", "හෙමාස්"],
-  "fuel-station": ["fuel station", "filling station", "petrol shed", "fuel shed", "ඉන්ධන පිරවුම්හල", "ඉන්ධන හල", "පිරවුම්හල", "තෙල්"],
-  funeral: ["funeral services", "funeral", "අන්තිම කටයුතු", "මළ ගෙදර", "අවමංගල්‍ය"],
-  "gold-loan-service": ["gold loan", "gold pawning", "pawning", "රත්‍රන් ණය", "රන් ණය", "උකස්", "රත්රන් උකස්"],
+  "ristbury-tiara": [
+    "ristbury", "restbury", "risbury", "tiara", "tiyara", "ristbury tiara", "confectionery", "confectionery agency",
+    "chocolate", "chocolate agency", "sweets", "sweets agency", "රිස්බරි", "රෙස්බරි", "ටියාරා", "රිස්බරි ටියාරා",
+    "රසකැවිලි", "රසකැවිලි නියෝජිතායතනය", "චොකලට්", "චොකලට් නියෝජිතායතනය",
+  ],
+  "coop-city": [
+    "co-op city", "coop city", "co op city", "coopcity", "supermarket", "super market", "grocery", "groceries", "grocery store",
+    "කෝ ඔප් සිටි", "කෝප් සිටි", "කෝ-ඔප් සිටි", "සුපිරි වෙළඳසැල", "සුපිරි වෙළදසැල", "සුපර් මාර්කට්", "සූපර් මාර්කට්",
+    "සුපර් මාකට්", "සිල්ලර බඩු", "සිල්ලර කඩේ", "බඩු කඩේ", "වෙළඳසැල",
+  ],
+  transport: [
+    "transport", "transport division", "distribution", "distribution division", "delivery", "goods transport", "vehicle hire",
+    "lorry", "lorry hire", "vehicle", "wahana", "wahana hire", "ප්‍රවාහනය", "ප්‍රවාහන අංශය", "බෙදාහැරීම", "බෙදාහැරීම් අංශය",
+    "භාණ්ඩ ප්‍රවාහනය", "වාහන", "වාහන කුලියට", "වාහනයක් කුලියට", "ලොරි", "ලොරි කුලියට",
+  ],
+  fertilizer: [
+    "fertilizer", "fertiliser", "fertilizer depot", "agricultural fertilizer", "agricultural fertilizer depot", "pohora", "pohora depot",
+    "පොහොර", "පොහොර ගබඩාව", "කෘෂි පොහොර", "කෘෂිකාර්මික පොහොර",
+  ],
+  insurance: [
+    "insurance", "insuarance", "insurence", "co-op insurance", "coop insurance", "insurance agency",
+    "රක්ෂණය", "රක්ෂණ", "රක්ෂණ නියෝජිතායතනය", "සමූපකාර රක්ෂණය", "ඉන්ෂුවරන්ස්", "ඉන්ෂුරන්ස්", "ඉන්ෂුවරන්ස් නියෝජිතායතනය",
+  ],
+  "rural-bank": [
+    "rural bank", "ruralbank", "bank", "bankuwa", "banku", "gramiya bankuwa", "gramiya bank", "village bank",
+    "ග්‍රාමීය බැංකුව", "ග්‍රාමීය බැංකු", "බැංකුව", "බැංකු", "savings", "savings account", "ඉතුරුම්", "ඉතුරුම් ගිණුම", "ණය", "naya",
+  ],
+  consumer: [
+    "consumer", "consumer section", "consumer division", "wholesale", "wholesale goods", "retail", "village shops", "village cooperative shops",
+    "paribhogika", "paribogika", "පාරිභෝගික", "පාරිභෝගික අංශය", "තොග", "තොග බඩු", "තොග අලෙවිය", "ග්‍රාමීය වෙළඳසැල්", "සමූපකාර කඩ",
+  ],
+  "maliban-biscuits": [
+    "maliban", "malibun", "malibon", "meliban", "baliban", "maliban biscuits", "maliban biscuit", "biscuits", "biscuit", "biscuit agency",
+    "මාලිබන්", "මැලිබන්", "බැලිබන්", "බිස්කට්", "බිස්කට් නියෝජිතායතනය", "මාලිබන් බිස්කට්", "මාලිබන් බිස්කට් නියෝජිතායතනය",
+  ],
+  "maliban-kiri": [
+    "maliban milk", "maliban kiri", "milk", "milk agency", "kiri", "මාලිබන් කිරි", "මැලිබන් කිරි", "කිරි", "කිරි නියෝජිතායතනය", "මාලිබන් කිරි නියෝජිතායතනය",
+  ],
+  "natures-secrets": [
+    "nature's secrets", "natures secrets", "nature secrets", "nature's secret", "natures secret", "nature secret", "cosmetics", "beauty products",
+    "නේචර්ස් සීක්රට්ස්", "නේචර්ස් සීක්‍රට්ස්", "නේචර් සීක්රට්", "රූපලාවණ්‍ය", "රූපලාවණ්‍ය නිෂ්පාදන",
+  ],
+  hemas: ["hemas", "hemaas", "hemas agency", "හෙමාස්", "හේමාස්", "හෙමාස් නියෝජිතායතනය"],
+  "fuel-station": [
+    "fuel station", "filling station", "fuel shed", "petrol shed", "diesel shed", "fuel pump", "petrol pump",
+    "ඉන්ධන පිරවුම්හල", "ඉන්ධන හල", "ඉන්ධනහල", "පිරවුම්හල", "තෙල්", "තෙල් ෂෙඩ්", "ඉන්ධන ෂෙඩ්", "පෙට්‍රල් ෂෙඩ්",
+  ],
+  funeral: [
+    "funeral", "funeral services", "funeral service", "funeral section", "anthima katayuthu", "awamangala",
+    "අන්තිම කටයුතු", "අන්තිම කටයුතු සේවා", "මළ ගෙදර", "මල ගෙදර", "මළගෙදර සේවා", "අවමංගල්‍ය", "අවමංගල්‍ය සේවා",
+  ],
+  "gold-loan-service": [
+    "gold loan", "gold loan service", "gold pawning", "pawning", "jewellery loan", "jewelry loan", "ran naya", "ran ukas", "rathran naya",
+    "රත්‍රන් ණය", "රන් ණය", "රන් උකස්", "රත්‍රන් උකස්", "රත්රන් උකස්", "උකස්", "ආභරණ උකස්", "රත්‍රන් ණය සේවාව",
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -303,6 +399,29 @@ function staticEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
   const fmt = (n: number) => Number(n || 0).toLocaleString("en-US");
 
   return [
+    {
+      id: "society-name",
+      kind: "static",
+      emoji: "🏛️",
+      title_si: "සමිතියේ නම",
+      title_en: "Society name",
+      body_si:
+        `අපේ සමිතියේ සම්පූර්ණ නම: ${SITE.name_si}.\nEnglish: ${SITE.name_en}.\nකෙටි නම: ${SITE.short_en}.`,
+      body_en:
+        `Our society's full name is ${SITE.name_en}.\nSinhala: ${SITE.name_si}.\nShort name: ${SITE.short_en}.`,
+      keywords: [
+        "society name", "full society name", "full name of the society", "official society name", "name of the society",
+        "what is the society name", "what is your society called", "society full name", "mpcs full form", "panduwasnuwara mpcs full name",
+        "සමිතියේ නම", "සමිතියේ සම්පූර්ණ නම", "සම්පූර්ණ නම", "නිල නම", "සමිතියට කියන නම", "ඔයාලගේ සමිතියේ නම",
+        "samithiye nama", "samitiye nama", "samithiya nama", "samithiyage nama", "sampurna nama", "samithiye sampurna nama",
+      ],
+      href: "/#about",
+      linkLabel_si: "සමිතිය ගැන තව බලන්න",
+      linkLabel_en: "More about the society",
+      chips_si: ["සභාපති කවුද?", "ව්‍යාපාර අංශ මොනවාද?"],
+      chips_en: ["Who is the chairman?", "What are the business divisions?"],
+      topic: "society-name",
+    },
     {
       id: "society-about",
       kind: "static",
@@ -541,6 +660,9 @@ function businessEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
     topic: "business-list",
   });
 
+  const hasMalibanBiscuits = businesses.some((b) => b.slug === "maliban-biscuits" && b.active !== false);
+  const hasMalibanMilk = businesses.some((b) => b.slug === "maliban-kiri" && b.active !== false);
+
   for (const biz of businesses) {
     const aliases = BUSINESS_ALIASES[biz.slug] ?? [];
     const keywordsBase = unique([
@@ -552,6 +674,10 @@ function businessEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
       biz.tagline_en,
       biz.tagline_si,
       ...aliases,
+      // Manager/contact and branch names are keywords too, so a question
+      // mentioning a person or place can still find the right division.
+      ...(biz.contacts ?? []).flatMap((c) => [c.name, c.role_en, c.role_si, c.location]),
+      ...(biz.branches ?? []).flatMap((b) => [b.name, b.manager, b.location]),
     ]);
     const svcSi = serviceNames(biz, true);
     const svcEn = serviceNames(biz, false);
@@ -578,6 +704,8 @@ function businessEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
         biz.desc_si || fallbackDescSi,
         svcSi.length ? `ප්‍රධාන සේවා: ${svcSi.slice(0, 6).join(" · ")}.` : "",
         firstContact ? `සම්බන්ධතා: ${firstContact.name} (${firstContact.role_si || firstContact.role_en}) — ${firstContact.phone}` : "",
+        biz.slug === "maliban-biscuits" && hasMalibanMilk ? "ඊට අමතරව මාලිබන් කිරි නිෂ්පාදන සඳහා වෙනම මාලිබන් කිරි නියෝජිතායතනයක්ද අප සතුව ඇත." : "",
+        biz.slug === "maliban-kiri" && hasMalibanBiscuits ? "බිස්කට් නිෂ්පාදන සඳහා වෙනම මාලිබන් බිස්කට් නියෝජිතායතනයක්ද අප සතුව ඇත." : "",
         statusSi,
       ])),
       body_en: compact(sentenceList([
@@ -585,14 +713,24 @@ function businessEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
         biz.desc_en || fallbackDescEn,
         svcEn.length ? `Main services: ${svcEn.slice(0, 6).join(" · ")}.` : "",
         firstContact ? `Contact: ${firstContact.name} (${firstContact.role_en || firstContact.role_si}) — ${firstContact.phone}` : "",
+        biz.slug === "maliban-biscuits" && hasMalibanMilk ? "We also have a separate Maliban Milk Agency for milk products." : "",
+        biz.slug === "maliban-kiri" && hasMalibanBiscuits ? "We also have a separate Maliban Biscuits Agency for biscuit products." : "",
         statusEn,
       ])),
       keywords: [...keywordsBase, ...svcSi, ...svcEn],
       href,
       linkLabel_si: "අංශයේ පිටුව බලන්න",
       linkLabel_en: "View division page",
-      chips_si: businessChips(true),
-      chips_en: businessChips(false),
+      chips_si: biz.slug === "maliban-biscuits" && hasMalibanMilk
+        ? [...businessChips(true), "මාලිබන් කිරි"]
+        : biz.slug === "maliban-kiri" && hasMalibanBiscuits
+          ? [...businessChips(true), "මාලිබන් බිස්කට්"]
+          : businessChips(true),
+      chips_en: biz.slug === "maliban-biscuits" && hasMalibanMilk
+        ? [...businessChips(false), "Maliban Milk"]
+        : biz.slug === "maliban-kiri" && hasMalibanBiscuits
+          ? [...businessChips(false), "Maliban Biscuits"]
+          : businessChips(false),
       topic: `biz:${biz.slug}`,
     });
 
@@ -686,7 +824,15 @@ function businessEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
         body_en: biz.contacts
           .map((c) => `👤 ${c.name}\n${c.role_en || c.role_si}${c.location ? ` · ${c.location}` : ""}\n📞 ${c.phone}${c.note_en ? `\n${c.note_en}` : ""}`)
           .join("\n\n"),
-        keywords: [...keywordsBase, "phone", "contact", "manager", "number", "call", "දුරකථන", "කළමනාකරු", "අංකය", "අමතන්න", ...biz.contacts.map((c) => c.name)],
+        keywords: [
+          ...keywordsBase,
+          "phone", "contact", "manager", "manager name", "number", "phone number", "call",
+          "දුරකථන", "දුරකථන අංකය", "කළමනාකරු", "කළමනාකරුගේ නම", "අංකය", "අමතන්න",
+          `${biz.name_en} manager`, `${biz.name_en} manager name`, `${biz.name_en} phone number`,
+          `${biz.name_si} කළමනාකරු`, `${biz.name_si} කළමනාකරුගේ නම`, `${biz.name_si} දුරකථන අංකය`,
+          ...biz.contacts.map((c) => c.name),
+          ...biz.contacts.flatMap((c) => [c.role_en, c.role_si]),
+        ],
         href,
         linkLabel_si: "අංශයේ පිටුව බලන්න",
         linkLabel_en: "View division page",
@@ -742,7 +888,13 @@ function businessEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
         title_en: `${branch.name || branch.name_si} — Rural Bank`,
         body_si: `👤 කළමනාකරු: ${branch.manager || "—"}\n📞 දුරකථන: ${branch.phone || "—"}`,
         body_en: `👤 Manager: ${branch.manager || "—"}\n📞 Phone: ${branch.phone || "—"}`,
-        keywords: [branch.name, branch.name_si, branch.manager, branch.phone, "rural bank branch", "ග්‍රාමීය බැංකු ශාඛාව", "branch manager", "branch phone"],
+        keywords: [
+          branch.name, branch.name_si, branch.manager, branch.phone, branch.no ?? "",
+          "rural bank branch", "ග්‍රාමීය බැංකු ශාඛාව", "branch manager", "branch manager name", "branch phone", "branch phone number",
+          `${branch.name} manager`, `${branch.name} manager name`, `${branch.name} phone`, `${branch.name} phone number`,
+          `${branch.name_si} කළමනාකරු`, `${branch.name_si} කළමනාකරුගේ නම`, `${branch.name_si} දුරකථන අංකය`,
+          branch.no ? `branch ${branch.no}` : "", branch.no ? `ශාඛා අංක ${branch.no}` : "",
+        ],
         href: "/businesses/rural-bank",
         topic: `branch:${branch.name || branch.name_si}`,
       });
@@ -763,7 +915,13 @@ function boardEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
     title_en: "Board of Directors",
     body_si: board.map((p) => `• ${p.position_si || p.position_en}: ${p.name_si || p.name_en}`).join("\n"),
     body_en: board.map((p) => `• ${p.position_en || p.position_si}: ${p.name_en || p.name_si}`).join("\n"),
-    keywords: ["board of directors", "board members", "directors list", "who are directors", "අධ්‍යක්ෂ මණ්ඩලය", "අධ්‍යක්ෂවරු", "බෝඩ් එක", "board list", ...board.map((p) => p.position_en), ...board.map((p) => p.position_si)],
+    keywords: [
+      "board of directors", "board members", "board member names", "directors list", "director names", "who are directors", "who are the board members",
+      "අධ්‍යක්ෂ මණ්ඩලය", "අධ්‍යක්ෂ මණ්ඩලයේ නම්", "අධ්‍යක්ෂවරු", "අධ්‍යක්ෂවරුන්ගේ නම්", "බෝඩ් එක", "බෝඩ් එකේ ඉන්නේ කවුද", "board list",
+      "board eke inne kawuda", "directors la kawuda", "adyaksha mandalaya",
+      ...board.map((p) => p.position_en), ...board.map((p) => p.position_si),
+      ...board.map((p) => p.name_en), ...board.map((p) => p.name_si),
+    ],
     href: "/#board",
     linkLabel_si: "අධ්‍යක්ෂ මණ්ඩලය බලන්න",
     linkLabel_en: "View the Board",
@@ -773,6 +931,45 @@ function boardEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
   }];
 
   for (const person of board) {
+    const roleAliases = [
+      `${person.position_en} name`,
+      `name of the ${person.position_en}`,
+      `who is the ${person.position_en}`,
+      `${person.position_si}ගේ නම`,
+      `${person.position_si} ගේ නම`,
+      `${person.position_si}වරයාගේ නම`,
+      `${person.position_si} කවුද`,
+      `${person.position_si} කව්ද`,
+    ];
+    if (person.category === "chairman") {
+      roleAliases.push(
+        "chairman", "chaiman", "chairman name", "chaiman name", "name of chairman", "who is chairman",
+        "sabhapathi", "sabapathi", "saba pathi", "sabapathige nama", "sabhapathige nama", "sabapathi kawuda",
+        "සභාපති", "සභාපතිගේ නම", "සභාපති කවුද", "සභාපතිවරයාගේ නම", "සබාපති", "සබාපතිගේ නම", "සබාපති කවුද", "සබාපතිවරයාගේ නම",
+      );
+    }
+    if (person.category === "vice-chairman") {
+      roleAliases.push(
+        "vice chairman", "vice-chairman", "vice chairman name", "upa sabhapathi", "upa sabapathi", "upa sabapathige nama",
+        "උප සභාපති", "උප සභාපතිගේ නම", "උප සභාපති කවුද", "උප සබාපති", "උප සබාපතිගේ නම", "උප සබාපති කවුද",
+      );
+    }
+    if (person.category === "director") {
+      roleAliases.push("director", "board director", "අධ්‍යක්ෂ", "අධ්‍යක්ෂවරයා", "adyaksha");
+    }
+    if (/general manager/i.test(person.position_en)) {
+      roleAliases.push(
+        "general manager", "general manager name", "gm", "gm name", "jeneral manager",
+        "සාමාන්‍ය කළමනාකරු", "සාමාන්ය කළමනාකරු", "සාමාන්‍ය කළමනාකරුගේ නම", "ජෙනරල් මැනේජර්", "ප්‍රධාන කළමනාකරු",
+      );
+    }
+    if (/regional/i.test(person.position_en)) {
+      roleAliases.push(
+        "regional coop officer", "regional co-op officer", "regional cooperative officer", "regional officer",
+        "කලාපීය සමූපකාර නිලධාරී", "කලාපීය නිලධාරියා", "කලාපීය සමූපකාර නිලධාරියාගේ නම",
+      );
+    }
+
     entries.push({
       id: `person:${person.order}:${person.name_en}`,
       kind: "person",
@@ -793,7 +990,22 @@ function boardEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
         person.email ? `✉️ ${person.email}` : "",
         person.address ? `📍 ${person.address}` : "",
       ]),
-      keywords: [person.name_en, person.name_si, person.position_en, person.position_si, person.qualification, person.category, `who is the ${person.position_en}`, `${person.position_si} කවුද`],
+      keywords: unique([
+        person.name_en,
+        person.name_si,
+        person.position_en,
+        person.position_si,
+        person.qualification,
+        person.category,
+        person.phone,
+        person.email,
+        `who is the ${person.position_en}`,
+        `${person.position_en} phone`,
+        `${person.position_en} phone number`,
+        `${person.position_si} කවුද`,
+        `${person.position_si}ගේ දුරකථන අංකය`,
+        ...roleAliases,
+      ]),
       href: "/#board",
       chips_si: ["කාර්යාල දුරකථන"],
       chips_en: ["Office Phones"],
@@ -876,7 +1088,9 @@ function intentBoost(entry: IndexedKnowledgeEntry, queryNorm: string, tokens: Se
   const serviceIntent = has(/service|services|offer|offers|available|product|products|facility|facilities|සේවා|පහසුකම්|නිෂ්පාදන|sewa|sewawan/);
   const branchIntent = has(/branch|branches|located|location|where|ශාඛා|ශාඛාව|කොහෙද|ස්ථානය|shakha|shakawa/);
   const countIntent = has(/how many|number of|count|total|කීයක්|කියක්|ගණන|සංඛ්‍යාව|ganana|kiyada|keeyada/) || tokens.has("count");
-  const whoIntent = has(/who|chairman|vice|secretary|treasurer|director|manager|කවුද|සභාපති|උප සභාපති|ලේකම්|භාණ්ඩාගාරික|අධ්‍යක්ෂ|kawuda|sabhapathi/);
+  const whoIntent = has(/who|chairman|chaiman|vice|secretary|treasurer|director|manager|කවුද|කව්ද|සභාපති|සබාපති|උප සභාපති|උප සබාපති|ලේකම්|භාණ්ඩාගාරික|අධ්‍යක්ෂ|kawuda|kauda|sabhapathi|sabapathi/);
+  const nameIntent = tokens.has("name") || has(/නම|නාමය|nama\b/);
+  const bareQuery = queryNorm.trim();
 
   if (phoneIntent) {
     if (entry.kind === "business-contact") boost += 24;
@@ -900,10 +1114,47 @@ function intentBoost(entry: IndexedKnowledgeEntry, queryNorm: string, tokens: Se
     if (entry.kind === "business-contact") boost += 10;
     if (entry.id === "board-list") boost += 8;
   }
+  if (nameIntent) {
+    if (entry.kind === "person") boost += 14;
+    if (entry.kind === "branch") boost += 10;
+    if (entry.kind === "business-contact") boost += 12;
+    if (entry.id === "board-list") boost += 5;
+  }
+
+  // A named Rural Bank branch plus a manager/phone question should beat
+  // unrelated division contacts that merely share the location name.
+  if (entry.kind === "branch") {
+    const genericBranchTokens = new Set(["branch", "branches", "rural", "bank", "ශාඛාව", "ශාඛා", "ග්‍රාමීය", "බැංකු", "බැංකුව"]);
+    const branchNameHit = entry.titleTokens.some((token) => !genericBranchTokens.has(token) && tokens.has(token));
+    if (branchNameHit && (whoIntent || nameIntent || phoneIntent)) boost += 26;
+  }
+
+  // A bare division/brand keyword should open that division directly.
+  // This prevents near-ties such as "Maliban" (Biscuits vs Milk) or
+  // "consumer" (Consumer Section vs another retail category).
+  if (entry.kind === "business" && entry.id.startsWith("biz:")) {
+    const slugPhrase = entry.id.slice(4).replace(/-/g, " ");
+    if (bareQuery === slugPhrase) boost += 18;
+  }
+  if (entry.id === "biz:maliban-biscuits" && /^(maliban|මාලිබන්)$/.test(bareQuery)) boost += 22;
+  if (
+    entry.id === "biz:gold-loan-service" &&
+    has(/gold loan|gold pawning|ran ukas|රන් උකස්|රත්‍රන් ණය|රන් ණය/) &&
+    !has(/rural|bank|බැංකු|ග්‍රාමීය/)
+  ) {
+    boost += 18;
+  }
 
   // A few exact, high-value question shapes from the site's guidance pages.
   if (entry.id === "membership-apply" && has(/how.*(join|member|apply)|documents|rubber stamp|certified|fee|සාමාජික.*(වෙන්න|අයදුම්)|අයදුම්.*කරන|රබර් මුද්‍රාව|ලේඛන|ගාස්තු/)) boost += 25;
   if (entry.id === "account-help" && has(/forgot|reset|login|sign in|sign up|register|password|මුරපද|ලොගින්|ඇතුළු|ලියාපදිංචි/)) boost += 24;
+  if (
+    entry.id === "society-name" &&
+    ((tokens.has("society") || tokens.has("mpcs") || tokens.has("සමිතිය")) &&
+      (nameIntent || tokens.has("full") || has(/සම්පූර්ණ|නිල නම|official|called/)))
+  ) {
+    boost += 38;
+  }
   if (entry.id === "society-about" && has(/founded|established|history|registration|registered|ඉතිහාස|ආරම්භ|ලියාපදිංචි.*අංක|ස්ථාපිත/)) boost += 22;
   if (entry.id === "vision-mission" && has(/vision|mission|දැක්ම|මෙහෙවර|අරමුණ|මූලධර්ම/)) boost += 24;
   if (entry.id === "f28-help" && /\bf28\b/.test(queryNorm)) boost += 30;
@@ -959,6 +1210,15 @@ function scoreEntry(
   }
 
   if (querySet.size) score += (matched / querySet.size) * 8;
+
+  // A single exact entity/division keyword is a meaningful question by
+  // itself (e.g. "Hemas", "supermarket", "රක්ෂණය"), so let it clear the
+  // answer threshold instead of falling through as a weak match.
+  if (querySet.size === 1) {
+    const onlyToken = [...querySet][0];
+    if (titleSet.has(onlyToken) || keywordSet.has(onlyToken)) score += 8;
+  }
+
   score += intentBoost(entry, queryNorm, querySet);
   return { score, matched };
 }

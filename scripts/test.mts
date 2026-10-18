@@ -125,6 +125,12 @@ ok("bot: 'good morning' → daypart/morning", bot.detectSmalltalk("good morning"
 ok("bot: 'bohoma sthuthi' → thanks", bot.detectSmalltalk("bohoma sthuthi")?.intent === "thanks");
 ok("bot: 'bye' → bye", bot.detectSmalltalk("bye")?.intent === "bye");
 ok("bot: 'ඔයා කවුද' → who_are_you", bot.detectSmalltalk("ඔයා කවුද?")?.intent === "who_are_you");
+ok("bot: bare 'නම මොකක්ද' → who_are_you (bot's name)", bot.detectSmalltalk("නම මොකක්ද?")?.intent === "who_are_you");
+ok("bot: 'ඔයාගේ නම මොකක්ද' → who_are_you", bot.detectSmalltalk("ඔයාගේ නම මොකක්ද?")?.intent === "who_are_you");
+ok("bot: chairman-name question is NOT smalltalk", bot.detectSmalltalk("සභාපතිගේ නම මොකක්ද?") === null);
+ok("bot: society-name question is NOT smalltalk", bot.detectSmalltalk("සමිතියේ නම මොකක්ද?") === null);
+ok("bot: Singlish society-name is NOT smalltalk", bot.detectSmalltalk("samithiye nama mokakda") === null);
+ok("bot: 'how to join' කොහොමද is NOT how_are_you", bot.detectSmalltalk("සාමාජික වෙන්නේ කොහොමද?") === null);
 ok("bot: 'help' → help", bot.detectSmalltalk("help")?.intent === "help");
 ok("bot: random text → no smalltalk", bot.detectSmalltalk("xyzzy frobnicate") === null);
 ok("bot: name intro (en)", bot.detectNameIntro("My name is Nimal Perera") === "Nimal Perera");
@@ -193,6 +199,53 @@ ok("brain: society founded date", askSite("When was the society founded?")?.entr
 ok("brain: number of rural branches", askSite("How many Rural Bank branches are there?")?.entry.id === "rural-bank-branches");
 ok("brain: generic 'services' asks for clarification", askSite("services")?.ambiguous === true);
 ok("brain: unrelated question returns no invented answer", askSite("What will the weather be tomorrow?") === null);
+
+// Direct identity facts must answer immediately, not ask for clarification.
+const chairman = seed.BOARD.find((p) => p.category === "chairman")!;
+const viceChairman = seed.BOARD.find((p) => p.category === "vice-chairman")!;
+const generalManager = seed.BOARD.find((p) => /general manager/i.test(p.position_en))!;
+const societyNameAnswer = askSite("සමිතියේ නම මොකක්ද?");
+ok("brain: society name (Sinhala) is direct", societyNameAnswer?.entry.id === "society-name" && societyNameAnswer.ambiguous === false);
+ok("brain: society name returns full public names", societyNameAnswer?.entry.body_si.includes(seed.SITE.name_si) === true && societyNameAnswer.entry.body_en.includes(seed.SITE.name_en) === true);
+ok("brain: society full name (English)", askSite("What is the society's full name?")?.entry.id === "society-name");
+ok("brain: society name (Singlish)", askSite("samithiye nama mokakda")?.entry.id === "society-name");
+ok("brain: chairman name (Sinhala) is direct", askSite("සභාපතිගේ නම මොකක්ද?")?.entry.title_en.includes(chairman.name_en) === true && askSite("සභාපතිගේ නම මොකක්ද?")?.ambiguous === false);
+ok("brain: chairman name (misspelled Sinhala)", askSite("සබාපතිගේ නම මොකක්ද?")?.entry.title_en.includes(chairman.name_en) === true);
+ok("brain: chairman name (misspelled English)", askSite("chaiman name")?.entry.title_en.includes(chairman.name_en) === true);
+ok("brain: chairman name (Singlish)", askSite("sabapathige nama")?.entry.title_en.includes(chairman.name_en) === true);
+ok("brain: vice chairman name (Sinhala variant)", askSite("උප සබාපතිගේ නම")?.entry.title_en.includes(viceChairman.name_en) === true);
+ok("brain: general manager name", askSite("general manager name")?.entry.title_en.includes(generalManager.name_en) === true);
+ok("brain: branch manager name wording", askSite("Mandapola branch manager name")?.entry.topic === "branch:Mandapola Branch");
+
+// Every active division should be reachable from a natural keyword-only query.
+const divisionKeywordCases: [string, string][] = [
+  ["Ristbury Tiara", "biz:ristbury-tiara"],
+  ["supermarket", "biz:coop-city"],
+  ["transport", "biz:transport"],
+  ["fertilizer", "biz:fertilizer"],
+  ["insurance", "biz:insurance"],
+  ["rural bank", "biz:rural-bank"],
+  ["consumer", "biz:consumer"],
+  ["Maliban", "biz:maliban-biscuits"],
+  ["Maliban milk", "biz:maliban-kiri"],
+  ["Nature's Secrets", "biz:natures-secrets"],
+  ["Hemas", "biz:hemas"],
+  ["fuel station", "biz:fuel-station"],
+  ["funeral", "biz:funeral"],
+  ["gold loan", "biz:gold-loan-service"],
+];
+for (const [query, expectedId] of divisionKeywordCases) {
+  const result = askSite(query);
+  ok(`brain: keyword '${query}' → ${expectedId}`, result?.entry.id === expectedId && result.ambiguous === false, `got ${result?.entry.id ?? "null"}`);
+}
+ok("brain: bare keyword score clears widget answer threshold", (askSite("රක්ෂණය")?.score ?? 0) >= 24 && (askSite("Hemas")?.score ?? 0) >= 24);
+ok("brain: bare Maliban mentions separate Milk agency", askSite("Maliban")?.entry.body_en.includes("Maliban Milk Agency") === true && askSite("Maliban")?.entry.chips_en.includes("Maliban Milk") === true);
+ok("brain: Maliban misspelling (Sinhala)", askSite("මැලිබන්")?.entry.id === "biz:maliban-biscuits");
+ok("brain: supermarket (colloquial Sinhala)", askSite("සූපර් මාර්කට්")?.entry.id === "biz:coop-city");
+ok("brain: gold pawning picks dedicated Gold Loan division", askSite("රන් උකස්")?.entry.id === "biz:gold-loan-service");
+ok("brain: vehicle hire (Sinhala)", askSite("වාහනයක් කුලියට ගන්න")?.entry.topic === "biz:transport");
+ok("brain: wholesale goods (Sinhala)", askSite("තොග බඩු")?.entry.topic === "biz:consumer");
+
 const registeredSecret = String((seed as unknown as { REGISTERED_USERS?: { password_display?: string }[] }).REGISTERED_USERS?.[0]?.password_display ?? "");
 ok(
   "brain: registered-user secrets are never indexed",

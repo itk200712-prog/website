@@ -189,8 +189,8 @@ export function LiveChat() {
   /** Baymax හි පළමු (welcome) පණිවිඩය — reset කළාම ආයෙත් පේන්නේ මේක විතරයි */
   function makeWelcomeMessage(): Msg {
     const welcome = si
-      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය හෝ ව්‍යාපාර අංශ ගැන ඕනෑම දෙයක් සිංහල, English හෝ Singlish වලින් අහන්න — නැත්නම් පහත බොත්තමක් තෝරන්න.`
-      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me anything about the society, services, membership or business divisions in Sinhala, English or Singlish — or choose an option below.`;
+      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය හෝ අංශ ගැන ඕනෑම දෙයක් අහන්න. අංශයක නමක් විතරක් වුණත් ඇති — උදා: “Maliban”, “රක්ෂණය” හෝ “සභාපතිගේ නම”.`
+      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me anything about the society, services, membership or divisions. A single keyword works too — e.g. “Maliban”, “insurance” or “chairman name”.`;
     return {
       id: 0,
       from: "bot",
@@ -1699,8 +1699,8 @@ export function LiveChat() {
             from: "bot",
             bold: rsi ? "🧭 මට ඔබට උදව් කරන්න පුළුවන් දෑ" : "🧭 Here's how I can help",
             text: rsi
-              ? "ඔබට ඕනෑම දෙයක් නිදහසේ අහන්න පුළුවන් — උදා: “සාමාජිකත්වයට අයදුම් කරන්නේ කොහොමද?”, “රූරල් බැංකුවේ සේවා මොනවාද?”, “සභාපති කවුද?”\n🔎 සාමාජික සොයන්න — නම/NIC/සාමාජික අංකය (උදා: 41/01)\n⛽ ඉන්ධන මිල · 📰 පුවත් · 🖼️ ගැලරිය\n🏢 ව්‍යාපාර, ශාඛා, කළමනාකරුවන් සහ දුරකථන\n📞 නිලධාරියෙකුගේ ඇමතුමක් ඉල්ලන්න\n\nපහත බොත්තමක් ඔබන්න, නැත්නම් ඔබේ ප්‍රශ්නය සිංහල/English/Singlish වලින් මෙතැන ලියන්න."
-              : "You can ask me freely — e.g. “How do I become a member?”, “What services does the Rural Bank offer?” or “Who is the chairman?”\n🔎 Find a member — name / NIC / member No. (e.g. 41/01)\n⛽ Fuel prices · 📰 News · 🖼️ Gallery\n🏢 Businesses, branches, managers and phone numbers\n📞 Request a call from an officer\n\nTap an option below, or type your question in Sinhala, English or Singlish.",
+              ? "ඔබට ඕනෑම දෙයක් නිදහසේ අහන්න පුළුවන් — උදා: “සමිතියේ සම්පූර්ණ නම”, “සභාපතිගේ නම”, “සාමාජිකත්වයට අයදුම් කරන්නේ කොහොමද?”\nඅංශයක නමක් හෝ keyword එකක් විතරක් වුණත් ඇති — “Maliban”, “පොහොර”, “රක්ෂණය”, “සුපර් මාර්කට්”.\n🔎 සාමාජික සොයන්න — නම/NIC/සාමාජික අංකය (උදා: 41/01)\n⛽ ඉන්ධන මිල · 📰 පුවත් · 🖼️ ගැලරිය\n🏢 ව්‍යාපාර, ශාඛා, කළමනාකරුවන් සහ දුරකථන\n📞 නිලධාරියෙකුගේ ඇමතුමක් ඉල්ලන්න"
+              : "You can ask me freely — e.g. “What is the society's full name?”, “chairman name” or “How do I become a member?”\nA single division keyword also works — “Maliban”, “fertilizer”, “insurance” or “supermarket”.\n🔎 Find a member — name / NIC / member No. (e.g. 41/01)\n⛽ Fuel prices · 📰 News · 🖼️ Gallery\n🏢 Businesses, branches, managers and phone numbers\n📞 Request a call from an officer",
             chips: [...menuChips, rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
           });
           return;

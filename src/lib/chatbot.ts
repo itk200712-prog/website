@@ -79,10 +79,13 @@ export function detectSmalltalk(raw: string): SmalltalkHit | null {
   }
 
   // "kohomada / කොහොමද / how are you"
+  // Sinhala/Singlish "කොහොමද" is also the ordinary "how?" in factual
+  // questions (e.g. "සාමාජික වෙන්නේ කොහොමද?"), so treat it as a greeting
+  // only when the whole message is greeting-shaped.
   if (
-    /^(kohomada|kohomadha|komada)\b/.test(c) ||
-    /(කොහොමද|කෝමද|සැප සනීප|how are you|how are u|how r u|hows it going|how is it going|whats up|how do you do)/.test(c) ||
-    /^(kohomada|kohomadha)( oyata| obata)?$/.test(c)
+    /^(oyata |obata )?(kohomada|kohomadha|komada)( oyata| obata| baymax| bot)?$/.test(c) ||
+    /^(ඔයාට |ඔබට |ඔයා |ඔබ |baymax |බොට් )?(කොහොමද|කෝමද)( ඉන්නේ| ඉන්නවාද| තියෙන්නේ| baymax| බොට්)?$/.test(c) ||
+    /(සැප සනීප|how are you|how are u|how r u|hows it going|how is it going|whats up|how do you do)/.test(c)
   ) {
     return { intent: "how_are_you" };
   }
@@ -99,9 +102,14 @@ export function detectSmalltalk(raw: string): SmalltalkHit | null {
   // ආයුබෝවන් (\b සිංහල අකුරු සමඟ වැඩ නොකරයි — \s|$ යොදා ගැනෙන්නේ එනිසයි)
   if (/^(aayubowan|ayubowan|ayubovan|ආයුබෝවන්|ආයුබෝ)(?:\s|$)/.test(c)) return { intent: "ayubowan" };
 
-  // "ඔයා කවුද / නම මොකක්ද / who are you"
+  // "ඔයා කවුද / ඔයාගේ නම මොකක්ද / who are you"
+  // A bare "නම මොකක්ද" means the BOT's name, but "සභාපතිගේ නම මොකක්ද" or
+  // "සමිතියේ නම මොකක්ද" is a factual site question — those must reach the
+  // knowledge brain, so the name-only forms are anchored to the full message.
   if (
-    /(who are you|your name|what are you|whats your name|ඔබ කවුද|ඔයා කවුද|ඔයාගෙ නම|ඔබේ නම|නම මොකක්ද|ඔයා මොකෙක්ද|oyage nama|nama mokakda|oya kawuda)/.test(c)
+    /(who are you|your name|what are you|whats your name|ඔබ කවුද|ඔයා කවුද|ඔයා මොකෙක්ද|ඔයාගෙ නම|ඔයාගේ නම|ඔබේ නම|ඔබගේ නම|oyage nama|oya kawuda|oba kawuda)/.test(c) ||
+    /^(ඔයාගේ |ඔයාගෙ |ඔබගේ |ඔබේ |බොට් එකේ |බොට්ගේ )?නම( මොකක්ද| මොකද්ද)?$/.test(c) ||
+    /^(oyage |obage |bot |baymax )?(nama|name)( mokakda)?$/.test(c)
   ) {
     return { intent: "who_are_you" };
   }

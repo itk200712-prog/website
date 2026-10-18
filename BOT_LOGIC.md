@@ -19,7 +19,7 @@
 | `good morning` / `සුබ උදෑසනක්` (afternoon/evening/night ද) | ඒ ආචාරයම ආපසු + උදව් යෝජනාව |
 | `thank you` / `ස්තූතියි` / `bohoma sthuthi` | «ඔබව සාදරයෙන් පිළිගන්නවා! 🙏 තවත් උදව්වක් ඕනෙද?» |
 | `bye` / `tata` / `ගිහින් එන්නම්` | «ගිහිල්ලා එන්න! 👋 …සුබ දවසක්!» |
-| `ඔයා කවුද` / `your name` | «මම Baymax — …» + කළ හැකි දේ ලැයිස්තුව |
+| `ඔයා කවුද` / `your name` / නම විතරක් ඇහුවොත් | «මම Baymax — …» + කළ හැකි දේ ලැයිස්තුව (නමුත් `සභාපතිගේ නම`, `සමිතියේ නම` වගේ විෂයයක් තියෙන ප්‍රශ්න site brain එකට යයි) |
 | `help` / `උදව්` / `menu` | 🧭 හැකියාවන් ලැයිස්තුව + shortcuts |
 | `ok` / `හරි` / `එල` / `නියමයි` | «හරි! 👍 තවත් දෙයක් ඕනෙද?» |
 | `මගේ නම Nimal Perera` / `my name is …` / `mage nama …` | නම **මතක තබා ගනී** (device එකේමයි) → පස්සේ හැම ආචාරයකදීම නමින් අමතයි |
@@ -42,10 +42,18 @@ knowledge index එකක් හදනවා (offline/DB error නම් seed fa
 - සාමාජිකත්වයට අයදුම් කිරීම, ලේඛන, ගිණුම්/Register/Sign In/Forgot Password,
   F28, Privacy, සම්බන්ධතා/වේලාවන් වැනි අඩවියේ උපදෙස්
 
-උදාහරණ: `රූරල් බැංකුවේ සේවා මොනවාද?` · `සභාපති කවුද?` ·
-`Mandapola ශාඛාවේ කළමනාකරු කවුද?` · `How do I reset my password?` ·
+උදාහරණ: `සමිතියේ සම්පූර්ණ නම` · `සභාපතිගේ නම` · `chaiman name` ·
+`Maliban` · `මාලිබන් කිරි` · `රූරල් බැංකුවේ සේවා මොනවාද?` ·
+`Mandapola branch manager name` · `How do I reset my password?` ·
 `gramiya bankuwe sewa monawada` · `සාමාජිකයින් කීයක් ඉන්නවාද?`
 
+- හැම ක්‍රියාකාරී ව්‍යාපාර අංශයක්ම එහි නමෙන් හෝ එක keyword එකකින් සොයාගත
+  හැක (`supermarket`, `සූපර් මාර්කට්`, `පොහොර`, `රක්ෂණය`, `රන් උකස්` වගේ).
+  `Maliban` විතරක් ලියුවොත් ප්‍රධාන මාලිබන් බිස්කට් අංශය පෙන්වා, වෙනම මාලිබන්
+  කිරි අංශයක් ඇති බවත් දන්වයි; `Maliban milk` කියුවොත් කෙලින්ම කිරි අංශය එයි.
+- සමිතියේ නිල නම, සභාපති/උප සභාපති/අධ්‍යක්ෂ/සාමාන්‍ය කළමනාකරු වැනි තනතුරු,
+  ශාඛා සහ කළමනාකරු නම්/දුරකථන සඳහා English, සිංහල, Singlish ප්‍රශ්න රටා සහ
+  පොදුවේ දකින වැරදි අක්ෂර (`සබාපති`, `මැලිබන්`, `baliban` වගේ) තේරුම් ගනියි.
 - සිංහල අකුරු, English සහ Singlish තුනම support; කුඩා spelling වැරදිත්
   බොහෝ විට තේරුම් ගනියි (`Restbury` → Ristbury වගේ).
 - එකම වචනයෙන් අංශ කිහිපයක් අදහස් විය හැකි නම් (`services` වගේ) Baymax
@@ -100,7 +108,7 @@ section 12 ට test එකක් එක් කරන්න.
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 132 tests — section 11 smalltalk + section 12 site brain
+npx -y tsx scripts/test.mts   # 170 tests — section 11 smalltalk + section 12 site brain/keywords
 npm run build                 # production build
 ```
 
