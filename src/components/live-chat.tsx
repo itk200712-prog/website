@@ -32,8 +32,10 @@ import {
   detectSmalltalk,
   canUseLiveChat,
   hasClearableHistory,
+  resetBaymaxMemory,
   replyIsSi,
   shouldShowTyping,
+  type BaymaxMemory,
 } from "@/lib/chatbot";
 import {
   buildKnowledgeIndex,
@@ -175,7 +177,7 @@ export function LiveChat() {
   const idRef = useRef(1);
   const flowRef = useRef(0);          // flow එකක් අතරමැදි වීම වළක්වයි
   // ✅ bot "මතකය" — කතාව අතරේ දැනගන්නා දෑ (නම, අන්තිමට ඇසූ දේ) මතක තබා ගැනීම
-  const convoRef = useRef<{ lastIntent?: string; name?: string; lastTopic?: string }>({});
+  const convoRef = useRef<BaymaxMemory>({});
   const knowledgeIndexRef = useRef<IndexedKnowledgeEntry[] | null>(null);
   const knowledgeLoadRef = useRef<Promise<IndexedKnowledgeEntry[]> | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -183,6 +185,44 @@ export function LiveChat() {
   const sessionRef = useRef("");
 
   const push = (m: Omit<Msg, "id">) => setMsgs((xs) => [...xs, { ...m, id: idRef.current++ }].slice(-80));
+
+  /** Baymax හි පළමු (welcome) පණිවිඩය — reset කළාම ආයෙත් පේන්නේ මේක විතරයි */
+  function makeWelcomeMessage(): Msg {
+    const welcome = si
+      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය හෝ ව්‍යාපාර අංශ ගැන ඕනෑම දෙයක් සිංහල, English හෝ Singlish වලින් අහන්න — නැත්නම් පහත බොත්තමක් තෝරන්න.`
+      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me anything about the society, services, membership or business divisions in Sinhala, English or Singlish — or choose an option below.`;
+    return {
+      id: 0,
+      from: "bot",
+      bold: si ? "👋 ආයුබෝවන්!" : "👋 Welcome!",
+      text: welcome,
+      chips: si ? [...MENU_CHIPS_SI, "ව්‍යාපාර කළමනාකරුවන්"] : [...MENU_CHIPS_EN, "Business Managers"],
+    };
+  }
+
+  /**
+   * 🧹 Baymax conversation එක සම්පූර්ණයෙන්ම අයින් කර අලුතින් පටන් ගනී.
+   * පණිවිඩ history එක විතරක් නෙවෙයි — follow-up context (last intent/topic),
+   * open වෙලා තිබුණු panel, type කරපු text සහ callback form එකේ විස්තරත් අයින් වේ.
+   * Live (officer) session එකට මෙයින් කිසිම බලපෑමක් නෑ.
+   */
+  function resetBaymaxConversation() {
+    flowRef.current++; // දුවමින් තිබුණු Baymax flow එකක් තිබුණොත් ඒකත් නවත්වයි
+    idRef.current = 1;
+    started.current = true;
+    convoRef.current = resetBaymaxMemory(convoRef.current);
+    setMsgs([makeWelcomeMessage()]);
+    setInput("");
+    setPanel(null);
+    setTerm("");
+    setBusy(false);
+    setCName("");
+    setCNic("");
+    setCPhone("");
+    setCSent(false);
+    setTyping(false);
+    setAutoScroll(true);
+  }
 
   // ── bot නම + avatar (system_settings → public read) ──
   useEffect(() => {
@@ -210,22 +250,17 @@ export function LiveChat() {
 
   // ── session + පළමු පණිවිඩය ──
   useEffect(() => {
-    const welcome = si
-      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය හෝ ව්‍යාපාර අංශ ගැන ඕනෑම දෙයක් සිංහල, English හෝ Singlish වලින් අහන්න — නැත්නම් පහත බොත්තමක් තෝරන්න.`
-      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me anything about the society, services, membership or business divisions in Sinhala, English or Singlish — or choose an option below.`;
+    const welcome = makeWelcomeMessage();
     if (started.current) {
       // bot නම පසුව load වුණා නම් පළමු පණිවිඩයේ නම refresh කරයි
-      setMsgs((xs) => xs.map((m) => (m.id === 0 ? { ...m, text: welcome } : m)));
+      setMsgs((xs) => xs.map((m) => (m.id === 0 ? { ...m, bold: welcome.bold, text: welcome.text, chips: welcome.chips } : m)));
       return;
     }
     started.current = true;
     sessionRef.current = Math.random().toString(36).slice(2, 10);
-    push({
-      from: "bot",
-      bold: si ? "👋 ආයුබෝවන්!" : "👋 Welcome!",
-      text: welcome,
-      chips: si ? [...MENU_CHIPS_SI, "ව්‍යාපාර කළමනාකරුවන්"] : [...MENU_CHIPS_EN, "Business Managers"],
-    });
+    idRef.current = 1;
+    setMsgs([welcome]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [si, botName]);
 
   // visitor session key (localStorage — reload කළත් එකම chat එක)
@@ -551,9 +586,11 @@ export function LiveChat() {
 
   /** ⛽ "fuel prices" ගැහුවාම — මුලින්ම ඉන්ධනය තෝරන මෙනුව, මිල පෙන්වන්නේ තේරුවට පස්සේ */
   async function showFuelPicker() {
+    const myFlow = flowRef.current;
     setTyping(true);
     const prices = await loadFuelPrices();
     setTyping(false);
+    if (flowRef.current !== myFlow) return; // close/clear කළා නම් පරණ පිළිතුර නොදක්වයි
     const list: ListItem[] = prices.map((p) => ({
       label: (si ? p.name_si || p.name_en : p.name_en) ?? p.type,
       sub: si ? `${p.tag}${p.name_en && p.name_en !== p.tag ? ` · ${p.name_en}` : ""}` : p.tag,
@@ -580,9 +617,11 @@ export function LiveChat() {
 
   /** තෝරපු ඉන්ධන වර්ගයක මිල */
   async function showFuelPrice(type: FuelPrice["type"]) {
+    const myFlow = flowRef.current;
     setTyping(true);
     const prices = await loadFuelPrices();
     setTyping(false);
+    if (flowRef.current !== myFlow) return;
     const p = prices.find((x) => x.type === type);
     if (!p) {
       await showFuelPicker();
@@ -605,9 +644,11 @@ export function LiveChat() {
 
   /** ඉන්ධන මිල සියල්ලම එකවර */
   async function showAllFuelPrices() {
+    const myFlow = flowRef.current;
     setTyping(true);
     const prices = await loadFuelPrices();
     setTyping(false);
+    if (flowRef.current !== myFlow) return;
     push({
       from: "bot",
       bold: si ? "⛽ අද ඉන්ධන මිල ගණන්" : "⛽ Today's Fuel Prices",
@@ -630,6 +671,7 @@ export function LiveChat() {
 
   /** 📰 publish වුණු (published=true) නිවේදන හා පුවත් — pinned මුලින්ම, අලුත්ම මුලින් */
   async function showNews(category: "vacancy" | "tender" | null) {
+    const myFlow = flowRef.current;
     setTyping(true);
     let rows: NewsItem[] = [];
     try {
@@ -643,6 +685,7 @@ export function LiveChat() {
       rows = NEWS.filter((n) => n.published && (!category || n.category === category));
     }
     setTyping(false);
+    if (flowRef.current !== myFlow) return;
     const catLabel = category ? (si ? NEWS_CAT[category].si : NEWS_CAT[category].en) : si ? "නිවේදන හා පුවත්" : "News & Notices";
     if (!rows.length) {
       push({
@@ -685,6 +728,7 @@ export function LiveChat() {
 
   /** 🖼️ publish කළ ගැලරි ඡායාරූප — tagline (title + description) සමඟ */
   async function showGallery() {
+    const myFlow = flowRef.current;
     setTyping(true);
     let rows: GalleryItem[] = [];
     try {
@@ -696,6 +740,7 @@ export function LiveChat() {
       rows = GALLERY;
     }
     setTyping(false);
+    if (flowRef.current !== myFlow) return;
     if (!rows.length) {
       push({
         from: "bot",
@@ -1115,9 +1160,22 @@ export function LiveChat() {
     }
   }
 
-  // ✅ chat එක සම්පූර්ණයෙන්ම close — user side history අයින්, admin history ඉතුරු
+  // ✅ chat එක සම්පූර්ණයෙන්ම close — Live history එකත් Baymax history එකත්
+  //    visitor පැත්තෙන් අයින් වේ (admin history එක server එකේ ඉතුරු වේ)
   async function endChat() {
-    if (!sessionKey) return;
+    // 🧹 Baymax කතාබහත් ඔක්කොම අයින් කර welcome එකෙන් අලුතින් පටන් ගනී
+    resetBaymaxConversation();
+    setTab("chat");
+    setLiveText("");
+    setLiveErr("");
+    if (!sessionKey) {
+      setLiveMsgs([]);
+      setLiveStatus("closed");
+      setAgentTyping(false);
+      setOpen(false);
+      setMinimized(false);
+      return;
+    }
     // ⚡ marker + UI clear කලින්ම (poll එකට කලින් වැදගත්)
     clearedAtRef.current = new Date().toISOString();
     try {
@@ -1390,9 +1448,14 @@ export function LiveChat() {
       return false;
     }
 
+    const myFlow = flowRef.current;
     setTyping(true);
     try {
       const index = await loadKnowledge();
+      if (flowRef.current !== myFlow) {
+        setTyping(false);
+        return true; // handled — but conversation was reset, so stay silent
+      }
       const lastTopic = convoRef.current.lastTopic;
       const followUp = /(ඒක|එයා|එම|එහි|ඒ ගැන|එයාගේ|ඒකේ|තව විස්තර|\beke\b|\beyage\b|that (business|division|branch|person)|its|their|more details)/i.test(q);
       const searchText = followUp && lastTopic
@@ -1775,7 +1838,10 @@ export function LiveChat() {
     if (!v) return;
     push({ from: "me", text: v });
     setInput("");
-    setTimeout(() => void botReply(v), 350);
+    const myFlow = flowRef.current;
+    setTimeout(() => {
+      if (flowRef.current === myFlow) void botReply(v);
+    }, 350);
   }
 
   // ── legacy "Message" tab (free text) ──
@@ -1922,11 +1988,16 @@ export function LiveChat() {
               </button>
               <button
                 onClick={() => {
+                  // 🧹 X එකෙන් close කළාම Baymax history එකත් අයින් වේ —
+                  //    ආයෙත් අරින විට අලුත් welcome එකකින් පටන් ගනී.
+                  //    (Live officer session එක/history එක මෙයින් අයින් වෙන්නේ නෑ)
+                  resetBaymaxConversation();
                   setOpen(false);
                   setMinimized(false);
                 }}
                 className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition"
                 aria-label="Close"
+                title={si ? "වසන්න — Baymax කතාබහත් අයින් වේ" : "Close — clears the Baymax conversation"}
               >
                 <X size={15} />
               </button>

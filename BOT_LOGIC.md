@@ -83,6 +83,11 @@ section 12 ට test එකක් එක් කරන්න.
 
 1. **Context මතකය** — «ඔයාට කොහොමද?» කියලා ඇහැව්වට පස්සේ එන `hodin` වගේ
    පිළිතුරට ගැළපෙන විදිහට කතා කරනවා. කියපු **නමත්** මතක තබා ගන්නවා.
+   නමුත් widget එක **X එකෙන් close කළාම** හෝ Live Chat එක **Clear chat**
+   කළාම Baymax පණිවිඩ history එක, follow-up context එක, open panel සහ
+   type කරමින් තිබුණු text ඔක්කොම අයින් වී අලුත් welcome එකකින් පටන් ගනී.
+   (Minimize කළාම history එක එහෙමම තියෙනවා; officer session එකට X එකෙන්
+   බලපෑමක් නෑ.)
 2. **තේරුණේ නැති පණිවිඩ සටහන් වෙනවා** — bot එකට තේරුණේ නැති හැම පණිවිඩයක්ම
    `live_chat_events` එකට `event_type = 'unmatched'` විදිහට log වෙනවා (table එක
    තිබුණොත්). කවදා හරි ඒ ලැයිස්තුව බලලා නිතර එන වචන `chatbot.ts` එකට එකතු
@@ -95,7 +100,7 @@ section 12 ට test එකක් එක් කරන්න.
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 130 tests — section 11 smalltalk + section 12 site brain
+npx -y tsx scripts/test.mts   # 132 tests — section 11 smalltalk + section 12 site brain
 npm run build                 # production build
 ```
 

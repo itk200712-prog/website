@@ -154,6 +154,11 @@ ok("chat: typing hidden when not typing", bot.shouldShowTyping("joined", false) 
 ok("chat: live composer locked until officer joins (open)", bot.canUseLiveChat("open") === false);
 ok("chat: live composer locked when closed", bot.canUseLiveChat("closed") === false);
 ok("chat: live composer unlocks when joined", bot.canUseLiveChat("joined") === true);
+ok(
+  "chat: close/clear resets Baymax context",
+  JSON.stringify(bot.resetBaymaxMemory({ lastIntent: "knowledge", lastTopic: "biz:rural-bank", name: "Nimal" })) === JSON.stringify({ name: "Nimal" }),
+);
+ok("chat: Baymax reset with no saved name is empty", Object.keys(bot.resetBaymaxMemory({ lastTopic: "biz:hemas" })).length === 0);
 
 console.log("\n── 12) Baymax site brain (src/lib/knowledge.ts) ──");
 const knowledge = await import("../src/lib/knowledge.ts");

@@ -240,3 +240,20 @@ export function shouldShowTyping(status: string, typing: boolean): boolean {
 export function canUseLiveChat(status: string): boolean {
   return status === "joined";
 }
+
+/** Baymax කතාබහ අතරේ තබා ගන්නා කෙටි කාලීන මතකය */
+export interface BaymaxMemory {
+  lastIntent?: string;
+  name?: string;
+  lastTopic?: string;
+}
+
+/**
+ * Chat එක close/clear කළාම Baymax ගේ කතාබහ මතකය reset කරයි.
+ * අන්තිම intent/topic වගේ follow-up context එක සම්පූර්ණයෙන්ම අයින් වේ;
+ * visitor ගේ නම විතරක් තබා ගන්නේ ඒක chat history එකක් නොව device එකේ
+ * visitor identity එකක් නිසායි (Live Chat එකෙත් ඒ නමම පාවිච්චි වේ).
+ */
+export function resetBaymaxMemory(memory: BaymaxMemory): BaymaxMemory {
+  return memory.name ? { name: memory.name } : {};
+}
