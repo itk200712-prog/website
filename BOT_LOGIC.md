@@ -118,6 +118,10 @@ karaganna ona` · `Please connect me to someone at the office`.
 දුරකථන, මිල, සාමාජික වාර්තා) AI එක හදලා කියන්නේ නෑ — ඒවා site
 brain/officer flow එකෙන්මයි. Keyword විතරක් තියෙන කෙටි ඒවාත් site brain එකටමයි.
 
+- **වෘත්තීය හැසිරීම:** AI පිළිතුරු markdown නැති පිරිසිදු plain text එකක් ලෙස
+  (`•` bullets සහිතව) එයි; සිංහල පිළිතුරු ගෞරවයෙන් “ඔබ” ස්වරූපයෙන් එයි;
+  AI එකට අද දිනයත් දැනේ. පිළිතුරකට පසු «තව විස්තර කියන්න / කෙටියෙන් කියන්න /
+  උදාහරණයක් දෙන්න» වගේ follow-up බොත්තම් එනවා.
 - **Settings:** Admin → Live Chat → “Baymax AI — Gemini” card එකෙන් on/off,
   model එක සහ API key එක save කරන්න පුළුවන් (superadmin විතරයි key එක).
 - **ආරක්ෂාව:** key එක `backup_secrets` (superadmin-only) එකේ; browser එකට
@@ -160,10 +164,20 @@ Logic එක `src/lib/chatbot.ts` හි `getLiveChatHoursStatus()` එකේ �
    එකතු කරලා, `scripts/test.mts` එකේ section 11 ට test එකක් දාන්න. UI වෙනස්
    කරන්න ඕනේ නෑ.
 
+## 🔐 Original Super Admin ආරක්ෂණය
+
+මුල සිටම සිටි **original (root) superadmin** කෙනා `profiles.is_root_admin`
+එකෙන් ලකුණු කරලා ඇත (එය Backup ZIP එකෙත්, schema එකෙත් එනවා). අලුතින් එකතු වූ
+superadmin කෙනෙක්ට හෝ admin කෙනෙක්ට වෙනත් admin ගිණුමක password එක බලන්න,
+reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒවා root ට විතරයි. සාමාන්‍ය member ගිණුම්
+ඕනෑම admin කෙනෙක්ට කළමනාකරණය කරන්න පුළුවන්. Password reset එක කරන්නේ
+`/api/admin-reset-password` server route එකෙන් (service-role key එක server
+එකේ විතරයි); තමන්ගේම password එක වෙනස් කිරීම Admin → Profile එකෙනි.
+
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 249 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing) + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
+npx -y tsx scripts/test.mts   # 258 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + site brain/keywords + message box + backup (manifest/encryption/restore) + root-admin protection
 npm run build                 # production build
 ```
 

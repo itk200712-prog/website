@@ -361,7 +361,13 @@ ok("utils: summarizeInserts per-table counts", sampleSummary.totalRows === 3 && 
 const sampleManifest = bu.buildManifest({ generatedAt: "2026-10-18T00:00:00Z", tableCounts: { a: 2, b: 3 }, imageCount: 4, encrypted: false, supabaseHost: "x.supabase.co", schemaSha256: "s", databasePlainSha256: "d", files: { "database.sql": { sha256: "h", size: 5 } } });
 ok("utils: manifest = format v2 + totalRows summed", sampleManifest.formatVersion === 2 && sampleManifest.totalRows === 5 && bu.BACKUP_FORMAT_VERSION === 2);
 const recText = bu.buildRecoveryChecklist({ generatedAt: "2026-10-18T00:00:00Z", supabaseUrl: "https://x.supabase.co" });
-ok("utils: recovery checklist (repo + env keys + test-restore drill)", recText.includes("github.com/itk200712-prog/website") && recText.includes("NEXT_PUBLIC_SUPABASE_ANON_KEY") && recText.includes("Test Restore"));
+ok("utils: recovery checklist (repo + env keys + service-role + Gemini + test-restore drill)",
+  recText.includes("github.com/itk200712-prog/website") &&
+  recText.includes("NEXT_PUBLIC_SUPABASE_ANON_KEY") &&
+  recText.includes("SUPABASE_SERVICE_ROLE_KEY") &&
+  recText.includes("GEMINI_API_KEY") &&
+  recText.includes("is_root_admin") &&
+  recText.includes("Test Restore"));
 ok("backup: ZIP writes manifest.json + RECOVERY.txt; encryption optional",
   backupSrc.includes('"manifest.json"') && backupSrc.includes('"RECOVERY.txt"') && backupSrc.includes("encryptBackupText(sql"));
 ok("restore: partial restore (onlyTables) supported", backupSrc.includes("onlyTables") && backupSrc.includes("wantImages"));
@@ -410,7 +416,13 @@ ok("ai: enabled only for explicit on values", baymaxAi.isAiEnabledValue("1") ===
 ok("ai: secret mask never reveals the full key", baymaxAi.maskSecret("prod-secret-123456abcd") === "prod…abcd" && baymaxAi.maskSecret("short") === "••••••••" && baymaxAi.maskSecret("") === "");
 ok("ai: question is trimmed/collapsed and capped", baymaxAi.normalizeAiQuestion("  hello\n\n world  ") === "hello world" && baymaxAi.normalizeAiQuestion("x".repeat(900)).length === 600);
 const siInstruction = baymaxAi.baymaxAiSystemInstruction("si");
-ok("ai: Sinhala instruction + no invented society facts", siInstruction.includes("Sinhala script") && siInstruction.includes("Never invent facts") && siInstruction.includes("Google Search") && siInstruction.includes("Do not add an unrelated society"));
+ok("ai: Sinhala instruction (professional tone + current date) + no invented society facts",
+  siInstruction.includes("Sinhala script") &&
+  siInstruction.includes("respectful 'ඔබ' form") &&
+  siInstruction.includes("Today in Sri Lanka is") &&
+  siInstruction.includes("Never invent facts") &&
+  siInstruction.includes("Google Search") &&
+  siInstruction.includes("Do not add an unrelated society"));
 const groundedReq = baymaxAi.buildGeminiRequest("සමූපකාරයක් යනු කුමක්ද?", "si", true) as { tools?: unknown; contents: { parts: { text: string }[] }[] };
 ok("ai: Gemini request uses Google Search grounding", JSON.stringify(groundedReq.tools) === JSON.stringify([{ google_search: {} }]) && groundedReq.contents[0].parts[0].text.includes("සමූපකාරයක්"));
 const historyReq = baymaxAi.buildGeminiRequest("ඒක කොහෙද තියෙන්නේ?", "si", true, [
@@ -425,6 +437,9 @@ ok("ai: Gemini request carries conversation history for follow-ups",
 const plainReq = baymaxAi.buildGeminiRequest("hello", "en", false) as { tools?: unknown };
 ok("ai: Gemini request can retry without search tool", plainReq.tools === undefined);
 ok("ai: Gemini response text extraction", baymaxAi.extractGeminiText({ candidates: [{ content: { parts: [{ text: "ආයුබෝවන්" }, { text: "world" }] } }] }) === "ආයුබෝවන්\nworld" && baymaxAi.extractGeminiText({}) === "");
+ok("ai: professional cleanup strips markdown, keeps clean bullets",
+  baymaxAi.cleanAiAnswerText("## පිළිතුර\n**සීගිරිය** මාතලේ දිස්ත්‍රික්කයේ ඇත.\n- දඹුල්ලට ළඟයි\n\n\nස්තුතියි.") ===
+    "පිළිතුර\nසීගිරිය මාතලේ දිස්ත්‍රික්කයේ ඇත.\n• දඹුල්ලට ළඟයි\n\nස්තුතියි.");
 const adminLiveChatSrc = readFileSync(join(root, "src/app/admin/live-chat/page.tsx"), "utf8");
 const baymaxAiRouteSrc = readFileSync(join(root, "src/app/api/baymax-ai/route.ts"), "utf8");
 ok("ai: Admin saves key to private backup_secrets, enable/model to public settings",
@@ -460,6 +475,74 @@ ok("ai: widget sends free questions to AI first (with history) + keeps final AI 
   liveChatSrc.includes("ai_quota"));
 ok("ai: schema has private key slot + public defaults",
   schema.includes("('gemini_api_key','')") && schema.includes("('chat_ai_enabled', '0')") && schema.includes("('chat_ai_model', 'gemini-3.8-flash')"));
+
+console.log("\n── 17) Original (root) Super Admin protection + admin password reset ──");
+const rootAdmin = await import("../src/lib/root-admin.ts");
+const rootAcct = { id: "root", role: "superadmin", nic: "SUPERADMIN", joined_date: "2020-01-01", is_root_admin: true };
+const newSuper = { id: "s2", role: "superadmin", joined_date: "2024-01-01" };
+const plainAdmin = { id: "a1", role: "admin", joined_date: "2023-01-01" };
+const plainAdmin2 = { id: "a2", role: "admin", joined_date: "2023-06-01" };
+const memberAcct = { id: "m1", role: "member", joined_date: "2022-01-01" };
+const pickedRoot = rootAdmin.pickRootAdminId([newSuper, rootAcct, plainAdmin, memberAcct]);
+ok("root: flagged account wins; seed/earliest superadmin fallback",
+  pickedRoot === "root" &&
+  rootAdmin.pickRootAdminId([
+    { id: "old", role: "superadmin", joined_date: "2019-01-01" },
+    { id: "seed", role: "superadmin", nic: "SUPERADMIN", joined_date: "2020-01-01" },
+  ]) === "seed" &&
+  rootAdmin.pickRootAdminId([
+    { id: "late", role: "superadmin", joined_date: "2024-01-01" },
+    { id: "early", role: "superadmin", joined_date: "2021-01-01" },
+  ]) === "early");
+ok("root: any admin can view/reset/delete ordinary members",
+  rootAdmin.canViewPassword(plainAdmin, memberAcct, pickedRoot) === true &&
+  rootAdmin.canResetPassword(newSuper, memberAcct, pickedRoot) === true &&
+  rootAdmin.canDeleteAccount(plainAdmin, memberAcct, pickedRoot) === true &&
+  rootAdmin.canEditAccount(plainAdmin, memberAcct, pickedRoot) === true);
+ok("root: added superadmins/admins cannot touch other admin accounts",
+  rootAdmin.canViewPassword(newSuper, plainAdmin, pickedRoot) === false &&
+  rootAdmin.canResetPassword(plainAdmin, newSuper, pickedRoot) === false &&
+  rootAdmin.canDeleteAccount(newSuper, plainAdmin, pickedRoot) === false &&
+  rootAdmin.canEditAccount(plainAdmin, plainAdmin2, pickedRoot) === false &&
+  rootAdmin.canChangeRole(newSuper, memberAcct, pickedRoot) === false);
+ok("root: original superadmin manages admins; root/self accounts stay protected",
+  rootAdmin.canViewPassword(rootAcct, plainAdmin, pickedRoot) === true &&
+  rootAdmin.canResetPassword(rootAcct, newSuper, pickedRoot) === true &&
+  rootAdmin.canDeleteAccount(rootAcct, plainAdmin, pickedRoot) === true &&
+  rootAdmin.canChangeRole(rootAcct, memberAcct, pickedRoot) === true &&
+  rootAdmin.canDeleteAccount(rootAcct, rootAcct, pickedRoot) === false &&
+  rootAdmin.canResetPassword(rootAcct, rootAcct, pickedRoot) === false &&
+  rootAdmin.canChangeRole(rootAcct, rootAcct, pickedRoot) === false);
+ok("root: schema enforces root flag + delete policy + delete_admin RPC",
+  schema.includes("is_root_admin") &&
+  schema.includes("profiles_one_root_admin_idx") &&
+  schema.includes("root_admin_id()") &&
+  schema.includes("profiles_delete") &&
+  schema.includes("delete_admin(uid uuid)") &&
+  schema.includes("protect_profile_insert"));
+const resetRouteSrc = readFileSync(join(root, "src/app/api/admin-reset-password/route.ts"), "utf8");
+const membersSrc = readFileSync(join(root, "src/app/admin/members/page.tsx"), "utf8");
+const administratorsSrc = readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8");
+ok("root: password reset is server-only (service role + Auth Admin API + display sync)",
+  resetRouteSrc.includes("SUPABASE_SERVICE_ROLE_KEY") &&
+  resetRouteSrc.includes("/auth/v1/admin/users/") &&
+  resetRouteSrc.includes("canResetPassword") &&
+  resetRouteSrc.includes("protected_admin") &&
+  resetRouteSrc.includes("password_display") &&
+  resetRouteSrc.includes("self_reset_use_profile") &&
+  membersSrc.includes('fetch("/api/admin-reset-password"'));
+ok("root: admin UIs lock protected accounts (view/edit/delete/role)",
+  membersSrc.includes("canViewPassword") &&
+  membersSrc.includes("canDeleteAccount") &&
+  membersSrc.includes("Protected") &&
+  administratorsSrc.includes("canDeleteAccount") &&
+  administratorsSrc.includes("canChangeRole") &&
+  administratorsSrc.includes("Original") &&
+  administratorsSrc.includes("setSession(savedSession)"));
+ok("root: backup carries root flag + AI secret (profiles + backup_secrets + schema)",
+  backupTables.includes("profiles") &&
+  backupTables.includes("backup_secrets") &&
+  schema.includes("is_root_admin boolean"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

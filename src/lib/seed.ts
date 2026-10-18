@@ -984,6 +984,7 @@ export const REGISTERED_USERS = [
     joined_date: "10/5/2026",
     password_display: btoa("Admin@123"),
     auth_email: "superadmin@members.mpcs.lk",
+    is_root_admin: true,
   },
   {
     id: "u-admin",
@@ -994,5 +995,6 @@ export const REGISTERED_USERS = [
     joined_date: "10/13/2026",
     password_display: btoa("Kenula@123"),
     auth_email: "itk200712@gmail.com",
+    is_root_admin: false,
   },
 ];

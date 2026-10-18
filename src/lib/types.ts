@@ -174,6 +174,7 @@ export interface RegisteredUser {
   joined_date: string;
   password_display: string; // base64 (admin view requirement)
   auth_email: string;
+  is_root_admin?: boolean; // මුල සිටම සිටි original superadmin (protected)
 }
 
 export interface SiteSettings {

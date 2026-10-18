@@ -33,7 +33,8 @@ create table if not exists public.profiles (
   password_display text default '',     -- admin view එකේ "current password" පෙන්වීමට (base64)
   role user_role not null default 'member',
   status text not null default 'active',
-  joined_date timestamptz not null default now()
+  joined_date timestamptz not null default now(),
+  is_root_admin boolean not null default false  -- මුල සිටම සිටි original superadmin (protected)
 );
 
 -- ✅ user requirement: NIC වලින් login — anon ලඟට nic→email lookup පමණයි (password නෑ)
@@ -263,6 +264,7 @@ create table if not exists public.system_settings (
 -- 11. RLS
 -- ---------------------------------------------------------------------------
 alter table public.profiles add column if not exists sections text default '';
+alter table public.profiles add column if not exists is_root_admin boolean not null default false;
 
 alter table public.profiles enable row level security;
 alter table public.business_units enable row level security;
@@ -290,6 +292,120 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
+-- 🔐 Original (root) Super Admin — මුල සිටම සිටි superadmin.
+-- අලුතින් එකතු වූ superadmin ලාටවත් වෙනත් admin කෙනෙක්ගේ password/role/sections
+-- වෙනස් කරන්නවත් ගිණුම මකන්නවත් බෑ; ඒවා root ට විතරයි. Member ගිණුම් ඕන admin කෙනෙක්ට.
+create or replace function public.root_admin_id() returns uuid
+language sql stable security definer set search_path = public as $$
+  select id
+  from public.profiles
+  where role = 'superadmin'
+  order by
+    is_root_admin desc,
+    (upper(coalesce(nic, '')) = 'SUPERADMIN') desc,
+    (lower(coalesce(auth_email, '')) in ('superadmin@members.mpcs.lk', 'superadmin@mpcs.lk')) desc,
+    joined_date asc nulls last,
+    id asc
+  limit 1;
+$$;
+
+create or replace function public.is_root_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and auth.uid() = public.root_admin_id();
+$$;
+
+-- Root ලකුණ දාන්න පුළුවන් එක ගිණුමකට විතරයි
+create unique index if not exists profiles_one_root_admin_idx
+  on public.profiles (is_root_admin) where is_root_admin;
+
+-- Sensitive profile protection (password / role / status / sections / root flag)
+create or replace function public.protect_role_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  actor_id uuid := auth.uid();
+  rid uuid := public.root_admin_id();
+begin
+  if actor_id is null then
+    return new; -- SQL Editor / service-role (server) — restore & admin reset API
+  end if;
+
+  if actor_id = old.id then
+    if new.role is distinct from old.role
+       or new.status is distinct from old.status
+       or new.sections is distinct from old.sections
+       or new.is_root_admin is distinct from old.is_root_admin then
+      raise exception 'You cannot change your own role, status, sections or root-admin flag';
+    end if;
+    return new;
+  end if;
+
+  if not public.is_admin() then
+    raise exception 'Only administrators can update other accounts';
+  end if;
+
+  if new.is_root_admin is distinct from old.is_root_admin and actor_id is distinct from rid then
+    raise exception 'Only the original superadmin can change the root-admin flag';
+  end if;
+
+  if old.id = rid and (
+       new.role is distinct from old.role
+       or new.status is distinct from old.status
+       or new.is_root_admin is distinct from old.is_root_admin
+     ) then
+    raise exception 'The original superadmin role is protected';
+  end if;
+
+  if old.role in ('admin', 'superadmin') and actor_id is distinct from rid and (
+       new.password_display is distinct from old.password_display
+       or new.role is distinct from old.role
+       or new.status is distinct from old.status
+       or new.sections is distinct from old.sections
+       or new.is_root_admin is distinct from old.is_root_admin
+     ) then
+    raise exception 'Only the original superadmin can change another administrator password, role or sections';
+  end if;
+
+  if (new.role is distinct from old.role or new.status is distinct from old.status)
+     and (old.role in ('admin', 'superadmin') or new.role in ('admin', 'superadmin'))
+     and actor_id is distinct from rid then
+    raise exception 'Only the original superadmin can grant or remove administrator roles';
+  end if;
+
+  return new;
+end $$;
+
+drop trigger if exists trg_protect_role on public.profiles;
+create trigger trg_protect_role before update on public.profiles
+  for each row execute function public.protect_role_change();
+
+create or replace function public.protect_profile_insert() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  actor_id uuid := auth.uid();
+  rid uuid := public.root_admin_id();
+begin
+  if actor_id is null then
+    return new; -- SQL Editor / service-role restore
+  end if;
+  if new.is_root_admin and actor_id is distinct from rid then
+    raise exception 'Only the original superadmin can set the root-admin flag';
+  end if;
+  if actor_id = new.id then
+    if new.role in ('admin', 'superadmin') and not public.is_admin() then
+      raise exception 'You cannot create your own administrator account';
+    end if;
+    return new;
+  end if;
+  if not public.is_admin() then
+    raise exception 'Only administrators can create other accounts';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_protect_profile_insert on public.profiles;
+create trigger trg_protect_profile_insert before insert on public.profiles
+  for each row execute function public.protect_profile_insert();
+
 -- profiles: own + admins
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles for select
@@ -300,6 +416,49 @@ create policy profiles_insert on public.profiles for insert
 drop policy if exists profiles_update on public.profiles;
 create policy profiles_update on public.profiles for update
   using (auth.uid() = id or public.is_admin());
+-- Delete: member ගිණුම් ඕන admin කෙනෙක්ට; admin/superadmin ගිණුම් root ට විතරයි; root ගේ එක කාටවත් බෑ
+drop policy if exists profiles_delete on public.profiles;
+create policy profiles_delete on public.profiles for delete
+  using (
+    public.is_admin()
+    and id <> auth.uid()
+    and id is distinct from public.root_admin_id()
+    and (role = 'member' or auth.uid() = public.root_admin_id())
+  );
+
+-- ගිණුමක් profile + login (auth.users) දෙකම මකන RPC එක — root නීතිය මෙතැනත් බලයි
+create or replace function public.delete_admin(uid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  actor_id uuid := auth.uid();
+  rid uuid := public.root_admin_id();
+  target_role user_role;
+begin
+  if actor_id is null then
+    raise exception 'Not signed in';
+  end if;
+  if not public.is_admin() then
+    raise exception 'Only administrators can delete accounts';
+  end if;
+  if uid = actor_id then
+    raise exception 'You cannot delete your own account';
+  end if;
+  select role into target_role from public.profiles where id = uid;
+  if target_role is null then
+    raise exception 'Account not found';
+  end if;
+  if uid = rid then
+    raise exception 'The original superadmin account cannot be deleted';
+  end if;
+  if target_role in ('admin', 'superadmin') and actor_id is distinct from rid then
+    raise exception 'Only the original superadmin can delete an administrator account';
+  end if;
+  delete from public.profiles where id = uid;
+  delete from auth.users where id = uid;
+end $$;
+
+revoke all on function public.delete_admin(uuid) from public;
+grant execute on function public.delete_admin(uuid) to authenticated;
 
 -- public read (active businesses etc.), admin write
 do $$
@@ -614,12 +773,30 @@ from auth.users u
 where u.email = 'superadmin@members.mpcs.lk'
   and not exists (select 1 from auth.identities i where i.user_id = u.id and i.provider = 'email');
 
-insert into public.profiles (id, full_name, nic, phone, auth_email, password_display, role, status, joined_date)
+insert into public.profiles (id, full_name, nic, phone, auth_email, password_display, role, status, joined_date, is_root_admin)
 select u.id, 'Super Administrator', 'SUPERADMIN', '0372291012', 'superadmin@members.mpcs.lk',
-  encode('Admin@123'::bytea, 'base64'), 'superadmin', 'active', '2026-10-05'
+  encode('Admin@123'::bytea, 'base64'), 'superadmin', 'active', '2026-10-05', true
 from auth.users u
 where u.email = 'superadmin@members.mpcs.lk'
   and not exists (select 1 from public.profiles p where p.nic = 'SUPERADMIN');
+
+-- පරණ DB වලට: root ලකුණ කාටවත් නැත්නම් මුල්ම superadmin ට දානවා (එක් වතාවයි)
+with chosen as (
+  select id
+  from public.profiles
+  where role = 'superadmin'
+  order by
+    (upper(coalesce(nic, '')) = 'SUPERADMIN') desc,
+    (lower(coalesce(auth_email, '')) in ('superadmin@members.mpcs.lk', 'superadmin@mpcs.lk')) desc,
+    joined_date asc nulls last,
+    id asc
+  limit 1
+)
+update public.profiles p
+set is_root_admin = true
+from chosen
+where p.id = chosen.id
+  and not exists (select 1 from public.profiles where is_root_admin);
 
 -- ============================================================================
 -- F28 — සමිතියේ ගිනුම් (Profit & Loss) — selected members ට පමනක්

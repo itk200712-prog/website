@@ -5,12 +5,15 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { Lock, Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { logActivity } from "@/lib/activity";
 import { AdminModal, AdminTopbar, dbDelete, dbUpdate, useNotice, SECTION_KEYS } from "@/components/admin";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { nicToEmail } from "@/lib/auth";
 import { encodePw } from "@/lib/auth";
+import {
+  canChangeRole, canDeleteAccount, canEditAccount, isRootAdmin, pickRootAdminId,
+} from "@/lib/root-admin";
 import { REGISTERED_USERS } from "@/lib/seed";
 
 type AdminRow = {
@@ -21,6 +24,8 @@ type AdminRow = {
   auth_email: string;
   role: string;
   sections: string;
+  joined_date?: string;
+  is_root_admin?: boolean;
 };
 
 const SECTION_LABELS: Record<string, string> = {
@@ -45,18 +50,50 @@ export default function AdminAdministratorsPage() {
   const [editFor, setEditFor] = useState<AdminRow | null>(null);
   const [sections, setSections] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // 🔐 දැනට login වී ඇති admin + original (root) superadmin
+  const [actor, setActor] = useState<{ id: string; role: string } | null>(null);
+  const [rootId, setRootId] = useState("");
 
   async function load() {
     if (!isSupabaseConfigured()) {
-      setRows(REGISTERED_USERS.filter((u) => (u.role as string) !== "member").map((u) => ({
+      const demo = REGISTERED_USERS.filter((u) => (u.role as string) !== "member").map((u) => ({
         id: u.id, full_name: u.full_name, nic: u.nic, phone: u.phone, auth_email: u.auth_email, role: u.role, sections: "",
-      })));
+        joined_date: u.joined_date, is_root_admin: Boolean((u as { is_root_admin?: boolean }).is_root_admin),
+      })) as AdminRow[];
+      const rid = pickRootAdminId(demo);
+      setRootId(rid);
+      setActor(rid ? { id: rid, role: "superadmin" } : null);
+      setRows(demo);
       setLoaded(true);
       return;
     }
     try {
-      const { data } = await authedClient().then((c) => c.from("profiles").select("*").neq("role", "member"));
-      if (data) setRows(data as unknown as AdminRow[]);
+      const sb = await authedClient();
+      const { data: u } = await sb.auth.getUser();
+      const actorId = u?.user?.id ?? "";
+      const { data } = await sb
+        .from("profiles")
+        .select("id,full_name,nic,phone,auth_email,role,sections,joined_date")
+        .neq("role", "member");
+      if (data) {
+        let adminRows = data as unknown as AdminRow[];
+        try {
+          const { data: flags, error: flagErr } = await sb.from("profiles").select("id,is_root_admin").eq("is_root_admin", true);
+          if (!flagErr && flags && flags.length > 0) {
+            const flagged = new Set((flags as { id: string }[]).map((f) => String(f.id)));
+            adminRows = adminRows.map((r) => ({ ...r, is_root_admin: flagged.has(String(r.id)) }));
+          }
+        } catch { /* column නැත්නම් seed/පැරණිම එක අනුව */ }
+        const rid = pickRootAdminId(adminRows);
+        setRootId(rid);
+        const me = adminRows.find((r) => r.id === actorId);
+        if (me) setActor({ id: String(me.id), role: String(me.role) });
+        else {
+          const { data: prof } = await sb.from("profiles").select("id,role").eq("id", actorId).maybeSingle();
+          setActor(prof ? { id: String((prof as { id: string }).id), role: String((prof as { role: string }).role) } : null);
+        }
+        setRows(adminRows);
+      }
     } catch { /* ignore */ }
     setLoaded(true);
   }
@@ -68,6 +105,10 @@ export default function AdminAdministratorsPage() {
     setModal(true);
   }
   function openEdit(r: AdminRow) {
+    if (!canEditAccount(actor, r, rootId)) {
+      show("⚠ වෙනත් admin ගිණුම් edit කරන්න පුළුවන් Original Super Admin ට විතරයි");
+      return;
+    }
     setEditFor(r);
     setSections((r.sections || "").split(",").map((s) => s.trim()).filter(Boolean));
     setModal(true);
@@ -81,19 +122,39 @@ export default function AdminAdministratorsPage() {
     const fd = new FormData(e.currentTarget);
     const csv = sections.join(",");
     if (editFor) {
-      const err = await dbUpdate("profiles", { id: editFor.id }, {
+      if (!canEditAccount(actor, editFor, rootId)) {
+        show("⚠ වෙනත් admin ගිණුම් edit කරන්න පුළුවන් Original Super Admin ට විතරයි");
+        return;
+      }
+      // Role/sections වෙනස් කරන්න පුළුවන් Original Super Admin ට විතරයි — නැත්නම් නම/දුරකථනය විතරයි
+      const actorIsRoot = isRootAdmin(actor, rootId);
+      const patch: Record<string, unknown> = {
         full_name: String(fd.get("full_name")),
         phone: String(fd.get("phone")),
-        role: String(fd.get("role")),
-        sections: csv,
-      });
+      };
+      if (actorIsRoot) {
+        if (canChangeRole(actor, editFor, rootId)) patch.role = String(fd.get("role") ?? editFor.role);
+        if (editFor.id !== actor?.id) patch.sections = csv;
+      }
+      const err = await dbUpdate("profiles", { id: editFor.id }, patch);
       setModal(false);
       await load();
       show(err ? `⚠ ${err}` : "✅ Administrator updated");
       return;
     }
     // අලුත් admin කෙනෙක් — login එක්ක create කරන්න
+    if (String(fd.get("role")) === "superadmin" && !isRootAdmin(actor, rootId)) {
+      show("⚠ Super Admin ගිණුම් හදන්න පුළුවන් Original Super Admin ට විතරයි");
+      return;
+    }
     const password = String(fd.get("password"));
+    // signUp එකකින් browser session එක අලුත් user ට මාරු විය හැක — profile එක
+    // දාන්න කලින් නිර්මාණය කරන admin ගේ session එක ආපසු ගන්නයි මේක තියාගන්නේ.
+    const creatorSb = await authedClient();
+    const { data: creatorSession } = await creatorSb.auth.getSession();
+    const savedSession = creatorSession.session
+      ? { access_token: creatorSession.session.access_token, refresh_token: creatorSession.session.refresh_token }
+      : null;
     // ✅ LOGIN FIX: account එක හැදිය යුත්තේ nic@members.mpcs.lk එකෙන් (loginWithNic එකට ගැලපෙන්න)
     const email = nicToEmail(String(fd.get("nic")));
     const sb = createClient();
@@ -108,8 +169,11 @@ export default function AdminAdministratorsPage() {
       return;
     }
     if (uid) {
+      // නිර්මාණය කරන admin විදිහටම profile එක දාන්න session එක restore කරනවා
+      const adminSb = await authedClient();
+      if (savedSession) await adminSb.auth.setSession(savedSession);
       // ✅ direct upsert (AUTHED) — profile row නැත්නම් හැදෙනවා, තියෙනවා නම් update වෙනවා
-      const { error: upErr } = await (await authedClient()).from("profiles").upsert({
+      const { error: upErr } = await adminSb.from("profiles").upsert({
         id: uid,
         full_name: String(fd.get("full_name")),
         nic: String(fd.get("nic")),
@@ -132,23 +196,28 @@ export default function AdminAdministratorsPage() {
   }
 
   async function remove(r: AdminRow) {
-    if (r.role === "superadmin") return;
+    if (!canDeleteAccount(actor, r, rootId)) {
+      show(r.id === rootId ? "⚠ Original Super Admin ගිණුම මකන්න බෑ" : "⚠ Admin ගිණුම් මකන්න පුළුවන් Original Super Admin ට විතරයි");
+      return;
+    }
+    if (!confirm(`"${r.full_name}" ගේ admin ගිණුම (${r.role}) සම්පූර්ණයෙන්ම මකන්නද? Login එකත් නැති වෙනවා.`)) return;
     setRows((xs) => xs.filter((x) => x.id !== r.id));
     const sb = await authedClient();
     // ✅ පළවෙන් RPC — profile + login account දෙකම මකනවා (SQL function එක තියෙනවා නම්)
     const { error: rpcErr } = await sb.rpc("delete_admin", { uid: r.id });
-    void logActivity("DELETE", `administrator removed — ${r.full_name} (${r.role}) + login account`);
     if (!rpcErr) {
+      void logActivity("DELETE", `administrator removed — ${r.full_name} (${r.role}) + login account`);
       await load();
       show("✅ Removed — login account එකත් ඉවත් කළා");
       return;
     }
     // fallback: profiles row එක විතරක් (SQL function එක නැත්නම්)
     const err = await dbDelete("profiles", { id: r.id });
+    if (!err) void logActivity("DELETE", `administrator profile removed — ${r.full_name} (${r.role})`);
     await load();
     show(err
-      ? `⚠ ${err} — Supabase SQL Editor එකේ delete_admin function එක run කරලා නැත්නම් ඒක දාන්න`
-      : "✅ Removed (profile එක විතරයි — login account එක ඉවත් කරන්න SQL function එක දාන්න)");
+      ? `⚠ ${err} — Supabase SQL Editor එකේ schema.sql එක run කරලා නැත්නම් ඒක දාන්න`
+      : "✅ Removed (profile එක විතරයි — login account එකත් ඉවත් වෙන්න schema.sql එක run කරන්න)");
   }
 
   return (
@@ -163,7 +232,7 @@ export default function AdminAdministratorsPage() {
               <ShieldCheck size={20} className="text-indigo-700" /> Administrators & Section Permissions
             </h2>
             <p className="text-slate-500 text-[12px] mt-1">
-              Admin කෙනෙක්ට අවශ්‍ය sections පමණක් තෝරන්න — එයාට login වෙලා ඒ sections විතරක් edit කරන්න පුළුවන්.
+              Admin කෙනෙක්ට අවශ්‍ය sections පමණක් තෝරන්න. වෙනත් admin ගිණුම් edit/delete කරන්න පුළුවන් මුල සිටම සිටි ⭐ Original Super Admin ට විතරයි.
             </p>
           </div>
           <button className="btn btn-primary" onClick={openAdd}>
@@ -185,7 +254,7 @@ export default function AdminAdministratorsPage() {
                   </div>
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${r.role === "superadmin" ? "badge-amber" : "badge-blue"}`}>
-                  {r.role}
+                  {r.role}{rootId && r.id === rootId ? " · ⭐ Original" : ""}
                 </span>
               </div>
               <div className="mt-2.5 text-[11px] text-slate-500">NIC: {r.nic} · {r.phone}</div>
@@ -198,13 +267,23 @@ export default function AdminAdministratorsPage() {
                 )}
               </div>
               <div className="flex gap-1.5 mt-3.5 justify-end">
-                <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-700" title="Edit sections" onClick={() => openEdit(r)}>
-                  <Pencil size={13} />
-                </button>
-                {r.role !== "superadmin" && (
+                {canEditAccount(actor, r, rootId) ? (
+                  <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-700" title="Edit sections" onClick={() => openEdit(r)}>
+                    <Pencil size={13} />
+                  </button>
+                ) : (
+                  <span className="w-8 h-8 rounded-lg border border-slate-100 bg-slate-50 flex items-center justify-center text-slate-300" title="වෙනත් admin ගිණුම් edit කරන්න පුළුවන් Original Super Admin ට විතරයි">
+                    <Lock size={12} />
+                  </span>
+                )}
+                {canDeleteAccount(actor, r, rootId) ? (
                   <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-600" title="Remove" onClick={() => remove(r)}>
                     <Trash2 size={13} />
                   </button>
+                ) : (
+                  <span className="w-8 h-8 rounded-lg border border-slate-100 bg-slate-50 flex items-center justify-center text-slate-300" title={r.id === rootId ? "Original Super Admin ගිණුම මකන්න බෑ" : "Admin ගිණුම් මකන්න පුළුවන් Original Super Admin ට විතරයි"}>
+                    <Lock size={12} />
+                  </span>
                 )}
               </div>
             </div>
@@ -238,10 +317,20 @@ export default function AdminAdministratorsPage() {
               </div>
               <div>
                 <label className="field-label">Role</label>
-                <select name="role" className="field" defaultValue={editFor?.role ?? "admin"} disabled={editFor?.role === "superadmin"}>
+                <select
+                  name="role"
+                  className="field"
+                  defaultValue={editFor?.role ?? "admin"}
+                  disabled={editFor ? !canChangeRole(actor, editFor, rootId) : false}
+                >
                   <option value="admin">Admin (limited sections)</option>
-                  <option value="superadmin">Super Admin (all access)</option>
+                  <option value="superadmin" disabled={!editFor && !isRootAdmin(actor, rootId)}>
+                    Super Admin (all access){!editFor && !isRootAdmin(actor, rootId) ? " — Original Super Admin ට විතරයි" : ""}
+                  </option>
                 </select>
+                {editFor && !canChangeRole(actor, editFor, rootId) && (
+                  <p className="text-slate-400 text-[10.5px] mt-1.5">🔒 Role එක වෙනස් කරන්න පුළුවන් Original Super Admin ට විතරයි.</p>
+                )}
               </div>
             </div>
             {!editFor && (
@@ -266,7 +355,7 @@ export default function AdminAdministratorsPage() {
                       type="checkbox"
                       checked={sections.includes(k)}
                       onChange={() => toggle(k)}
-                      disabled={editFor?.role === "superadmin"}
+                      disabled={editFor ? editFor.role === "superadmin" || !isRootAdmin(actor, rootId) : false}
                     />
                     <span className="text-[11.5px] font-semibold text-slate-700">{SECTION_LABELS[k] ?? k}</span>
                   </label>

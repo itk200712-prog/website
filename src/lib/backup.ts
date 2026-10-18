@@ -284,7 +284,7 @@ export async function generateBackupSql(
   lines.push(`-- Fresh Supabase restore: 1) ZIP එකේ schema.sql run කරන්න`);
   lines.push(`--   2) මේ file එක run කරන්න (logins password සහිතව හැදේ)`);
   lines.push(`--   3) Admin → Import එකෙන් ZIP එක එක් වරක් තෝරන්න — images storage එකට යයි.`);
-  lines.push(`-- ⚠ මෙම file එකේ login passwords අඩංගුයි — රහසිගතව තබා ගන්න!`);
+  lines.push(`-- ⚠ මෙම file එකේ login passwords + Gemini API key (backup_secrets) අඩංගුයි — රහසිගතව තබා ගන්න!`);
   lines.push(`-- ============================================================`);
   lines.push(``);
   lines.push(`create extension if not exists "pgcrypto";`);
@@ -669,7 +669,7 @@ export async function generateBackupZip(
       "     3) Site එකේ env අලුත් project එකට මාරු කර පරණ superadmin password එකෙන්ම login වෙන්න",
       "     4) Admin → Backup & Restore → Import එකෙන් මේ ZIP එක එක් වරක් තෝරන්න (images storage එකට යයි)",
       "",
-      "⚠ ආරක්ෂාව: මේ ZIP එකේ user login passwords අඩංගුයි — ගොනුව රහසිගතව තබා ගන්න!",
+      "⚠ ආරක්ෂාව: මේ ZIP එකේ user login passwords + Gemini API key අඩංගුයි — ගොනුව රහසිගතව තබා ගන්න!",
       "⚠ Website code එක (Baymax bot logic ඇතුළුව) ඇත්තේ GitHub repository එකේය; මේ ZIP එකට",
       "   code එක ඇතුළත් වෙන්නේ නෑ. Database එකේ functions/logic සියල්ල schema.sql එකේ ඇත.",
     ].join("\n")

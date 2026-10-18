@@ -204,8 +204,8 @@ export function LiveChat() {
   /** Baymax හි පළමු (welcome) පණිවිඩය — reset කළාම ආයෙත් පේන්නේ මේක විතරයි */
   function makeWelcomeMessage(): Msg {
     const welcome = si
-      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය හෝ අංශ ගැන ඕනෑම දෙයක් අහන්න. අංශයක නමක් විතරක් වුණත් ඇති — උදා: “Maliban”, “රක්ෂණය” හෝ “සභාපතිගේ නම”.`
-      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me anything about the society, services, membership or divisions. A single keyword works too — e.g. “Maliban”, “insurance” or “chairman name”.`;
+      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය සහ අංශ ගැන — ඒ වගේම සාමාන්‍ය දැනුම ගැනත් සිංහලෙන් නිදහසේ අහන්න පුළුවන්.\nඋදා: “සභාපතිගේ නම”, “Maliban”, “සීගිරිය කොහෙද තියෙන්නේ?”`
+      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me freely about the society, services, membership and divisions — and general knowledge too.\nTry: “chairman name”, “Maliban” or “Where is Sigiriya?”`;
     return {
       id: 0,
       from: "bot",
@@ -1628,7 +1628,9 @@ export function LiveChat() {
         from: "bot",
         bold: rsi ? "✨ Baymax AI පිළිතුර" : "✨ Baymax AI answer",
         text: answer,
-        chips: [...(rsi ? MENU_CHIPS_SI : MENU_CHIPS_EN), rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
+        chips: rsi
+          ? ["තව විස්තර කියන්න", "කෙටියෙන් කියන්න", "උදාහරණයක් දෙන්න", "ඇමතුමක් ඉල්ලන්න"]
+          : ["Tell me more", "Make it shorter", "Give an example", "Request a Call"],
       });
       aiHistoryRef.current = [
         ...aiHistoryRef.current,
@@ -1851,8 +1853,8 @@ export function LiveChat() {
             from: "bot",
             bold: rsi ? "🧭 මට ඔබට උදව් කරන්න පුළුවන් දෑ" : "🧭 Here's how I can help",
             text: rsi
-              ? "ඔබට ඕනෑම දෙයක් නිදහසේ අහන්න පුළුවන් — උදා: “සමිතියේ සම්පූර්ණ නම”, “සභාපතිගේ නම”, “සාමාජිකත්වයට අයදුම් කරන්නේ කොහොමද?”\nඅංශයක නමක් හෝ keyword එකක් විතරක් වුණත් ඇති — “Maliban”, “පොහොර”, “රක්ෂණය”, “සුපර් මාර්කට්”.\n🔎 සාමාජික සොයන්න — නම/NIC/සාමාජික අංකය (උදා: 41/01)\n⛽ ඉන්ධන මිල · 📰 පුවත් · 🖼️ ගැලරිය\n🏢 ව්‍යාපාර, ශාඛා, කළමනාකරුවන් සහ දුරකථන\n📞 නිලධාරියෙකුගේ ඇමතුමක් ඉල්ලන්න"
-              : "You can ask me freely — e.g. “What is the society's full name?”, “chairman name” or “How do I become a member?”\nA single division keyword also works — “Maliban”, “fertilizer”, “insurance” or “supermarket”.\n🔎 Find a member — name / NIC / member No. (e.g. 41/01)\n⛽ Fuel prices · 📰 News · 🖼️ Gallery\n🏢 Businesses, branches, managers and phone numbers\n📞 Request a call from an officer",
+              ? "ඔබට නිදහසේ අහන්න පුළුවන් — සමිතිය ගැන: “සභාපතිගේ නම”, “සාමාජිකත්වයට අයදුම් කරන්නේ කොහොමද?” · සාමාන්‍ය දැනුම: “සීගිරිය කොහෙද තියෙන්නේ?”\nඅංශයක නමක් හෝ keyword එකක් විතරක් වුණත් ඇති — “Maliban”, “පොහොර”, “රක්ෂණය”, “සුපර් මාර්කට්”.\n🔎 සාමාජික සොයන්න — නම/NIC/සාමාජික අංකය (උදා: 41/01)\n⛽ ඉන්ධන මිල · 📰 පුවත් · 🖼️ ගැලරිය\n🏢 ව්‍යාපාර, ශාඛා, කළමනාකරුවන් සහ දුරකථන\n📞 නිලධාරියෙකුගේ ඇමතුමක් ඉල්ලන්න"
+              : "You can ask me freely — about the society: “chairman name”, “How do I become a member?” · general knowledge: “Where is Sigiriya?”\nA single division keyword also works — “Maliban”, “fertilizer”, “insurance” or “supermarket”.\n🔎 Find a member — name / NIC / member No. (e.g. 41/01)\n⛽ Fuel prices · 📰 News · 🖼️ Gallery\n🏢 Businesses, branches, managers and phone numbers\n📞 Request a call from an officer",
             chips: [...menuChips, rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
           });
           return;
