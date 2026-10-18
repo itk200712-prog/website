@@ -31,6 +31,8 @@ import {
   detectNews,
   detectSmalltalk,
   canUseLiveChat,
+  getLiveChatHoursStatus,
+  nextLiveChatOpenPhrase,
   hasClearableHistory,
   resetBaymaxMemory,
   replyIsSi,
@@ -167,6 +169,8 @@ export function LiveChat() {
   // ✅ callback request කළාම session එකක් තියෙනවා → admin join වුණාම notify කරන්න poll කරයි
   const [sessionActive, setSessionActive] = useState(false);
   const [officerJoined, setOfficerJoined] = useState(false);
+  // 🕘 Live Chat කාර්යාල වේලාව (Asia/Colombo) — තත්පර 30කට වරක් refresh වේ
+  const [liveHours, setLiveHours] = useState(() => getLiveChatHoursStatus());
   const audioRef = useRef<AudioContext | null>(null);
   const soundRef = useRef(true);
   const typingAt = useRef(0);
@@ -247,6 +251,12 @@ export function LiveChat() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  // 🕘 කාර්යාල වේලාව තත්‍ය වේලාවෙන්ම තබා ගන්න (widget එක ඇරලා තියෙද්දී වේලාව පැන ගියත්)
+  useEffect(() => {
+    const id = setInterval(() => setLiveHours(getLiveChatHoursStatus()), 30_000);
+    return () => clearInterval(id);
   }, []);
 
   // ── session + පළමු පණිවිඩය ──
@@ -347,6 +357,8 @@ export function LiveChat() {
         void logEvent("live_agent", "", 0, sessionRef.current);
         return;
       }
+      // 🕘 කාර්යාල වේලාවෙන් පිටත නම් ඊළඟ විවෘත වේලාව පෙන්වනවා
+      if (showLiveChatClosedNotice()) return;
       // 🔒 direct live chat නෑ — Baymax හරහා ඇමතුමක් ඉල්ලා නිලධාරියා join වෙනකම් ඉන්න ඕන
       setTab("chat");
       setPanel(null);
@@ -537,6 +549,7 @@ export function LiveChat() {
     }
 
     if (key === "contact") {
+      if (showLiveChatClosedNotice()) return;
       setTab("chat");
       setPanel("contact");
       setCSent(false);
@@ -940,6 +953,8 @@ export function LiveChat() {
     const nic = cNic.trim();
     const phone = cPhone.trim();
     if (!name || !nic || !phone) return;
+    // 🕘 form එක ඇරලා තියෙද්දී කාර්යාල වේලාව ඉවර වුණොත් ඉල්ලීම නොයවයි
+    if (showLiveChatClosedNotice()) return;
     setBusy(true);
     const ref = `LC-${Date.now().toString(36).toUpperCase().slice(-6)}`;
     push({ from: "me", text: `${name} · ${nic} · ${phone}` });
@@ -1250,8 +1265,33 @@ export function LiveChat() {
     setLiveBusy(false);
   }
 
+  /**
+   * 🕘 කාර්යාල වේලාවෙන් පිටත Live Chat නිලධාරියෙක් ඉල්ලුවොත් — ඉල්ලීම
+   * නොයවා, ඊළඟට විවෘත වන වේලාව කියා දෙනවා. දැනටමත් join වී ඇති
+   * සංවාදයකට මෙයින් බාධාවක් නෑ. @returns වසා ඇති බව දැනුම් දුන්නා නම් true
+   */
+  function showLiveChatClosedNotice(): boolean {
+    const status = getLiveChatHoursStatus();
+    setLiveHours(status);
+    if (status.open || canUseLiveChat(liveStatus)) return false;
+    setTab("chat");
+    setPanel(null);
+    setCSent(false);
+    push({
+      from: "bot",
+      bold: si ? "🕘 Live Chat දැන් වසා ඇත" : "🕘 Live Chat is closed right now",
+      text: si
+        ? `මේ වෙලාවේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම අපහසුයි.\nකරුණාකර ${nextLiveChatOpenPhrase(true)} නැවත සම්බන්ධ වෙන්න.\n\nLive Chat වේලාවන්:\nසඳුදා – සිකුරාදා : පෙ.ව. 8.30 – ප.ව. 5.30\nසෙනසුරාදා : පෙ.ව. 8.30 – ප.ව. 1.30\nඉරිදා : වසා ඇත\n\nඊට අතරතුරු මට (Baymax) ඕනෑම දෙයක් අහන්න පුළුවන්. පණිවිඩයක් තියන්න ඕන නම් උඩ තියෙන “පණිවිඩය” tab එක පාවිච්චි කරන්න — නිලධාරීන් ඊළඟ කාර්යාල වේලාවේදී එය බලනවා.`
+        : `It's difficult to connect you with a live officer at this time.\nPlease reconnect ${nextLiveChatOpenPhrase(false)}.\n\nLive Chat hours:\nMonday – Friday : 8:30 AM – 5:30 PM\nSaturday : 8:30 AM – 1:30 PM\nSunday : Closed\n\nIn the meantime, you can ask me (Baymax) anything. If you'd like to leave a message, use the “Message” tab above — our officers will see it during the next office hours.`,
+      chips: si ? MENU_CHIPS_SI : MENU_CHIPS_EN,
+    });
+    void logEvent("live_outside_hours", "", 0, sessionRef.current);
+    return true;
+  }
+
   // ── "Do you want to contact an officer?" — Yes / No ──
   function askOfficer() {
+    if (showLiveChatClosedNotice()) return;
     setTab("chat");
     setPanel(null);
     setCSent(false);
@@ -1924,6 +1964,8 @@ export function LiveChat() {
   const clearable = hasClearableHistory(liveMsgs);
   const showTypingNow = shouldShowTyping(liveStatus, agentTyping);
   const canChat = canUseLiveChat(liveStatus);   // 🔒 joined විට විතරක් composer unlock
+  const liveOfficeClosed = !liveHours.open && !canChat; // 🕘 joined සංවාදයකට බාධා නෑ
+  const nextLiveOpenPhrase = nextLiveChatOpenPhrase(si);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -2043,7 +2085,7 @@ export function LiveChat() {
               </button>
               <button onClick={() => setTab("live")} className={`relative rounded-lg py-1.5 text-[10.5px] font-bold transition ${tab === "live" ? "bg-white text-indigo-700 shadow" : "text-white/90 hover:bg-white/10"}`}>
                 <span className="inline-flex items-center gap-0.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${liveStatus === "joined" ? "bg-emerald-400" : "bg-amber-300"}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${liveStatus === "joined" ? "bg-emerald-400" : liveOfficeClosed ? "bg-rose-300" : "bg-amber-300"}`} />
                   {si ? "සජීවී චැට්" : "Live Chat"}
                 </span>
               </button>
@@ -2501,6 +2543,10 @@ export function LiveChat() {
                       ? si
                         ? "මේ chat එක අවසන් වී ඇත"
                         : "This chat has ended"
+                      : liveOfficeClosed
+                        ? si
+                          ? `🕘 Live Chat වසා ඇත — ${nextLiveOpenPhrase}`
+                          : `🕘 Live Chat closed — ${nextLiveOpenPhrase}`
                       : sessionActive
                         ? si
                           ? "⏳ නිලධාරියෙක් සම්බන්ධ වෙනතුරු රැඳී සිටින්න"
@@ -2533,6 +2579,10 @@ export function LiveChat() {
                       ? si
                         ? "ආයුබෝවන් 👋 නිලධාරියෙක් සම්බන්ධ වී ඇත — ඔබේ ප්‍රශ්නය පහත ලියන්න, මෙතැනම පිළිතුරු ලැබෙනවා."
                         : "Hello 👋 An officer is connected — type your question below and they'll reply right here."
+                      : liveOfficeClosed
+                        ? si
+                          ? `🕘 මේ වෙලාවේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම අපහසුයි. කරුණාකර ${nextLiveOpenPhrase} නැවත සම්බන්ධ වෙන්න. එතෙක් “පණිවිඩය” tab එකෙන් පණිවිඩයක් තියන්න පුළුවන්.`
+                          : `🕘 It's difficult to connect you with a live officer at this time. Please reconnect ${nextLiveOpenPhrase}. Until then, you can leave a note via the “Message” tab.`
                       : sessionActive
                         ? si
                           ? "ඔබේ ඉල්ලීම අපේ කාර්යාලයට ලැබී ඇත ✅ නිලධාරියෙක් සම්බන්ධ වුණු ගමන් මෙම chat එක unlock වෙනවා — ඒ මොහොතේ ඔබට දැනුම් දෙනවා."
@@ -2650,11 +2700,15 @@ export function LiveChat() {
                 ) : (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-center">
                     <div className="flex items-center justify-center gap-1.5 text-[11.5px] font-extrabold text-amber-800">
-                      {sessionActive && liveStatus !== "closed" ? <Clock size={13} /> : <Lock size={13} />}
-                      {liveStatus === "closed"
+                      {liveOfficeClosed || (sessionActive && liveStatus !== "closed") ? <Clock size={13} /> : <Lock size={13} />}
+                      {liveStatus === "closed" && !liveOfficeClosed
                         ? si
                           ? "මේ chat එක අවසන් වී ඇත"
                           : "This chat has ended"
+                        : liveOfficeClosed
+                          ? si
+                            ? "Live Chat දැන් වසා ඇත"
+                            : "Live Chat is closed now"
                         : sessionActive
                           ? si
                             ? "නිලධාරියෙක් join වෙන තුරු රැඳී සිටින්න"
@@ -2664,7 +2718,11 @@ export function LiveChat() {
                             : "Live chat hasn't started yet"}
                     </div>
                     <p className="mt-1 text-[10.5px] leading-relaxed text-amber-700">
-                      {sessionActive && liveStatus !== "closed"
+                      {liveOfficeClosed
+                        ? si
+                          ? `මේ වෙලාවේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම අපහසුයි. කරුණාකර ${nextLiveOpenPhrase} නැවත සම්බන්ධ වෙන්න. එතෙක් පහතින් පණිවිඩයක් තියන්න පුළුවන්.`
+                          : `It's difficult to connect you with a live officer at this time. Please reconnect ${nextLiveOpenPhrase}. Until then, you can leave a message below.`
+                        : sessionActive && liveStatus !== "closed"
                         ? si
                           ? "ඔබේ ඉල්ලීම කාර්යාලයට ලැබී ඇත. නිලධාරියෙක් join වුණු ගමන් මෙතැනින් කෙලින්ම කතා කරන්න පුළුවන් — ඔබට ශබ්ද දැනුම්දීමකුත් එනවා."
                           : "Your request is with our office. The moment an officer joins, you can chat right here — you'll get a sound notification too."
@@ -2672,12 +2730,20 @@ export function LiveChat() {
                           ? "මෙතැනින් කෙලින්ම පණිවිඩ යැවිය නොහැකියි. නිලධාරියෙක් සම්බන්ධ කරගන්න Baymax හරහා ඇමතුමක් ඉල්ලන්න."
                           : "You can't send messages from here directly. Request a call via Baymax to reach an officer."}
                     </p>
-                    {!(sessionActive && liveStatus !== "closed") && (
+                    {!(sessionActive && liveStatus !== "closed") && !liveOfficeClosed && (
                       <button
                         onClick={() => void runAction("contact")}
                         className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 py-2 text-[11.5px] font-extrabold text-white transition hover:opacity-95"
                       >
                         <PhoneCall size={13} /> {si ? "Baymax හරහා ඇමතුමක් ඉල්ලන්න" : "Request a call via Baymax"}
+                      </button>
+                    )}
+                    {liveOfficeClosed && (
+                      <button
+                        onClick={() => setTab("form")}
+                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 py-2 text-[11.5px] font-extrabold text-white transition hover:opacity-95"
+                      >
+                        <Send size={13} /> {si ? "පණිවිඩයක් තියන්න" : "Leave a message"}
                       </button>
                     )}
                   </div>

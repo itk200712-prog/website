@@ -249,6 +249,67 @@ export function canUseLiveChat(status: string): boolean {
   return status === "joined";
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Live Chat කාර්යාල වේලාවන් (Asia/Colombo)
+//  සඳුදා–සිකුරාදා 08:30–17:30 · සෙනසුරාදා 08:30–13:30 · ඉරිදා වසා ඇත
+//  මේ සීමාව අදාළ වන්නේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීමට විතරයි —
+//  Baymax සහ Message පෙට්ටිය 24/7 වැඩ කරයි. දැනටමත් join වී ඇති
+//  සංවාදයක් වේලාව ඉක්මවා ගියාට මැදින් නවත්වන්නේ නැත.
+// ─────────────────────────────────────────────────────────────────────────────
+export type LiveChatHoursStatus = {
+  open: boolean;
+  /** Sri Lanka වේලාවෙන් දවස — 0=ඉරිදා … 6=සෙනසුරාදා */
+  weekday: number;
+  /** Sri Lanka වේලාවෙන් මධ්‍යම රාත්‍රියේ සිට විනාඩි */
+  minutes: number;
+  /** ඊළඟට විවෘත වන දිනයට තව දින කීයක්ද (0=අද, 1=හෙට) */
+  nextOpenInDays: number;
+  nextOpenWeekday: number;
+};
+
+const LC_OPEN_MIN = 8 * 60 + 30; // 08:30
+const LC_CLOSE_WEEKDAY = 17 * 60 + 30; // 17:30
+const LC_CLOSE_SATURDAY = 13 * 60 + 30; // 13:30
+const WEEKDAY_SI = ["ඉරිදා", "සඳුදා", "අඟහරුවාදා", "බදාදා", "බ්‍රහස්පතින්දා", "සිකුරාදා", "සෙනසුරාදා"];
+const WEEKDAY_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** visitor ලෝකේ කොහේ හිටියත් ගණනය වන්නේ ශ්‍රී ලංකා වේලාවෙන් (UTC+5:30) */
+export function getLiveChatHoursStatus(now: Date = new Date()): LiveChatHoursStatus {
+  const lk = new Date(now.getTime() + 330 * 60_000);
+  const weekday = lk.getUTCDay();
+  const minutes = lk.getUTCHours() * 60 + lk.getUTCMinutes();
+
+  let open = false;
+  if (weekday >= 1 && weekday <= 5) open = minutes >= LC_OPEN_MIN && minutes < LC_CLOSE_WEEKDAY;
+  else if (weekday === 6) open = minutes >= LC_OPEN_MIN && minutes < LC_CLOSE_SATURDAY;
+
+  let nextOpenInDays = 0;
+  if (!open) {
+    if (weekday === 0) nextOpenInDays = 1; // ඉරිදා → සඳුදා
+    else if (weekday === 6) nextOpenInDays = minutes < LC_OPEN_MIN ? 0 : 2; // සෙනසුරාදා හවස → සඳුදා
+    else nextOpenInDays = minutes < LC_OPEN_MIN ? 0 : 1; // සතියේ දින: උදේ නම් අද, හවස නම් හෙට
+  }
+
+  return { open, weekday, minutes, nextOpenInDays, nextOpenWeekday: (weekday + nextOpenInDays) % 7 };
+}
+
+export function isLiveChatOpen(now: Date = new Date()): boolean {
+  return getLiveChatHoursStatus(now).open;
+}
+
+/** "අද පෙ.ව. 8.30න් පසුව" / "after 8:30 AM on Monday" වැනි ඊළඟ විවෘත වන වේලාව */
+export function nextLiveChatOpenPhrase(si: boolean, now: Date = new Date()): string {
+  const s = getLiveChatHoursStatus(now);
+  if (si) {
+    if (s.nextOpenInDays === 0) return "අද පෙ.ව. 8.30න් පසුව";
+    if (s.nextOpenInDays === 1) return `හෙට (${WEEKDAY_SI[s.nextOpenWeekday]}) පෙ.ව. 8.30න් පසුව`;
+    return `${WEEKDAY_SI[s.nextOpenWeekday]} පෙ.ව. 8.30න් පසුව`;
+  }
+  if (s.nextOpenInDays === 0) return "after 8:30 AM today";
+  if (s.nextOpenInDays === 1) return `after 8:30 AM tomorrow (${WEEKDAY_EN[s.nextOpenWeekday]})`;
+  return `after 8:30 AM on ${WEEKDAY_EN[s.nextOpenWeekday]}`;
+}
+
 /** Baymax කතාබහ අතරේ තබා ගන්නා කෙටි කාලීන මතකය */
 export interface BaymaxMemory {
   lastIntent?: string;

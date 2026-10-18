@@ -160,6 +160,18 @@ ok("chat: typing hidden when not typing", bot.shouldShowTyping("joined", false) 
 ok("chat: live composer locked until officer joins (open)", bot.canUseLiveChat("open") === false);
 ok("chat: live composer locked when closed", bot.canUseLiveChat("closed") === false);
 ok("chat: live composer unlocks when joined", bot.canUseLiveChat("joined") === true);
+
+// Live Chat office hours (Asia/Colombo). Oct 2026: 18=Sun, 19=Mon, 23=Fri, 24=Sat.
+const lkTime = (day: number, h: number, m: number) => new Date(Date.UTC(2026, 9, day, h, m) - 330 * 60_000);
+ok("hours: Mon 07:30 closed → opens today", bot.getLiveChatHoursStatus(lkTime(19, 7, 30)).open === false && bot.getLiveChatHoursStatus(lkTime(19, 7, 30)).nextOpenInDays === 0);
+ok("hours: Mon 08:30 open", bot.isLiveChatOpen(lkTime(19, 8, 30)) === true);
+ok("hours: Mon 17:29 still open", bot.isLiveChatOpen(lkTime(19, 17, 29)) === true);
+ok("hours: Mon 17:30 closed → tomorrow (Tue)", bot.getLiveChatHoursStatus(lkTime(19, 17, 30)).nextOpenWeekday === 2 && bot.nextLiveChatOpenPhrase(false, lkTime(19, 17, 30)).includes("Tuesday"));
+ok("hours: Fri evening → Saturday", bot.nextLiveChatOpenPhrase(false, lkTime(23, 17, 45)).includes("Saturday"));
+ok("hours: Sat 08:29 closed → today", bot.getLiveChatHoursStatus(lkTime(24, 8, 29)).nextOpenInDays === 0);
+ok("hours: Sat 13:29 open", bot.isLiveChatOpen(lkTime(24, 13, 29)) === true);
+ok("hours: Sat 13:30 closed → Monday (si)", bot.nextLiveChatOpenPhrase(true, lkTime(24, 13, 30)).includes("සඳුදා"));
+ok("hours: Sunday → Monday (si)", bot.nextLiveChatOpenPhrase(true, lkTime(18, 10, 0)).includes("සඳුදා") && bot.isLiveChatOpen(lkTime(18, 10, 0)) === false);
 ok(
   "chat: close/clear resets Baymax context",
   JSON.stringify(bot.resetBaymaxMemory({ lastIntent: "knowledge", lastTopic: "biz:rural-bank", name: "Nimal" })) === JSON.stringify({ name: "Nimal" }),
