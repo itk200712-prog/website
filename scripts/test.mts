@@ -143,6 +143,14 @@ ok("bot: si reply for Singlish", bot.replyIsSi("kohomada", false) === true);
 ok("bot: en reply stays en", bot.replyIsSi("hello there friend", false) === false);
 ok("bot: complaint → officer", bot.detectComplaint("මට පැමිණිල්ලක් තියෙනවා") === true);
 ok("bot: loan → banking", bot.detectBanking("loan ekak ganna oni") === true);
+ok("chat: empty history → no Clear chat", bot.hasClearableHistory([]) === false);
+ok("chat: system note only → no Clear chat", bot.hasClearableHistory([{ sender: "system" }]) === false);
+ok("chat: visitor msg → Clear chat shows", bot.hasClearableHistory([{ sender: "system" }, { sender: "visitor" }]) === true);
+ok("chat: officer msg → Clear chat shows", bot.hasClearableHistory([{ sender: "agent" }]) === true);
+ok("chat: typing shows only when joined", bot.shouldShowTyping("joined", true) === true);
+ok("chat: typing hidden when closed", bot.shouldShowTyping("closed", true) === false);
+ok("chat: typing hidden when open/waiting", bot.shouldShowTyping("open", true) === false);
+ok("chat: typing hidden when not typing", bot.shouldShowTyping("joined", false) === false);
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

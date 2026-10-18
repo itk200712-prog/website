@@ -30,7 +30,9 @@ import {
   detectNameIntro,
   detectNews,
   detectSmalltalk,
+  hasClearableHistory,
   replyIsSi,
+  shouldShowTyping,
 } from "@/lib/chatbot";
 import type { FuelPrice, GalleryItem, NewsItem } from "@/lib/types";
 
@@ -954,7 +956,8 @@ export function LiveChat() {
         if (tab !== "live" || !open) setUnread((u) => u + 1);
       }
       if (nextStatus === "closed") setOfficerJoined(false);
-      setAgentTyping(Boolean(d.typing));
+      // ✅ chat එක close නම් "Officer is typing" කවදාවත් පෙන්වන්නේ නෑ (stale typing flag එකත් අයින් වෙනවා)
+      setAgentTyping(shouldShowTyping(nextStatus, Boolean(d.typing)));
       const list = d.messages ?? [];
       if (reset) {
         setLiveMsgs(list);
@@ -1053,6 +1056,8 @@ export function LiveChat() {
     setOpen(false);
     setMinimized(false);
     setLiveUsed(false);
+    setSessionActive(false);   // ✅ clear කළාට පස්සේ officer-join poll එකත් නවතිනවා
+    setOfficerJoined(false);
     void logEvent("chat_closed", "", 0, sessionRef.current);
 
     // DB එකට දැනුම් දීම පස්සේ (admin history එකේ "chat ended" note එක එකතු වේ)
@@ -1064,6 +1069,19 @@ export function LiveChat() {
     } catch {
       /* RPC not created yet — ප්‍රශ්නයක් නෑ */
     }
+
+    // ✅ clear කළාට පස්සේ නැවත ඇරියත් "Chat ended" note එකවත් පරණ typing එකවත්
+    //    ආයේ නොපෙනෙන්න — note එක DB එකට ගිය පසු marker එක අලුතින් stamp කරයි
+    //    (admin history එක server එකේ නොවෙනස්ව ඉතුරු වේ · අලුත් msg ආවොත් පේනවා)
+    clearedAtRef.current = new Date().toISOString();
+    try {
+      localStorage.setItem("mpcs_chat_cleared_at", clearedAtRef.current);
+    } catch {
+      /* ignore */
+    }
+    setLiveMsgs([]);
+    lastTs.current = clearedAtRef.current;
+    setAgentTyping(false);
   }
 
   async function sendLive() {
@@ -1491,6 +1509,12 @@ export function LiveChat() {
     setTimeout(() => setSentOk(false), 5000);
   }
 
+  // ✅ Clear chat පෙන්වන්නේ clear කරන්න ඇත්ත පණිවිඩ (visitor/agent) තිබුණොත් විතරයි —
+  //    හිස් chat එකේවත්, දැනටමත් clear කරපු (system note විතරක් ඇති) chat එකේවත් නෑ.
+  //    එකවර පෙන්වන්නේ එක button එකයි: closed banner එක තියෙද්දී පොඩි රතු එක හැංගෙනවා.
+  const clearable = hasClearableHistory(liveMsgs);
+  const showTypingNow = shouldShowTyping(liveStatus, agentTyping);
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
@@ -1538,7 +1562,7 @@ export function LiveChat() {
           <span className="text-left max-w-[160px]">
             <span className="block text-[11.5px] font-extrabold text-slate-800 leading-tight">{si ? "සජීවී චැට්" : "Live Chat"}</span>
             <span className="block text-[9.5px] text-slate-500 truncate">
-              {agentTyping
+              {showTypingNow
                 ? si ? "නිලධාරියා ලියනවා…" : "Officer is typing…"
                 : liveMsgs.length
                   ? liveMsgs[liveMsgs.length - 1].body
@@ -2105,7 +2129,7 @@ export function LiveChat() {
                       : "Hello 👋 Type your question below — an officer will reply here shortly. If no one joins within a few minutes, use “Request a Call” to leave your number."}
                   </div>
                 )}
-                {agentTyping && (
+                {showTypingNow && (
                   <div className="flex items-center gap-1.5">
                     <div className="flex gap-1 rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-2">
                       {[0, 150, 300].map((d) => (
@@ -2141,8 +2165,8 @@ export function LiveChat() {
                 )}
               </div>
 
-              {/* ✅ චැට් එක close වුණාම — යූසර්ට chat clear option එක */}
-              {liveStatus === "closed" && (
+              {/* ✅ චැට් එක close වුණාම — clear කරන්න ඇත්ත history එකක් තිබුණොත් විතරක් chat clear option එක */}
+              {liveStatus === "closed" && clearable && (
                 <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2.5 text-center">
                   <div className="text-[10.5px] font-semibold text-slate-500">
                     {si ? "මේ චැට් එක අවසන් කර ඇත. ඔබේ chat history ඉවත් කරගන්න පුළුවන්." : "This chat has ended. You can clear your chat history."}
@@ -2163,6 +2187,7 @@ export function LiveChat() {
               <div className="shrink-0 border-t border-slate-200 bg-white p-2.5">
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="text-[9px] text-slate-400">{si ? "ඔබේ chat history ඔබේ උපාංගයේ පමණයි" : "Your chat history stays on your device"}</span>
+                  {clearable && liveStatus !== "closed" && (
                   <button
                     onClick={() => {
                       if (confirm(si ? "chat එක සම්පූර්ණයෙන්ම අවසන් කරන්නද? ඔබේ history ඉවත් වේ." : "End this chat completely? Your history will be cleared.")) void endChat();
@@ -2172,6 +2197,7 @@ export function LiveChat() {
                   >
                     <X size={10} /> {si ? "Chat clear" : "Clear chat"}
                   </button>
+                  )}
                 </div>
                 {!visitorName.trim() && (
                   <input

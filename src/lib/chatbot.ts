@@ -212,3 +212,21 @@ export function detectBanking(raw: string): boolean {
   const c = cleanText(raw);
   return /(loan|loans|ණය|savings?|ඉතුරුම්|ඉතිරි කිරීම|pawning|pawn|උකස්|රන් උකස්|gold loan|rural bank|ග්‍රාමීය බැංකු)/.test(c);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Live Chat (officer) UI නීති
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * "Clear chat" option එක පෙන්විය යුතුද?
+ * නීතිය: clear කරන්න ඇත්තටම පණිවිඩ තිබුණොත් විතරයි — visitor හෝ officer
+ * කෙනෙකුගේ ඇත්ත පණිවිඩයක්. හිස් chat එකකවත්, system note ("Chat ended…")
+ * විතරක් තියෙන (දැනටමත් clear කරපු) chat එකකවත් clear option එන්නේ නෑ.
+ */
+export function hasClearableHistory(messages: { sender: string }[]): boolean {
+  return messages.some((m) => m.sender === "visitor" || m.sender === "agent");
+}
+
+/** "Officer/Visitor is typing…" පෙන්විය යුතුද? — chat එක live (joined) විට විතරයි, close කළාම කවදාවත් නෑ */
+export function shouldShowTyping(status: string, typing: boolean): boolean {
+  return status === "joined" && typing;
+}

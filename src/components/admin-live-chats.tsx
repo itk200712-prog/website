@@ -63,8 +63,11 @@ export function AdminLiveChats() {
   const activeKey = active?.session_key ?? "";
   // sessions list එකෙන් live status ගන්නවා (join වුණාම header එක update වේ)
   const current = sessions.find((x) => x.session_key === activeKey) ?? active;
+  // ✅ closed chat එකේ typing indicator එක පෙන්වන්නේ නෑ (visitor පැත්තේ වගේමයි)
   const visitorTyping = Boolean(
-    current?.visitor_typing_at && Date.now() - new Date(current.visitor_typing_at).getTime() < 5000
+    current?.status !== "closed" &&
+      current?.visitor_typing_at &&
+      Date.now() - new Date(current.visitor_typing_at).getTime() < 5000
   );
 
   // admin ගේ නම
