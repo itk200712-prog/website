@@ -2,7 +2,8 @@
 
 // ============================================================================
 // Backup & Restore — SUPERADMIN ONLY
-// Download = full-site .sql (password gated) · Import = full restore (password gated)
+// Download = full-site ZIP (database.sql + schema.sql + registers) — password gated
+// Import = full restore from ZIP/.sql (password gated)
 // Two separate passwords, visible + changeable by superadmin only
 // ============================================================================
 
@@ -58,7 +59,7 @@ export default function AdminBackupPage() {
       a.download = `mpcs-full-backup-${new Date().toISOString().slice(0, 10)}.zip`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      void logActivity("BACKUP_DOWNLOAD", `Full ZIP backup (SQL + registers XLSX/CSV + images) — ${a.download}`);
+      void logActivity("BACKUP_DOWNLOAD", `Full ZIP backup (schema.sql + database.sql + logins + images + registers XLSX/CSV) — ${a.download}`);
       setAnim({ pct: 100, msg: "Backup downloaded ✅", done: true });
       setTimeout(() => setAnim(null), 1800);
     } catch (e) {
@@ -118,7 +119,7 @@ export default function AdminBackupPage() {
 
   return (
     <div>
-      <AdminTopbar title="Backup & Restore" sub="Download the complete site as SQL (members, settings, images, passwords) or restore from a backup file" />
+      <AdminTopbar title="Backup & Restore" sub="මුලු site එකම එක් ZIP එකක් ලෙස (data + schema + images + login passwords) හෝ backup එකකින් restore කරන්න" />
       {node}
 
       {!secrets && role === "superadmin" && (
@@ -140,10 +141,10 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         {/* DOWNLOAD */}
         <div className="card p-6">
           <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2.5">
-            <Download size={19} className="text-indigo-700" /> Download Backup (.sql)
+            <Download size={19} className="text-indigo-700" /> Download Backup (.zip)
           </h3>
           <p className="text-slate-500 text-[12px] mt-1.5">
-            සියලුම සාමාජික දත්ත, settings, images/photos, passwords ඇතුළු සියල්ල එක් SQL ගොනුවක් ලෙස බාගන්න.
+            සාමාජික දත්ත, settings, emails, ව්‍යාපාර තොරතුරු, පුවත්, gallery, සියලු images/photos (bot photo ඇතුළුව), ඉන්ධන මිල, live chat දත්ත සහ login passwords ඇතුළු මුලු site එකම එක් ZIP ගොනුවක් ලෙස බාගන්න (database.sql + schema.sql + registers).
           </p>
           <label className="field-label mt-4">Download Password</label>
           <div className="flex gap-2">
@@ -154,7 +155,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             <DatabaseBackup size={16} className="hidden" /><Download size={16} /> Generate &amp; Download Backup
           </button>
           <div className="mt-3 text-[11px] text-slate-400">
-            Password එක හරි නම් පමණයි ගොනුව බාගැනේ. Server එක down වුණොත් මේ ගොනුව SQL Editor එකෙන් restore කර හෝ Import එකෙන් නැවත ලබාගත හැක.
+            Password එක හරි නම් පමණයි ගොනුව බාගැනේ. ZIP එකේ login passwords ඇති නිසා ගොනුව රහසිගතව තබා ගන්න. අලුත් Supabase එකකට යනවා නම් ZIP එකේ schema.sql → database.sql පිළිවෙළට run කරන්න (විස්තර README.txt එකේ).
           </div>
         </div>
 
@@ -164,13 +165,13 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             <UploadCloud size={19} className="text-emerald-700" /> Import Backup (Restore)
           </h3>
           <p className="text-slate-500 text-[12px] mt-1.5">
-            Backup .sql ගොනුව තෝරන්න — සියලු දත්ත, images සහ settings නැවත පූර්ණ ලෙස restore වේ (දැන් ඇති දත්ත replace වේ).
+            Download කළ ZIP එකම (හෝ database.sql එක) තෝරන්න — සියලු දත්ත, images සහ settings නැවත පූර්ණ ලෙස restore වේ (දැන් ඇති දත්ත replace වේ).
           </p>
           <label className="field-label mt-4">Import Password</label>
           <input type="password" className="field" value={imPw} onChange={(e) => setImPw(e.target.value)} placeholder="Import password එක ඇතුළත් කරන්න" />
           <label className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/60 p-5 cursor-pointer hover:border-emerald-400 mt-4">
             <input type="file" accept=".sql,.zip" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importBackup(f); }} />
-            <span className="btn btn-outline !py-2 !px-4 !text-[12px]">Choose .sql File</span>
+            <span className="btn btn-outline !py-2 !px-4 !text-[12px]">Choose Backup File (.zip / .sql)</span>
             <span className="text-slate-500 text-[12.5px]">backup file එක තෝරන්න…</span>
           </label>
           <div className="mt-3 text-[11px] text-slate-400">

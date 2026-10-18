@@ -119,7 +119,7 @@ Logic එක `src/lib/chatbot.ts` හි `getLiveChatHoursStatus()` එකේ �
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 187 tests — smalltalk + office hours + site brain/keywords + message box + backup
+npx -y tsx scripts/test.mts   # 193 tests — smalltalk + office hours + site brain/keywords + message box + backup
 npm run build                 # production build
 ```
 

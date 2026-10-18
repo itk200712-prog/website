@@ -1,6 +1,7 @@
 // ============================================================================
 // Backup & Restore engine — full-site SQL dump / restore (superadmin only UI)
-// Dump  = DDL + INSERTs (all tables, all rows) + site-images base64 (site_images_backup)
+// Dump  = DDL + LOGIN accounts (auth.users+passwords) + INSERTs (all tables, all rows)
+//         + site-images base64 (site_images_backup) · ZIP එකට schema.sql එකත් ඇතුළත්
 // Restore = wipe + re-insert + storage re-upload + URL rewrite (project මාරු වුණත්)
 // ============================================================================
 
@@ -156,29 +157,50 @@ function ddlFor(t: BackupTable, cols: ColType[]): string {
 /* --------------------------------------------------------- image scan ---- */
 const IMG_RE = /https?:\/\/[^"'\s)]+?\/storage\/v1\/object\/public\/site-images\/([^"'\s?)]+)/g;
 
-async function collectImagePaths(tables: { name: string; rows: Record<string, unknown>[] }[]): Promise<string[]> {
+/** rows ඇතුළේ තියෙන site-images URL සේරම — nested JSON ඇතුළේ තියෙන ඒවත් (bot avatar / hero වගේ) */
+export function scanImagePathsInRows(tables: { name: string; rows: Record<string, unknown>[] }[]): string[] {
   const paths = new Set<string>();
   for (const t of tables)
-    for (const r of t.rows)
-      for (const v of Object.values(r))
-        if (typeof v === "string") {
-          IMG_RE.lastIndex = 0;
-          let m: RegExpExecArray | null;
-          while ((m = IMG_RE.exec(v))) paths.add(decodeURIComponent(m[1]));
-        }
-  // bucket list (ට නැති අයින් වූ ගොනුත්)
-  try {
-    const sb = await authedClient();
-    const { data } = await sb.storage.from("site-images").list("", { limit: 1000 });
-    for (const f of data ?? []) if (f.name && !f.name.includes("/")) paths.add(f.name);
-    // folders
-    for (const f of data ?? []) {
-      if (f.id === null && f.name) {
-        const { data: sub } = await sb.storage.from("site-images").list(f.name, { limit: 1000 });
-        for (const g of sub ?? []) if (g.name) paths.add(`${f.name}/${g.name}`);
+    for (const r of t.rows) {
+      // මුළු row එකම string කරලා scan කළාම nested object/array ඇතුළේ URL එකක්වත් මගහැරෙන්නෑ
+      const s = JSON.stringify(r);
+      if (!s.includes("site-images/")) continue;
+      IMG_RE.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = IMG_RE.exec(s))) {
+        try { paths.add(decodeURIComponent(m[1])); } catch { paths.add(m[1]); }
       }
     }
+  return [...paths];
+}
+
+/** storage bucket එකේ සියලු ගොනු — folder කොච්චර ගැඹුරට තිබුණත්, pagination සහිතව */
+async function listAllStorageFiles(): Promise<string[]> {
+  const out: string[] = [];
+  try {
+    const sb = await authedClient();
+    async function walk(prefix: string, depth: number): Promise<void> {
+      if (depth > 6) return;
+      for (let offset = 0; offset < 10000; offset += 100) {
+        const { data, error } = await sb.storage.from("site-images").list(prefix, { limit: 100, offset });
+        if (error || !data?.length) break;
+        for (const f of data) {
+          const p = prefix ? `${prefix}/${f.name}` : f.name;
+          if (f.id === null) await walk(p, depth + 1); // folder එකක්
+          else out.push(p);
+        }
+        if (data.length < 100) break;
+      }
+    }
+    await walk("", 0);
   } catch { /* listing නැත්නම් scan එකෙන් ආපු ඒවා ඇති */ }
+  return out;
+}
+
+async function collectImagePaths(tables: { name: string; rows: Record<string, unknown>[] }[]): Promise<string[]> {
+  const paths = new Set<string>(scanImagePathsInRows(tables));
+  // bucket list එකත් (දත්ත වල reference නැති, අයින් වෙන්න තිබුණු ගොනුත් backup වේ)
+  for (const p of await listAllStorageFiles()) paths.add(p);
   return [...paths];
 }
 
@@ -197,6 +219,45 @@ async function fetchBase64(url: string): Promise<{ b64: string; type: string } |
   }
 }
 
+/* ------------------------------------------------------ LOGIN ACCOUNTS - */
+/**
+ * auth.users + auth.identities නැවත හදන SQL එක — profiles වල auth_email +
+ * password_display (base64) එකෙන් password එකත් එක්කම. fresh Supabase
+ * project එකකට database.sql run කළාම හැමෝටම පරණ password එකෙන්ම login වෙන්න පුළුවන්.
+ * ⚠ profiles.id → auth.users FK එක නිසා මේ block එක DATA inserts වලට කලින් යා යුතුමයි.
+ */
+export function buildLoginAccountsSql(profiles: Record<string, unknown>[]): string[] {
+  const lines: string[] = [];
+  lines.push(`-- -------------------------- LOGIN ACCOUNTS ----------------------------`);
+  lines.push(`-- fresh Supabase restore එකේ login වීමට — password එක්ක (pgcrypto)`);
+  lines.push(`-- ⚠ මේ file එකේ passwords අඩංගුයි — රහසිගතව තබා ගන්න!`);
+  lines.push(`set search_path = public, extensions;`);
+  for (const p of profiles) {
+    const id = String(p.id ?? "");
+    const email = String(p.auth_email ?? "").trim();
+    const plain = decodeDisplayPw(String(p.password_display ?? ""));
+    if (!id || !email || !plain) {
+      lines.push(`-- ⚠ login account skipped: ${email || id || "?"} (email/password නෑ — අවශ්‍ය නම් Admin එකෙන් reset කරන්න)`);
+      continue;
+    }
+    lines.push(`DO $$ BEGIN
+  INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  VALUES ('00000000-0000-0000-0000-000000000000', ${sqlVal(id)}, 'authenticated', 'authenticated', ${sqlVal(email)}, crypt(${sqlVal(plain)}, gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now())
+  ON CONFLICT (id) DO UPDATE SET encrypted_password = EXCLUDED.encrypted_password, email = EXCLUDED.email, email_confirmed_at = COALESCE(auth.users.email_confirmed_at, now());
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'login account skipped: %', SQLERRM;
+END $$;`);
+    lines.push(`DO $$ BEGIN
+  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+  VALUES (gen_random_uuid(), ${sqlVal(id)}, ${sqlVal(id)}, json_build_object('sub', ${sqlVal(id)}, 'email', ${sqlVal(email)}, 'email_verified', true)::jsonb, 'email', now(), now(), now())
+  ON CONFLICT DO NOTHING;
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'login identity skipped: %', SQLERRM;
+END $$;`);
+  }
+  lines.push(`reset search_path;`);
+  lines.push(``);
+  return lines;
+}
+
 /* ------------------------------------------------------------- GENERATE -- */
 export async function generateBackupSql(onProgress: (msg: string, pct: number) => void): Promise<string> {
   const sb = await authedClient();
@@ -205,9 +266,11 @@ export async function generateBackupSql(onProgress: (msg: string, pct: number) =
   lines.push(`-- ============================================================`);
   lines.push(`-- Panduwasnuwara New MPCS — FULL SITE BACKUP`);
   lines.push(`-- Generated: ${new Date().toISOString()}`);
-  lines.push(`-- Restore (fresh Supabase): run this file in SQL Editor,`);
-  lines.push(`--   then use Admin → Backup & Restore → Import with this file`);
-  lines.push(`--   to re-upload images to storage.`);
+  lines.push(`-- Same-site restore: Admin → Backup & Restore → Import (ZIP එකම තෝරන්න).`);
+  lines.push(`-- Fresh Supabase restore: 1) ZIP එකේ schema.sql run කරන්න`);
+  lines.push(`--   2) මේ file එක run කරන්න (logins password සහිතව හැදේ)`);
+  lines.push(`--   3) Admin → Import එකෙන් ZIP එක එක් වරක් තෝරන්න — images storage එකට යයි.`);
+  lines.push(`-- ⚠ මෙම file එකේ login passwords අඩංගුයි — රහසිගතව තබා ගන්න!`);
   lines.push(`-- ============================================================`);
   lines.push(``);
   lines.push(`create extension if not exists "pgcrypto";`);
@@ -266,6 +329,13 @@ export async function generateBackupSql(onProgress: (msg: string, pct: number) =
   }
   lines.push(``);
 
+  // ---- login accounts මුලින්ම (profiles FK → auth.users නිසා DATA වලට කලින්!) ----
+  const profilesRows = gathered.find((g) => g.name === "profiles")?.rows ?? [];
+  if (profilesRows.length) {
+    onProgress("Preparing login accounts…", 86);
+    lines.push(...buildLoginAccountsSql(profilesRows));
+  }
+
   // row INSERTs
   onProgress("Writing data rows…", 88);
   lines.push(`-- ------------------------------- DATA ---------------------------------`);
@@ -280,36 +350,6 @@ export async function generateBackupSql(onProgress: (msg: string, pct: number) =
         `INSERT INTO public.${t.name} (${cols.map(colName).join(", ")}) VALUES (${cols.map((c) => sqlVal(r[c])).join(", ")})` +
           (sets ? ` ON CONFLICT (${colName(pk)}) DO UPDATE SET ${sets};` : ` ON CONFLICT (${colName(pk)}) DO NOTHING;`)
       );
-    }
-    lines.push(``);
-  }
-
-  // ---- login accounts (auth.users + identities) — password එක්ක ----------
-  const profiles = gathered.find((g) => g.name === "profiles")?.rows ?? [];
-  if (profiles.length) {
-    onProgress("Preparing login accounts…", 96);
-    lines.push(`-- -------------------------- LOGIN ACCOUNTS ----------------------------`);
-    lines.push(`-- fresh Supabase restore එකේ login වීමට — password එක්ක (pgcrypto)`);
-    for (const p of profiles) {
-      const id = String(p.id ?? "");
-      const email = String(p.auth_email ?? "").trim();
-      const plain = decodeDisplayPw(String(p.password_display ?? ""));
-      if (!id || !email || !plain) {
-        lines.push(`-- ⚠ login account skipped: ${email || id || "?"} (email/password නෑ)`);
-        continue;
-      }
-      lines.push(`DO $$ BEGIN
-  INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-  VALUES ('00000000-0000-0000-0000-000000000000', ${sqlVal(id)}, 'authenticated', 'authenticated', ${sqlVal(email)}, crypt(${sqlVal(plain)}, gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{}', now(), now())
-  ON CONFLICT (id) DO UPDATE SET encrypted_password = EXCLUDED.encrypted_password, email = EXCLUDED.email, email_confirmed_at = COALESCE(auth.users.email_confirmed_at, now());
-EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'login account skipped: %', SQLERRM;
-END $$;`);
-      lines.push(`DO $$ BEGIN
-  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-  VALUES (gen_random_uuid(), ${sqlVal(id)}, ${sqlVal(id)}, json_build_object('sub', ${sqlVal(id)}, 'email', ${sqlVal(email)}, 'email_verified', true)::jsonb, 'email', now(), now(), now())
-  ON CONFLICT DO NOTHING;
-EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'login identity skipped: %', SQLERRM;
-END $$;`);
     }
     lines.push(``);
   }
@@ -431,29 +471,54 @@ export async function restoreBackup(
     }
   }
 
-  // old URL patterns -> path mapping (rows වල තියෙන https://xxx/site-images/<path>)
+  // old URL patterns -> path mapping (rows වල තියෙන https://xxx/site-images/<path>) — nested JSON ඇතුළුව
   const pathOldUrl = new Map<string, string>(); // path -> old url found in data
   for (const [, rows] of byTable)
-    for (const r of rows)
-      for (const v of Object.values(r))
-        if (typeof v === "string") {
-          IMG_RE.lastIndex = 0;
-          let m: RegExpExecArray | null;
-          while ((m = IMG_RE.exec(v))) pathOldUrl.set(decodeURIComponent(m[1]), v.slice(m.index, m.index + m[0].length));
-        }
+    for (const r of rows) {
+      const s = JSON.stringify(r);
+      if (!s.includes("site-images/")) continue;
+      IMG_RE.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = IMG_RE.exec(s))) {
+        try { pathOldUrl.set(decodeURIComponent(m[1]), m[0]); } catch { pathOldUrl.set(m[1], m[0]); }
+      }
+    }
 
-  function rewrite(val: unknown): unknown {
-    if (typeof val !== "string") return val;
-    let s = val;
+  function rewriteStr(s: string): string {
+    let out = s;
     for (const [path, newUrl] of urlMap) {
       const oldUrl = pathOldUrl.get(path);
-      if (oldUrl && oldUrl !== newUrl) s = s.split(oldUrl).join(newUrl);
+      if (oldUrl && oldUrl !== newUrl) out = out.split(oldUrl).join(newUrl);
     }
-    return s;
+    return out;
   }
 
-  // 2) wipe + insert each table (order: BACKUP_TABLES order — profiles first)
+  function rewrite(val: unknown): unknown {
+    if (typeof val === "string") return rewriteStr(val);
+    // nested JSON (object/array) ඇතුළේ URL තිබුණොත් string කරලා rewrite කර ආපසු parse කරයි
+    if (val && typeof val === "object") {
+      const s = JSON.stringify(val);
+      if (!s.includes("site-images/")) return val;
+      const out = rewriteStr(s);
+      if (out !== s) {
+        try { return JSON.parse(out); } catch { return val; }
+      }
+    }
+    return val;
+  }
+
+  // 2) wipe + insert — wipe එක reverse පිළිවෙළේ (children → parents), insert එක forward (parents → children)
   const ordered = BACKUP_TABLES.filter((t) => byTable.has(t.name));
+  // ⚠ profiles + backup_secrets සම්පූර්ණයෙන් wipe කරන්නේ නෑ: RLS policies profiles එකෙන්
+  //    බලන නිසා ඒක හිස් කළොත් admin තමන්වම lock out වෙනවා. එම tables upsert එකෙන් update වේ.
+  const NO_WIPE = new Set(["profiles", "backup_secrets"]);
+  for (const t of [...ordered].reverse()) {
+    if (NO_WIPE.has(t.name)) continue;
+    // not(pk, is, null) — uuid/text ඕන pk එකකට වැඩ කරයි (පරණ neq("__backup_wipe__") එක uuid වල fail වුණා)
+    const { error } = await sb.from(t.name).delete().not(t.pk, "is", null);
+    if (error) errors.push(`wipe ${t.name}: ${error.message}`);
+  }
+
   for (let i = 0; i < ordered.length; i++) {
     const t = ordered[i];
     const rows = byTable.get(t.name)!.map((r) => {
@@ -461,18 +526,41 @@ export async function restoreBackup(
       for (const [k, v] of Object.entries(r)) o[k] = rewrite(v);
       return o;
     });
-    onProgress(`Restoring ${t.name} (${rows.length} rows)…`, 30 + Math.round((i / ordered.length) * 65));
-    try {
-      await sb.from(t.name).delete().neq(t.pk, "__backup_wipe__");
-    } catch { /* empty */ }
+    onProgress(`Restoring ${t.name} (${rows.length} rows)…`, 35 + Math.round((i / ordered.length) * 58));
+    let failed = false;
     for (let j = 0; j < rows.length; j += 200) {
       const { error } = await sb.from(t.name).upsert(rows.slice(j, j + 200), { onConflict: t.pk });
       if (error) {
         errors.push(`${t.name}: ${error.message}`);
+        failed = true;
         break;
       }
     }
-    restored[t.name] = rows.length;
+    if (!failed) restored[t.name] = rows.length;
+  }
+
+  // 3) backup එකේ නැති පරණ profiles අයින් කරයි (දැන් login වී ඇති admin හැර) — stale ගිණුම් ඉතුරු නොවීමට
+  const backupProfileIds = new Set(
+    (byTable.get("profiles") ?? []).map((r) => String(r.id ?? "")).filter(Boolean)
+  );
+  if (backupProfileIds.size) {
+    try {
+      const { data: u } = await sb.auth.getUser();
+      if (u?.user?.id) backupProfileIds.add(u.user.id);
+      const stale: string[] = [];
+      for (let from = 0; from < 200000; from += 1000) {
+        const { data, error } = await sb.from("profiles").select("id").range(from, from + 999);
+        if (error || !data?.length) break;
+        for (const r of data as { id: string }[]) if (!backupProfileIds.has(String(r.id))) stale.push(String(r.id));
+        if (data.length < 1000) break;
+      }
+      for (let j = 0; j < stale.length; j += 100) {
+        const { error } = await sb.from("profiles").delete().in("id", stale.slice(j, j + 100));
+        if (error) errors.push(`stale profiles cleanup: ${error.message}`);
+      }
+    } catch (e) {
+      errors.push(`stale profiles cleanup: ${(e as Error).message}`);
+    }
   }
 
   onProgress("Restore complete ✅", 100);
@@ -499,10 +587,12 @@ export async function setBackupSecret(key: "backup_download_password" | "backup_
 
 
 /* ============================================================================
- * FULL BACKUP ZIP — database.sql + Member/Voter XLSX registers + README
- *   · සියලු tables (settings, profiles, passwords, images, live chat…)
- *   · Members Register (සියලු පේළි) + Voters Register — Excel (.xlsx)
- *   · Import කරද්දී SQL එකෙන් සියල්ල restore වේ (images ඇතුළුව)
+ * FULL BACKUP ZIP — මුලු site එකම, එකක් නෑර:
+ *   · schema.sql   (tables + RLS + functions + live chat DB logic)
+ *   · database.sql (tables 27ම data + images base64 + LOGIN accounts/passwords)
+ *   · Members Register + Voters Register — XLSX + CSV
+ *   · README.txt   (restore උපදෙස්)
+ * Import: ZIP එකම තේරුවම data + settings + images සියල්ල restore වේ.
  * ========================================================================== */
 export async function generateBackupZip(onProgress: (msg: string, pct: number) => void): Promise<Blob> {
   const zipMod = await import("jszip");
@@ -511,9 +601,17 @@ export async function generateBackupZip(onProgress: (msg: string, pct: number) =
   const XLSX = xlsxMod.default ?? xlsxMod;
   const zip = new JSZip();
 
-  // 1) database.sql (images base64 සමඟ)
+  // 1) database.sql (images base64 + login accounts සමඟ)
   const sql = await generateBackupSql((msg, pct) => onProgress(msg, Math.round(pct * 0.75)));
   zip.file("database.sql", sql);
+
+  // 1b) schema.sql — canonical schema (tables + RLS + functions + live chat RPC logic).
+  //     fresh Supabase project එකකට restore කරද්දී මුලින්ම run කළ යුත්තේ මෙයයි.
+  try {
+    const schemaMod = await import("../../supabase/schema.sql");
+    const schemaText = (schemaMod as { default?: unknown }).default;
+    if (typeof schemaText === "string" && schemaText.length > 1000) zip.file("schema.sql", schemaText);
+  } catch { /* schema embed බැරි වුණත් backup එක හැදේ */ }
 
   // 2) registers → XLSX
   const sb = await authedClient();
@@ -574,24 +672,29 @@ export async function generateBackupZip(onProgress: (msg: string, pct: number) =
       "Panduwasnuwara New MPCS — FULL SITE BACKUP",
       "Generated: " + new Date().toISOString(),
       "",
-      "මේ ZIP එකේ තියෙන්නේ:",
-      "  • database.sql        — සියලු tables (members, voters, profiles+passwords, chat,",
-      "                          system settings, board, news, gallery, messages(live chat),",
-      "                          applications, fuel, f28, activity logs, images(base64))",
+      "මේ ZIP එකේ තියෙන්නේ (මුලු site එකම — එකක් නෑර):",
+      "  • schema.sql            — database ව්‍යුහය: tables + RLS + functions (live chat logic ඇතුළුව)",
+      "  • database.sql          — සියලු data: tables 27ම (members, voters, settings, emails,",
+      "                          board, business, news, gallery, messages, live chat, applications,",
+      "                          fuel, f28, activity logs) + සියලු images/photos (base64)",
+      "                          + LOGIN accounts (auth.users) password සහිතව",
       "  • Members-Register.xlsx — සියලු සාමාජික විස්තර (" + members.length + " පේළි)",
       "  • Voters-Register.xlsx  — සියලු ඡන්ද හිමි විස්තර (" + voters.length + " පේළි)",
       "  • Members-Register.csv / Voters-Register.csv — UTF-8 CSV",
       "",
       "RESTORE කරන විදිහ:",
-      "  1) Admin → Backup & Restore → Import (import password එක දෙන්න)",
-      "  0) ⚠ FRESH project එකකට restore කරනවා නම්: මුලින්ම supabase/schema.sql",
-      "     run කරන්න (tables + RLS policies + live chat functions). ඊට පස්සේ:",
-      "  2) හෝ Supabase → SQL Editor → database.sql run කරන්න (data)",
-      "  3) ඉන්පසු admin එකේ Backup → Import එකෙන් images storage එකට re-upload වේ",
+      "  A) ඒම site එකේම restore කරනවා නම් (සාමාන්‍ය අවස්ථාව):",
+      "     Admin → Backup & Restore → Import → මේ ZIP file එකම තෝරන්න → import password එක දෙන්න.",
+      "     (දත්ත + settings + images සියල්ල replace වේ; දැනට තියන login accounts ට බලපෑමක් නෑ)",
+      "  B) අලුත්ම Supabase project එකකට restore කරනවා නම්:",
+      "     1) Supabase SQL Editor එකේ schema.sql එක මුලින්ම run කරන්න",
+      "     2) ඊට පස්සේ database.sql එක run කරන්න (login accounts password සහිතවම හැදෙනවා)",
+      "     3) Site එකේ env අලුත් project එකට මාරු කර පරණ superadmin password එකෙන්ම login වෙන්න",
+      "     4) Admin → Backup & Restore → Import එකෙන් මේ ZIP එක එක් වරක් තෝරන්න (images storage එකට යයි)",
       "",
-      "⚠ auth.users passwords Supabase එකෙන් පිටතට export කළ නොහැක (security).",
-      "   නමුත් සියලු profiles + password_display (base64) + role/status backup එකේ ඇත.",
-      "   Restore එකෙන් පසු අවශ්‍ය නම් password reset කරන්න.",
+      "⚠ ආරක්ෂාව: මේ ZIP එකේ user login passwords අඩංගුයි — ගොනුව රහසිගතව තබා ගන්න!",
+      "⚠ Website code එක (Baymax bot logic ඇතුළුව) ඇත්තේ GitHub repository එකේය; මේ ZIP එකට",
+      "   code එක ඇතුළත් වෙන්නේ නෑ. Database එකේ functions/logic සියල්ල schema.sql එකේ ඇත.",
     ].join("\n")
   );
 

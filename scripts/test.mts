@@ -291,6 +291,20 @@ ok("backup: covers EVERY table in schema.sql",
   `missing: ${schemaTables.filter((t) => !backupTables.includes(t)).join(", ") || "none"}`);
 ok("backup: includes settings + messages + notify emails (new mail features)",
   ["system_settings", "messages", "notify_emails", "chat_sessions", "chat_messages"].every((t) => backupTables.includes(t)));
+// මුලු site එකම: login passwords + schema + images + restore නිරවද්‍යතාව
+const genSqlFn = backupSrc.slice(backupSrc.indexOf("export async function generateBackupSql"), backupSrc.indexOf("/* --------------------------------------------------------------- PARSE --- */"));
+ok("backup: login accounts (auth.users+passwords) written BEFORE data rows (FK order)",
+  genSqlFn.includes("buildLoginAccountsSql(profilesRows)") && genSqlFn.indexOf("buildLoginAccountsSql(profilesRows)") < genSqlFn.indexOf("Writing data rows"));
+ok("backup: login SQL uses crypt(pgcrypto) and creates auth.identities",
+  backupSrc.includes("crypt(${sqlVal(plain)}, gen_salt('bf'))") && backupSrc.includes("INSERT INTO auth.identities") && backupSrc.includes("set search_path = public, extensions;"));
+ok("backup: ZIP embeds canonical schema.sql (live chat DB logic + RLS)",
+  backupSrc.includes('zip.file("schema.sql"') && backupSrc.includes("../../supabase/schema.sql"));
+ok("backup: image scan covers nested JSON (JSON.stringify) + recursive storage list",
+  backupSrc.includes("scanImagePathsInRows") && backupSrc.includes("JSON.stringify(r)") && backupSrc.includes("listAllStorageFiles"));
+ok("restore: wipe uses not(pk,is,null) in reverse order; profiles never fully wiped (no RLS lockout)",
+  backupSrc.includes('.not(t.pk, "is", null)') && backupSrc.includes("[...ordered].reverse()") && backupSrc.includes('new Set(["profiles", "backup_secrets"])'));
+ok("restore: URL rewrite handles nested JSON values",
+  backupSrc.includes("rewriteStr") && backupSrc.includes("JSON.parse(out)"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
