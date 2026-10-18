@@ -14,6 +14,7 @@ import {
   DEFAULT_GEMINI_MODEL,
   extractGeminiText,
   isAiEnabledValue,
+  modelFallbackChain,
   normalizeAiQuestion,
   normalizeGeminiModel,
   type BaymaxAiLanguage,
@@ -158,6 +159,41 @@ async function callGemini(
   }
 }
 
+type GeminiAnswer = { ok: true; answer: string; model: string } | { ok: false; status: number };
+
+/**
+ * තෝරපු model එක මුලින්ම (Google Search එක්ක). Search එකට 400/429 ආවොත්
+ * search නැතිවත් උත්සාහ කරනවා — search grounding quota එක වෙනම නිසා.
+ * Model එකක් නැත්නම් (404) හෝ එහි quota ඉවර නම් (429) ඊළඟ model එකට යනවා;
+ * quota එක model එක අනුව වෙනස් නිසා එකක් බ්ලොක් වුණත් අනිකෙන් උත්තරේ එන්න පුළුවන්.
+ */
+async function callGeminiWithFallbacks(
+  apiKey: string,
+  selectedModel: string,
+  question: string,
+  language: BaymaxAiLanguage
+): Promise<GeminiAnswer> {
+  const chain = modelFallbackChain(selectedModel);
+  let lastStatus = 0;
+
+  for (let i = 0; i < chain.length; i++) {
+    const model = chain[i];
+    // පළමු (තෝරපු) model එකට search එක්ක; fallback ඒවාට search නැතිව (ලාභදායකයි/ඉක්මන්)
+    const attempts = i === 0 ? [true, false] : [false];
+    for (const useSearch of attempts) {
+      const result = await callGemini(apiKey, model, question, language, useSearch);
+      if (result.ok) return { ok: true, answer: result.answer, model };
+      lastStatus = result.status;
+      // search එක්ක ගැටලුවක් නම් විතරක් search නැති උත්සාහයට යනවා
+      if (useSearch && result.status !== 400 && result.status !== 429) break;
+    }
+    // key එකම වැරදි නම් (401) හෝ ඉල්ලීමම වැරදි නම් (400) තව model try කරලා වැඩක් නෑ
+    if (lastStatus === 401 || lastStatus === 400) break;
+  }
+
+  return { ok: false, status: lastStatus };
+}
+
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return json({ ok: false, reason: "forbidden" }, 403);
   if (rateLimited(req)) return json({ ok: false, reason: "rate_limited" }, 429);
@@ -177,20 +213,18 @@ export async function POST(req: NextRequest) {
   if (!c.serverConfigured) return json({ ok: false, reason: "server_not_configured" });
   if (!c.apiKey) return json({ ok: false, reason: "not_configured" });
 
-  let result = await callGemini(c.apiKey, c.model, question, language, true);
-  // තෝරපු model එක search grounding support නොකළොත් search නැතිව ආයෙත් උත්සාහ කරයි
-  if (!result.ok && result.status === 400) {
-    result = await callGemini(c.apiKey, c.model, question, language, false);
-  }
-  if (result.ok) return json({ ok: true, answer: result.answer, model: c.model });
+  const result = await callGeminiWithFallbacks(c.apiKey, c.model, question, language);
+  if (result.ok) return json({ ok: true, answer: result.answer, model: result.model });
   return json({
     ok: false,
     reason:
-      result.status === 404
-        ? "invalid_model"
-        : result.status === 400 || result.status === 401 || result.status === 403
-          ? "invalid_key"
-          : "ai_error",
+      result.status === 429
+        ? "quota_exceeded"
+        : result.status === 404
+          ? "invalid_model"
+          : result.status === 400 || result.status === 401 || result.status === 403
+            ? "invalid_key"
+            : "ai_error",
     status: result.status || undefined,
   });
 }

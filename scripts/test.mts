@@ -376,6 +376,16 @@ console.log("\n── 16) Baymax Gemini AI fallback (server-side only key) ─�
 const baymaxAi = await import("../src/lib/baymax-ai.ts");
 ok("ai: model id normalizes models/ prefix + case", baymaxAi.normalizeGeminiModel("models/Gemini-3.8-Flash") === "gemini-3.8-flash");
 ok("ai: blank model falls back to default", baymaxAi.normalizeGeminiModel("  ") === baymaxAi.DEFAULT_GEMINI_MODEL);
+const fallbackChain = baymaxAi.modelFallbackChain("gemini-3.5-flash-lite");
+ok("ai: model fallback chain (selected first, unique, capped)", fallbackChain[0] === "gemini-3.5-flash-lite" && fallbackChain.includes("gemini-2.5-flash") && fallbackChain.length === 5 && new Set(fallbackChain).size === fallbackChain.length);
+ok("ai: general-knowledge detector (general → AI, society facts → site brain)",
+  baymaxAi.isGeneralKnowledgeQuestion("සමූපකාරයක් යනු කුමක්ද?") === true &&
+  baymaxAi.isGeneralKnowledgeQuestion("What is a cooperative?") === true &&
+  baymaxAi.isGeneralKnowledgeQuestion("ආලෝකයේ වේගය කීයද?") === true &&
+  baymaxAi.isGeneralKnowledgeQuestion("සමිතියේ නම මොකක්ද?") === false &&
+  baymaxAi.isGeneralKnowledgeQuestion("සභාපති කවුද?") === false &&
+  baymaxAi.isGeneralKnowledgeQuestion("What is F28?") === false &&
+  baymaxAi.isGeneralKnowledgeQuestion("How do I become a member?") === false);
 ok("ai: enabled only for explicit on values", baymaxAi.isAiEnabledValue("1") === true && baymaxAi.isAiEnabledValue("true") === true && baymaxAi.isAiEnabledValue("0") === false && baymaxAi.isAiEnabledValue("") === false);
 ok("ai: secret mask never reveals the full key", baymaxAi.maskSecret("prod-secret-123456abcd") === "prod…abcd" && baymaxAi.maskSecret("short") === "••••••••" && baymaxAi.maskSecret("") === "");
 ok("ai: question is trimmed/collapsed and capped", baymaxAi.normalizeAiQuestion("  hello\n\n world  ") === "hello world" && baymaxAi.normalizeAiQuestion("x".repeat(900)).length === 600);
@@ -406,10 +416,17 @@ ok("ai: server route reads secret with service role + sends x-goog-api-key",
   baymaxAiRouteSrc.includes("backup_secrets?select=value&key=eq.gemini_api_key") &&
   baymaxAiRouteSrc.includes('"x-goog-api-key"') &&
   baymaxAiRouteSrc.includes("sameOrigin") &&
-  baymaxAiRouteSrc.includes("server_not_configured"));
-ok("ai: widget tries AI only after site brain, before unmatched fallback",
-  liveChatSrc.indexOf("answerFromAI(q, rsi)") > liveChatSrc.indexOf("answerFromKnowledge(q, rsi)") &&
-  liveChatSrc.indexOf("answerFromAI(q, rsi)") < liveChatSrc.indexOf('logEvent("unmatched"'));
+  baymaxAiRouteSrc.includes("server_not_configured") &&
+  baymaxAiRouteSrc.includes("modelFallbackChain") &&
+  baymaxAiRouteSrc.includes("quota_exceeded") &&
+  baymaxAiRouteSrc.includes("result.status !== 400 && result.status !== 429"));
+ok("ai: widget sends clear general questions to AI first + keeps final AI fallback",
+  liveChatSrc.indexOf("isGeneralKnowledgeQuestion(q)") > -1 &&
+  liveChatSrc.indexOf("isGeneralKnowledgeQuestion(q)") < liveChatSrc.indexOf("answerFromKnowledge(q, rsi)") &&
+  liveChatSrc.lastIndexOf("answerFromAI(q, rsi)") > liveChatSrc.indexOf("answerFromKnowledge(q, rsi)") &&
+  liveChatSrc.lastIndexOf("answerFromAI(q, rsi)") < liveChatSrc.indexOf('logEvent("unmatched"') &&
+  liveChatSrc.includes('fetch("/api/baymax-ai", { cache: "no-store" })') &&
+  liveChatSrc.includes("ai_quota"));
 ok("ai: schema has private key slot + public defaults",
   schema.includes("('gemini_api_key','')") && schema.includes("('chat_ai_enabled', '0')") && schema.includes("('chat_ai_model', 'gemini-3.8-flash')"));
 

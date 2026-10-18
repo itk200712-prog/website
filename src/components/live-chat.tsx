@@ -46,6 +46,7 @@ import {
   type IndexedKnowledgeEntry,
   type KnowledgeSourceData,
 } from "@/lib/knowledge";
+import { isAiEnabledValue, isGeneralKnowledgeQuestion } from "@/lib/baymax-ai";
 import type {
   BoardMember,
   BusinessBranch,
@@ -252,7 +253,7 @@ export function LiveChat() {
         const n = (map.get("chat_bot_name") || "").trim();
         if (n) setBotName(n);
         setBotAvatar((map.get("chat_bot_avatar") || "").trim());
-        setAiEnabled(["1", "true", "yes", "on"].includes((map.get("chat_ai_enabled") || "").trim().toLowerCase()));
+        setAiEnabled(isAiEnabledValue(map.get("chat_ai_enabled")));
       } catch {
         /* default Baymax */
       }
@@ -1561,15 +1562,34 @@ export function LiveChat() {
   }
 
   /**
-   * ✨ Gemini AI fallback — site brain එකට උත්තරයක් නැති පොදු දැනුම් ප්‍රශ්නවලට.
+   * ✨ Gemini AI — පොදු දැනුම් ප්‍රශ්නවලට.
    * API key එක browser එකට එන්නේ නෑ: /api/baymax-ai server route එක හරහායි යන්නේ.
-   * AI off නම් / key එක නැත්නම් / error එකක් නම් false → පරණ fallback එකමයි.
+   * Admin එකෙන් AI on කළේ පිටුව load වුණාට පස්සේ නම්, මෙතැනින් status එක
+   * අලුතින්ම අරගන්න නිසා refresh නොකරම වැඩ කරනවා.
    */
   async function answerFromAI(q: string, rsi: boolean): Promise<boolean> {
-    if (!aiEnabled || detectOfficerRequest(q)) return false;
+    if (detectOfficerRequest(q)) return false;
     const myFlow = flowRef.current;
+
+    // පිටුව load වෙද්දී AI off වෙලා තිබුණත්, දැන් on කරලා ඇත්නම් ඒක දැනගන්නවා
+    let enabledNow = aiEnabled;
+    if (!enabledNow) {
+      try {
+        const statusRes = await fetch("/api/baymax-ai", { cache: "no-store" });
+        const status = (await statusRes.json().catch(() => null)) as {
+          ok?: boolean; enabled?: boolean; configured?: boolean; serverConfigured?: boolean;
+        } | null;
+        if (flowRef.current !== myFlow) return true; // reset වුණා — නිහඬව ඉන්නවා
+        enabledNow = Boolean(status?.ok && status.enabled && status.configured && status.serverConfigured);
+        if (status?.ok && typeof status.enabled === "boolean") setAiEnabled(status.enabled);
+      } catch {
+        /* status එක ගන්න බැරි නම් පරණ fallback එකමයි */
+      }
+    }
+    if (!enabledNow) return false;
+
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25_000);
+    const timer = setTimeout(() => controller.abort(), 40_000);
     setTyping(true);
     try {
       const res = await fetch("/api/baymax-ai", {
@@ -1578,9 +1598,27 @@ export function LiveChat() {
         body: JSON.stringify({ question: q, language: rsi ? "si" : "en" }),
         signal: controller.signal,
       });
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; answer?: string } | null;
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; answer?: string; reason?: string } | null;
       setTyping(false);
       if (flowRef.current !== myFlow) return true; // conversation reset වුණා — නිහඬව ඉන්නවා
+      if (data?.reason === "disabled") {
+        setAiEnabled(false);
+        return false;
+      }
+      // quota/සීමාව පැනලා නම් "තේරුණේ නෑ" වෙනුවට ඇත්ත හේතුව කියනවා
+      if (data?.reason === "quota_exceeded" || data?.reason === "rate_limited") {
+        push({
+          from: "bot",
+          bold: rsi ? "✨ Baymax AI" : "✨ Baymax AI",
+          text: rsi
+            ? "මේ වෙලාවේ AI සේවයේ සීමාව පැනලා තියෙනවා (quota). කරුණාකර ටික වෙලාවකින් ආයේ උත්සාහ කරන්න. 🙏\nසමිති කටයුත්තක් නම් පහත මෙනුවෙන් තෝරන්න, නැත්නම් නිලධාරියෙක්ට කතා කරන්නත් පුළුවන්."
+            : "The AI service has reached its limit for now (quota). Please try again in a little while. 🙏\nFor society matters, pick from the menu below — or request a call from an officer.",
+          chips: [...(rsi ? MENU_CHIPS_SI : MENU_CHIPS_EN), rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
+        });
+        convoRef.current.lastIntent = "ai_quota";
+        void logEvent("ai_quota", q, 0, sessionRef.current);
+        return true;
+      }
       const answer = typeof data?.answer === "string" ? data.answer.trim() : "";
       if (!res.ok || !data?.ok || !answer) return false;
       push({
@@ -1848,6 +1886,10 @@ export function LiveChat() {
       askOfficer(rsi);
       return;
     }
+
+    // ✨ පැහැදිලි පොදු දැනුම් ප්‍රශ්න ("සමූපකාරයක් යනු කුමක්ද?" වගේ) — site brain
+    // එක අනුමානයක් දෙන්න කලින් AI එකෙන් අහනවා. AI off/fail නම් site brain එකටම යනවා.
+    if (isGeneralKnowledgeQuestion(q) && (await answerFromAI(q, rsi))) return;
 
     // 🧠 Site brain — ඕනෑම නිදහස් ප්‍රශ්නයකට අඩවියේම තහවුරු කළ තොරතුරු වලින් පිළිතුරු දෙයි
     if (await answerFromKnowledge(q, rsi)) return;

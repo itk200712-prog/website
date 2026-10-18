@@ -125,6 +125,9 @@ AI එක හදලා කියන්නේ නෑ — ඒවා site brain/off
 - **එක වරක් setup:** Vercel → Settings → Environment Variables එකට
   `SUPABASE_SERVICE_ROLE_KEY` දාලා redeploy කරන්න ඕනේ (Admin card එකෙත්
   පියවර තියෙනවා). ඊට පස්සේ Gemini key එක save කරලා **Test** ඔබන්න.
+- **Quota/model වැටුණොත්:** තෝරපු model එකට 429 (quota) හෝ 404 ආවොත් server
+  එක search නැතිවත් සහ වෙනත් models කීපයක්ද auto try කරනවා. සේරම fail නම්
+  visitor ට “තේරුණේ නෑ” වෙනුවට AI සීමාව පැන ඇති බව කියනවා.
 
 ## 🕘 Live Chat කාර්යාල වේලාවන්
 
@@ -158,7 +161,7 @@ Logic එක `src/lib/chatbot.ts` හි `getLiveChatHoursStatus()` එකේ �
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 244 tests — smalltalk + Sinhala officer intent + Gemini AI fallback + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
+npx -y tsx scripts/test.mts   # 246 tests — smalltalk + Sinhala officer intent + Gemini AI fallback + office hours + site brain/keywords + message box + backup (manifest/encryption/restore)
 npm run build                 # production build
 ```
 

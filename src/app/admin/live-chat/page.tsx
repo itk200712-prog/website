@@ -34,6 +34,8 @@ function aiReasonText(reason?: string, status?: number): string {
       return "Gemini API key එක වැරදියි වගේ (Google එකෙන් reject වුණා) — key එක ආයේ check කරලා save කරන්න.";
     case "invalid_model":
       return "තෝරපු model එක හමු නොවීය — වෙනත් model එකක් තෝරලා Save කරන්න.";
+    case "quota_exceeded":
+      return "Gemini quota/rate limit එක ඉවරයි (429) — server එක වෙනත් models ද උත්සාහ කළා. ටික වෙලාවක් ඉඳලා ආයේ Test කරන්න; දිගටම එනවා නම් Google AI Studio එකේ quota/billing එක බලන්න, නැත්නම් අලුත් key එකක් දාන්න.";
     case "rate_limited":
       return "විනාඩියක් තුළ ප්‍රශ්න ගොඩක් ආවා — ටිකක් ඉඳලා ආයේ උත්සාහ කරන්න.";
     default:
@@ -61,6 +63,7 @@ const TYPE_META: Record<string, { label: string; tone: string; icon: typeof Acti
   ask_officer: { label: "Officer Yes/No prompt", tone: "bg-fuchsia-50 text-fuchsia-700", icon: MessageCircle },
   decline_officer: { label: "Officer — declined", tone: "bg-slate-100 text-slate-600", icon: XIcon },
   ai_answer: { label: "AI answer (Gemini)", tone: "bg-indigo-50 text-indigo-700", icon: Sparkles },
+  ai_quota: { label: "AI quota/limit", tone: "bg-rose-50 text-rose-700", icon: Sparkles },
 };
 
 export default function AdminLiveChatPage() {
@@ -282,9 +285,9 @@ export default function AdminLiveChatPage() {
           language: "si",
         }),
       });
-      const j = (await r.json()) as { ok?: boolean; answer?: string; reason?: string; status?: number };
+      const j = (await r.json()) as { ok?: boolean; answer?: string; reason?: string; status?: number; model?: string };
       if (j.ok && j.answer) {
-        setAiStatus(`✅ වැඩ කරනවා! උදාහරණ පිළිතුර:\n${String(j.answer).slice(0, 260)}`);
+        setAiStatus(`✅ වැඩ කරනවා!${j.model ? ` (model: ${j.model})` : ""} උදාහරණ පිළිතුර:\n${String(j.answer).slice(0, 260)}`);
       } else {
         setAiStatus(`⚠ ${aiReasonText(j.reason, j.status)}`);
       }
