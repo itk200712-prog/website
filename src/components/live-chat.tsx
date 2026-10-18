@@ -21,7 +21,7 @@ import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Fuel, I
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { tokens } from "@/lib/search";
-import { FUEL_PRICES, GALLERY, NEWS, SITE } from "@/lib/seed";
+import { BOARD, BUSINESSES, FUEL_PRICES, GALLERY, NEWS, RURAL_BANK_BRANCHES, SETTINGS, SITE } from "@/lib/seed";
 import {
   detectBanking,
   detectComplaint,
@@ -35,7 +35,22 @@ import {
   replyIsSi,
   shouldShowTyping,
 } from "@/lib/chatbot";
-import type { FuelPrice, GalleryItem, NewsItem } from "@/lib/types";
+import {
+  buildKnowledgeIndex,
+  searchKnowledge,
+  type IndexedKnowledgeEntry,
+  type KnowledgeSourceData,
+} from "@/lib/knowledge";
+import type {
+  BoardMember,
+  BusinessBranch,
+  BusinessContact,
+  BusinessService,
+  BusinessUnit,
+  FuelPrice,
+  GalleryItem,
+  NewsItem,
+} from "@/lib/types";
 
 type MemberRow = {
   member_no?: string;
@@ -160,7 +175,9 @@ export function LiveChat() {
   const idRef = useRef(1);
   const flowRef = useRef(0);          // flow එකක් අතරමැදි වීම වළක්වයි
   // ✅ bot "මතකය" — කතාව අතරේ දැනගන්නා දෑ (නම, අන්තිමට ඇසූ දේ) මතක තබා ගැනීම
-  const convoRef = useRef<{ lastIntent?: string; name?: string }>({});
+  const convoRef = useRef<{ lastIntent?: string; name?: string; lastTopic?: string }>({});
+  const knowledgeIndexRef = useRef<IndexedKnowledgeEntry[] | null>(null);
+  const knowledgeLoadRef = useRef<Promise<IndexedKnowledgeEntry[]> | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const started = useRef(false);
   const sessionRef = useRef("");
@@ -194,8 +211,8 @@ export function LiveChat() {
   // ── session + පළමු පණිවිඩය ──
   useEffect(() => {
     const welcome = si
-      ? `මම ${botName} — ${SITE.short_si} සජීවී සහායකයා.\nපහත බොත්තමක් තෝරන්න — මම වහාම උදව් කරන්නම්.`
-      : `I'm ${botName} — the ${SITE.short_en} live assistant.\nChoose an option below and I'll help you right away.`;
+      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය හෝ ව්‍යාපාර අංශ ගැන ඕනෑම දෙයක් සිංහල, English හෝ Singlish වලින් අහන්න — නැත්නම් පහත බොත්තමක් තෝරන්න.`
+      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me anything about the society, services, membership or business divisions in Sinhala, English or Singlish — or choose an option below.`;
     if (started.current) {
       // bot නම පසුව load වුණා නම් පළමු පණිවිඩයේ නම refresh කරයි
       setMsgs((xs) => xs.map((m) => (m.id === 0 ? { ...m, text: welcome } : m)));
@@ -264,6 +281,7 @@ export function LiveChat() {
       setUnread(0);
       if (!sessionRef.current) sessionRef.current = Math.random().toString(36).slice(2, 10);
       void logEvent("open", "", 0, sessionRef.current);
+      void loadKnowledge().catch(() => undefined);
     }
   }, [open]);
 
@@ -1207,6 +1225,228 @@ export function LiveChat() {
   // ─────────────────────────────────────────────────────────────────────────
   //  TEXT BOT (existing brains + shortcuts)
   // ─────────────────────────────────────────────────────────────────────────
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SITE BRAIN — live public website content + seed fallback
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function seedKnowledgeData(): KnowledgeSourceData {
+    return {
+      businesses: BUSINESSES,
+      board: BOARD,
+      ruralBranches: RURAL_BANK_BRANCHES,
+      news: NEWS,
+      gallery: GALLERY,
+      settings: SETTINGS,
+    };
+  }
+
+  /** Load public site content once, then answer from a cached search index. */
+  function loadKnowledge(): Promise<IndexedKnowledgeEntry[]> {
+    if (knowledgeIndexRef.current) return Promise.resolve(knowledgeIndexRef.current);
+    if (knowledgeLoadRef.current) return knowledgeLoadRef.current;
+
+    knowledgeLoadRef.current = (async () => {
+      let data = seedKnowledgeData();
+
+      try {
+        const sb = createAnonClient();
+        const [unitsRes, servicesRes, contactsRes, branchesRes, boardRes, newsRes, galleryRes, settingsRes] = await Promise.all([
+          sb.from("business_units").select("*").order("order").limit(100),
+          sb.from("business_services").select("*").order("order").limit(500),
+          sb.from("business_contacts").select("*").limit(500),
+          sb.from("business_branches").select("*").limit(500),
+          sb.from("board_members").select("*").order("order").limit(100),
+          sb.from("news").select("*").eq("published", true).order("date", { ascending: false }).limit(100),
+          sb.from("gallery_items").select("*").limit(100),
+          sb.from("system_settings").select("key,value").in("key", [
+            "members_total",
+            "voters_total",
+            "members_files_count",
+            "voters_files_count",
+            "years_of_service",
+          ]),
+        ]);
+
+        if (unitsRes.data?.length) {
+          type ServiceRow = BusinessService & { business_slug: string };
+          type ContactRow = BusinessContact & { business_slug: string };
+          type BranchRow = BusinessBranch & { business_slug: string };
+
+          const servicesBySlug = new Map<string, BusinessService[]>();
+          for (const row of (servicesRes.data ?? []) as unknown as ServiceRow[]) {
+            const list = servicesBySlug.get(row.business_slug) ?? [];
+            list.push({
+              order: Number(row.order ?? 0),
+              title_en: row.title_en ?? "",
+              title_si: row.title_si ?? "",
+              desc_en: row.desc_en ?? "",
+              desc_si: row.desc_si ?? "",
+              features_en: Array.isArray(row.features_en) ? row.features_en : [],
+              features_si: Array.isArray(row.features_si) ? row.features_si : [],
+              active: row.active !== false && String(row.active) !== "false",
+            });
+            servicesBySlug.set(row.business_slug, list);
+          }
+
+          const contactsBySlug = new Map<string, BusinessContact[]>();
+          for (const row of (contactsRes.data ?? []) as unknown as ContactRow[]) {
+            const list = contactsBySlug.get(row.business_slug) ?? [];
+            list.push({
+              role_en: row.role_en ?? "",
+              role_si: row.role_si ?? "",
+              name: row.name ?? "",
+              location: row.location ?? "",
+              phone: row.phone ?? "",
+              note_en: row.note_en,
+              note_si: row.note_si,
+            });
+            contactsBySlug.set(row.business_slug, list);
+          }
+
+          const branchesBySlug = new Map<string, BusinessBranch[]>();
+          for (const row of (branchesRes.data ?? []) as unknown as BranchRow[]) {
+            const list = branchesBySlug.get(row.business_slug) ?? [];
+            list.push({
+              name: row.name ?? "",
+              manager: row.manager ?? "",
+              location: row.location ?? "",
+              phone: row.phone ?? "",
+            });
+            branchesBySlug.set(row.business_slug, list);
+          }
+
+          const units = unitsRes.data as unknown as BusinessUnit[];
+          data = {
+            ...data,
+            businesses: units.map((unit) => ({
+              ...unit,
+              active: unit.active === true || String(unit.active) === "true",
+              is_new: unit.is_new === true || String(unit.is_new) === "true",
+              contacts: contactsBySlug.get(unit.slug) ?? [],
+              branches: branchesBySlug.get(unit.slug) ?? [],
+              services: servicesBySlug.get(unit.slug) ?? [],
+            })),
+          };
+        }
+
+        if (boardRes.data?.length) {
+          const seen = new Set<string>();
+          const board = (boardRes.data as unknown as BoardMember[]).filter((member) => {
+            const key = (member.email || member.name_en || member.name_si || "").trim().toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          if (board.length) data = { ...data, board };
+        }
+        if (newsRes.data?.length) data = { ...data, news: newsRes.data as unknown as NewsItem[] };
+        if (galleryRes.data?.length) data = { ...data, gallery: galleryRes.data as unknown as GalleryItem[] };
+
+        if (settingsRes.data?.length) {
+          const settingsMap = new Map(
+            (settingsRes.data as { key: string; value: string }[]).map((row) => [row.key, row.value]),
+          );
+          const settingNumber = (key: string, fallback: number) => {
+            const value = Number(settingsMap.get(key));
+            return Number.isFinite(value) && value > 0 ? value : fallback;
+          };
+          data = {
+            ...data,
+            settings: {
+              ...SETTINGS,
+              members_total: settingNumber("members_total", SETTINGS.members_total),
+              voters_total: settingNumber("voters_total", SETTINGS.voters_total),
+              members_files_count: settingNumber("members_files_count", SETTINGS.members_files_count),
+              voters_files_count: settingNumber("voters_files_count", SETTINGS.voters_files_count),
+              years_of_service: settingNumber("years_of_service", SETTINGS.years_of_service),
+            },
+          };
+        }
+      } catch {
+        data = seedKnowledgeData();
+      }
+
+      let index: IndexedKnowledgeEntry[];
+      try {
+        index = buildKnowledgeIndex(data);
+      } catch {
+        index = buildKnowledgeIndex(seedKnowledgeData());
+      }
+      knowledgeIndexRef.current = index;
+      return index;
+    })();
+
+    return knowledgeLoadRef.current;
+  }
+
+  /** Search the website brain; returns false when no verified site answer is found. */
+  async function answerFromKnowledge(q: string, rsi: boolean): Promise<boolean> {
+    const n = norm(q);
+    // Explicit requests for a person keep using the officer-confirmation flow.
+    if (
+      /(live ?chat|live agent|contact (an )?(agent|officer|person|someone)|talk to (someone|somebody|a person)|call ?back|customer (care|service)|support team|සජීවී චැට්|නිලධාරියෙක් සම්බන්ධ|කෙනෙකුට කතා කරන්න)/.test(n)
+    ) {
+      return false;
+    }
+
+    setTyping(true);
+    try {
+      const index = await loadKnowledge();
+      const lastTopic = convoRef.current.lastTopic;
+      const followUp = /(ඒක|එයා|එම|එහි|ඒ ගැන|එයාගේ|ඒකේ|තව විස්තර|\beke\b|\beyage\b|that (business|division|branch|person)|its|their|more details)/i.test(q);
+      const searchText = followUp && lastTopic
+        ? `${q} ${lastTopic.replace(/^(biz|person|branch):/, "").replace(/-/g, " ")}`
+        : q;
+      const result = searchKnowledge(searchText, index);
+      setTyping(false);
+      if (!result) return false;
+
+      if (result.ambiguous && result.alternatives.length > 1) {
+        push({
+          from: "bot",
+          bold: rsi ? "🤔 මේවායින් කෝකද අදහස් කළේ?" : "🤔 Which one did you mean?",
+          text: result.alternatives
+            .map((entry, i) => `${i + 1}. ${rsi ? entry.title_si : entry.title_en}`)
+            .join("\n"),
+          chips: result.alternatives.map((entry) => (rsi ? entry.title_si : entry.title_en).slice(0, 54)),
+        });
+        convoRef.current.lastIntent = "knowledge_ambiguous";
+        void logEvent("knowledge_ambiguous", q, Math.round(result.score), sessionRef.current);
+        return true;
+      }
+
+      const entry = result.entry;
+      const body = rsi ? entry.body_si : entry.body_en;
+      const phone = body.match(/0\d{2}\s\d{3}\s\d{4}/)?.[0];
+      const phoneIntent = /(phone|telephone|number|contact|call|manager|දුරකථන|අංකය|අමතන්න|කළමනාකරු|නොම්බර)/i.test(q);
+      push({
+        from: "bot",
+        bold: `${entry.emoji ?? "💡"} ${rsi ? entry.title_si : entry.title_en}`,
+        text: body,
+        chips: rsi ? entry.chips_si : entry.chips_en,
+        link:
+          phone && phoneIntent
+            ? { href: `tel:${phone.replace(/\s/g, "")}`, label: rsi ? `📞 ${phone} කෙලින්ම අමතන්න` : `📞 Call ${phone}` }
+            : entry.href
+              ? {
+                  href: entry.href,
+                  label:
+                    (rsi ? entry.linkLabel_si : entry.linkLabel_en) ??
+                    (rsi ? "අදාළ පිටුව විවෘත කරන්න" : "Open the relevant page"),
+                }
+              : undefined,
+      });
+      convoRef.current.lastIntent = "knowledge";
+      if (entry.topic) convoRef.current.lastTopic = entry.topic;
+      void logEvent("knowledge", `${entry.id} · ${q}`, Math.round(result.score), sessionRef.current);
+      return true;
+    } catch {
+      setTyping(false);
+      return false;
+    }
+  }
+
   async function botReply(raw: string) {
     const q = raw.trim();
     const n = norm(q);
@@ -1396,8 +1636,8 @@ export function LiveChat() {
             from: "bot",
             bold: rsi ? "🧭 මට ඔබට උදව් කරන්න පුළුවන් දෑ" : "🧭 Here's how I can help",
             text: rsi
-              ? "🔎 සාමාජික සොයන්න — නම/NIC/සාමාජික අංකය (උදා: 41/01)\n⛽ ඉන්ධන මිල — “fuel prices” ලියන්න\n📰 පුවත් හා නිවේදන · 🖼️ ගැලරිය\n🏢 ව්‍යාපාර කළමනාකරුවන් සහ දුරකථන\n📞 නිලධාරියෙකුගේ ඇමතුමක් ඉල්ලන්න\n\nපහත බොත්තමක් ඔබන්න, නැත්නම් ඔබේ ප්‍රශ්නය මෙතැන ලියන්න."
-              : "🔎 Find a member — name / NIC / member No. (e.g. 41/01)\n⛽ Fuel prices — type “fuel prices”\n📰 News & notices · 🖼️ Gallery\n🏢 Business managers and phone numbers\n📞 Request a call from an officer\n\nTap an option below, or just type your question here.",
+              ? "ඔබට ඕනෑම දෙයක් නිදහසේ අහන්න පුළුවන් — උදා: “සාමාජිකත්වයට අයදුම් කරන්නේ කොහොමද?”, “රූරල් බැංකුවේ සේවා මොනවාද?”, “සභාපති කවුද?”\n🔎 සාමාජික සොයන්න — නම/NIC/සාමාජික අංකය (උදා: 41/01)\n⛽ ඉන්ධන මිල · 📰 පුවත් · 🖼️ ගැලරිය\n🏢 ව්‍යාපාර, ශාඛා, කළමනාකරුවන් සහ දුරකථන\n📞 නිලධාරියෙකුගේ ඇමතුමක් ඉල්ලන්න\n\nපහත බොත්තමක් ඔබන්න, නැත්නම් ඔබේ ප්‍රශ්නය සිංහල/English/Singlish වලින් මෙතැන ලියන්න."
+              : "You can ask me freely — e.g. “How do I become a member?”, “What services does the Rural Bank offer?” or “Who is the chairman?”\n🔎 Find a member — name / NIC / member No. (e.g. 41/01)\n⛽ Fuel prices · 📰 News · 🖼️ Gallery\n🏢 Businesses, branches, managers and phone numbers\n📞 Request a call from an officer\n\nTap an option below, or type your question in Sinhala, English or Singlish.",
             chips: [...menuChips, rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
           });
           return;
@@ -1439,6 +1679,9 @@ export function LiveChat() {
       askOfficer();
       return;
     }
+
+    // 🧠 Site brain — ඕනෑම නිදහස් ප්‍රශ්නයකට අඩවියේම තහවුරු කළ තොරතුරු වලින් පිළිතුරු දෙයි
+    if (await answerFromKnowledge(q, rsi)) return;
 
     // ණය / ඉතුරුම් / උකස් → ග්‍රාමීය බැංකුව
     if (detectBanking(q)) {
@@ -1521,8 +1764,8 @@ export function LiveChat() {
       from: "bot",
       bold: rsi ? "🙏 සමාවෙන්න, ඒක මට හරියට තේරුණේ නෑ" : "🙏 Sorry, I didn't quite get that",
       text: rsi
-        ? "මම තාම ඉගෙන ගන්නවා — ඔබේ පණිවිඩය සටහන් කර ගත්තා, ඉක්මනින් මට මේකටත් උත්තර දෙන්න පුළුවන් වෙයි.\nමේ අතරේ පහත විකල්පයකින් තෝරන්න, නැත්නම් නිලධාරියෙක් සම්බන්ධ කරලා දෙන්නම්."
-        : "I'm still learning — I've noted your message so I can do better next time.\nMeanwhile, pick an option below or let me connect you with an officer.",
+        ? "මම අඩවියේ තියෙන තොරතුරුත් පරීක්ෂා කළා, නමුත් මේකට විශ්වාසදායක උත්තරයක් හමු වුණේ නෑ. ඔබේ පණිවිඩය සටහන් කර ගත්තා.\nවචන ටිකක් වෙනස් කරලා ආයෙත් අහන්න, පහත විකල්පයකින් තෝරන්න, නැත්නම් නිලධාරියෙක් සම්බන්ධ කරලා දෙන්නම්."
+        : "I checked the information on this website, but I couldn't find a reliable answer to that. I've noted your message.\nTry asking in different words, pick an option below, or let me connect you with an officer.",
       chips: [...menuChips, rsi ? "ඇමතුමක් ඉල්ලන්න" : "Request a Call"],
     });
   }
@@ -2117,14 +2360,14 @@ export function LiveChat() {
                           send();
                         }
                       }}
-                      placeholder={si ? "“Hi”, “කොහොමද”, “fuel prices”, “news”… ලියන්න" : "Try “Hi”, “Hello”, “fuel prices”, “news”, “gallery”…"}
+                      placeholder={si ? "සමිතිය ගැන ඕනෑම දෙයක් අහන්න…" : "Ask anything about our society…"}
                       className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
                     />
                     <button onClick={() => send()} disabled={!input.trim()} className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center disabled:opacity-40 hover:bg-indigo-700 transition">
                       <Send size={16} />
                     </button>
                   </div>
-                  <div className="mt-1.5 text-center text-[9.5px] text-slate-400">{si ? "නිල ලේඛන දත්ත වලින් · 24/7" : "Official registry data · 24/7"}</div>
+                  <div className="mt-1.5 text-center text-[9.5px] text-slate-400">{si ? "අඩවියේ තහවුරු කළ තොරතුරු වලින් උත්තර දෙයි · 24/7" : "Answers from verified website information · 24/7"}</div>
                 </div>
               )}
             </>

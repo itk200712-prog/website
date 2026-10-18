@@ -1,8 +1,10 @@
 # 🤖 Baymax Bot — Logic & Training Guide (③)
 
-> Site එකේ Live Chat widget එකේ ඉන්න **Baymax** බොට් ගේ මොළය. වචන තේරුම් ගැනීමේ
-> logic එක ඔක්කොම **`src/lib/chatbot.ts`** එකේ තියෙනවා (pure functions, UI නැතුව).
-> දත්ත ගන්න flows සහ UI එක **`src/components/live-chat.tsx`** එකේ.
+> Site එකේ Live Chat widget එකේ ඉන්න **Baymax** බොට් ගේ මොළය. සුහද කතා සහ
+> intent වචන තේරුම් ගැනීමේ logic එක **`src/lib/chatbot.ts`** එකේ තියෙනවා
+> (pure functions, UI නැතුව). අඩවියේ ඕනෑම දෙයක් ගැන නිදහස් ප්‍රශ්නවලට
+> පිළිතුරු දෙන **site brain** එක **`src/lib/knowledge.ts`** එකේ. දත්ත ගන්න
+> flows සහ UI එක **`src/components/live-chat.tsx`** එකේ.
 
 ## 💬 Smalltalk (සුහද කතා)
 
@@ -25,6 +27,40 @@
 විශේෂත්වය: reply භාෂාව පණිවිඩය අනුව ස්වයංක්‍රීයයි — සිංහල/Singlish ලියුවොත්
 සිංහලෙන්ම, English ලියුවොත් site භාෂාව අනුව. Spelling වරදින්නත් කමක් නෑ
 (`hellow`, `hii`, `kohomadha` වගේ තේරුම් ගනියි).
+
+## 🧠 Site Brain — අඩවිය ගැන ඕනෑම දෙයක් අහන්න
+
+Baymax දැන් බොත්තම්/කෙටි වචන විතරක් නෙවෙයි, නිදහස් ප්‍රශ්නත් තේරුම් ගන්නවා.
+Chat එක අරින විට widget එක public website data එක වරක් load කරලා searchable
+knowledge index එකක් හදනවා (offline/DB error නම් seed fallback):
+
+- ව්‍යාපාර අංශ, ඒවායේ සේවා, කළමනාකරු සම්බන්ධතා සහ ශාඛා
+- ග්‍රාමීය බැංකු ශාඛා 22 සහ එක් එක් ශාඛාවේ කළමනාකරු/දුරකථනය
+- අධ්‍යක්ෂ මණ්ඩලය (තනතුර, සුදුසුකම්, දුරකථන)
+- ප්‍රකාශිත පුවත් සහ ගැලරි අයිතම
+- සාමාජික/ඡන්ද දායක සංඛ්‍යා සහ සේවා වසර
+- සාමාජිකත්වයට අයදුම් කිරීම, ලේඛන, ගිණුම්/Register/Sign In/Forgot Password,
+  F28, Privacy, සම්බන්ධතා/වේලාවන් වැනි අඩවියේ උපදෙස්
+
+උදාහරණ: `රූරල් බැංකුවේ සේවා මොනවාද?` · `සභාපති කවුද?` ·
+`Mandapola ශාඛාවේ කළමනාකරු කවුද?` · `How do I reset my password?` ·
+`gramiya bankuwe sewa monawada` · `සාමාජිකයින් කීයක් ඉන්නවාද?`
+
+- සිංහල අකුරු, English සහ Singlish තුනම support; කුඩා spelling වැරදිත්
+  බොහෝ විට තේරුම් ගනියි (`Restbury` → Ristbury වගේ).
+- එකම වචනයෙන් අංශ කිහිපයක් අදහස් විය හැකි නම් (`services` වගේ) Baymax
+  උත්තරයක් හිතාගන්නේ නැතුව «මේවායින් කෝකද අදහස් කළේ?» කියා විකල්ප පෙන්වයි.
+- කලින් කතා කළ අංශය මතක තබා ගන්නා නිසා «ඒකේ දුරකථන අංකය මොකක්ද?» වගේ
+  follow-up ප්‍රශ්නවලටත් උත්තර දෙයි.
+- මෙය පිටත generative AI/API එකක් නොවේ — **අඩවියේම තහවුරු කළ තොරතුරු වලින්
+  පමණක්** උත්තර දෙයි. අඩවියේ උත්තරයක් නැත්නම් ඒ බව කියා නිලධාරියෙකුට
+  යොමු කරයි; තොරතුරු හදලා කියන්නේ නැහැ. ලියාපදිංචි user password වැනි
+  රහසිගත දත්ත index එකට කිසිසේත් ඇතුළත් වන්නේ නැහැ.
+
+අලුත් සේවාවක්/අංශයක් Admin එකෙන් දැම්මොත් ඊළඟ වර chat එක අරින විට එය
+ස්වයංක්‍රීයව brain එකට එනවා. අලුත් උපදෙස් පිළිතුරක් උගන්වන්න නම්
+`knowledge.ts` හි `staticEntries()` ට entry එකක් දමා `scripts/test.mts`
+section 12 ට test එකක් එක් කරන්න.
 
 ## ⛽ Fuel Prices
 
@@ -59,10 +95,10 @@
 ## ✅ පරීක්ෂණ
 
 ```bash
-npm test        # 97 tests — section 11 එකේ bot brain tests 33ක්
-npm run build   # production build
+npx -y tsx scripts/test.mts   # 130 tests — section 11 smalltalk + section 12 site brain
+npm run build                 # production build
 ```
 
-තවත් අදහස් (ඉදිරියේදී): ව්‍යාපාර අංශයක නමෙන්ම සොයන්නේ «Maliban මිල» වගේ
-කියූ විට ඒ අංශයේ විස්තර, ලේඛන වල සිංහල නමෙන් සාමාජික සොයන්න කෙලින්ම
-chat එකෙන් ගැහුවම search එකට යොමු කිරීම.
+ඉදිරි අදහසක්: අවශ්‍ය නම් පසුව පිටත LLM API එකක් (API key එකක් සමඟ) මෙම
+site brain එකටම සම්බන්ධ කර භාෂාව වඩාත් ස්වාභාවික කළ හැක. එසේ කළත්
+උත්තර සඳහා මූලාශ්‍රය විය යුත්තේ මෙම verified site knowledge එකමයි.

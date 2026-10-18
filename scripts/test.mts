@@ -155,6 +155,45 @@ ok("chat: live composer locked until officer joins (open)", bot.canUseLiveChat("
 ok("chat: live composer locked when closed", bot.canUseLiveChat("closed") === false);
 ok("chat: live composer unlocks when joined", bot.canUseLiveChat("joined") === true);
 
+console.log("\n── 12) Baymax site brain (src/lib/knowledge.ts) ──");
+const knowledge = await import("../src/lib/knowledge.ts");
+const knowledgeData = {
+  businesses: seed.BUSINESSES,
+  board: seed.BOARD,
+  ruralBranches: seed.RURAL_BANK_BRANCHES,
+  news: seed.NEWS,
+  gallery: seed.GALLERY,
+  settings: seed.SETTINGS,
+};
+const knowledgeIndex = knowledge.buildKnowledgeIndex(knowledgeData);
+const askSite = (q: string) => knowledge.searchKnowledge(q, knowledgeIndex);
+ok("brain: builds a broad dynamic site index", knowledgeIndex.length > 100, `got ${knowledgeIndex.length}`);
+ok("brain: Rural Bank services (English)", askSite("What services does the Rural Bank offer?")?.entry.id === "biz-services:rural-bank");
+ok("brain: Rural Bank services (Sinhala)", askSite("ග්‍රාමීය බැංකුවේ සේවා මොනවාද?")?.entry.id === "biz-services:rural-bank");
+ok("brain: Rural Bank (Singlish)", askSite("gramiya bankuwe sewa monawada")?.entry.topic === "biz:rural-bank");
+ok("brain: children's savings service detail", askSite("Children's savings account details")?.entry.id === "service:rural-bank:5");
+ok("brain: who is chairman (English)", askSite("Who is the chairman?")?.entry.title_en.includes("Chairman") === true);
+ok("brain: who is chairman (Sinhala)", askSite("සභාපති කවුද?")?.entry.title_si.includes("සභාපති") === true);
+ok("brain: how many members", askSite("How many members are there?")?.entry.id === "society-counts");
+ok("brain: member count (Sinhala)", askSite("සාමාජිකයින් කීයක් ඉන්නවාද?")?.entry.id === "society-counts");
+ok("brain: how to join + documents", askSite("How do I become a member and what documents do I need?")?.entry.id === "membership-apply");
+ok("brain: membership documents (Sinhala)", askSite("සාමාජිකත්වයට අයදුම් කරන්න අවශ්‍ය ලේඛන මොනවාද?")?.entry.id === "membership-apply");
+ok("brain: branch manager/phone", askSite("Mandapola branch manager phone")?.entry.topic === "branch:Mandapola Branch");
+ok("brain: business contact by phone intent", askSite("Hemas agency phone number")?.entry.id === "biz-contact:hemas");
+ok("brain: misspelled business brand", askSite("Tell me about Restbury")?.entry.topic === "biz:ristbury-tiara");
+ok("brain: F28 explanation", askSite("What is F28?")?.entry.id === "f28-help");
+ok("brain: forgot password", askSite("I forgot my password")?.entry.id === "account-help");
+ok("brain: society vision", askSite("What is the society vision?")?.entry.id === "vision-mission");
+ok("brain: society founded date", askSite("When was the society founded?")?.entry.id === "society-about");
+ok("brain: number of rural branches", askSite("How many Rural Bank branches are there?")?.entry.id === "rural-bank-branches");
+ok("brain: generic 'services' asks for clarification", askSite("services")?.ambiguous === true);
+ok("brain: unrelated question returns no invented answer", askSite("What will the weather be tomorrow?") === null);
+const registeredSecret = String((seed as unknown as { REGISTERED_USERS?: { password_display?: string }[] }).REGISTERED_USERS?.[0]?.password_display ?? "");
+ok(
+  "brain: registered-user secrets are never indexed",
+  !registeredSecret || !JSON.stringify(knowledgeIndex).includes(registeredSecret),
+);
+
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
 console.log(`══════════════════════════════════════\n`);
