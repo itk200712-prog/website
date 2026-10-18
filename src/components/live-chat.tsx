@@ -9,7 +9,7 @@
 //  · 🖼️ Gallery           → published ඡායාරූප + tagline → විස්තරය
 //  · 🏢 Business Managers → එක් එක් අංශය වෙන වෙනම (අංශය + කළමනාකරු නම)
 //  · ☎️ Office Phones     → අධ්‍යක්ෂ මණ්ඩලයේ නම් + දුරකථන
-//  · 📞 Managers Phones   → කළමනාකරු නම + අංශය + දුරකථන
+//  · 📞 Managers Phones   → කළමනාකරු නම් බොත්තම් → තෝරපු අයගේ දුරකථනය (Office Phones වගේමයි)
 //  · 📨 Contact Live Chat → නම + NIC + දුරකථන → FormSubmit email + inbox
 //                          → "Wait a few minutes, our officer will contact you"
 //  · 🧠 Smalltalk brain   → hi/hello/කොහොමද ආචාර, නම මතක තබා ගැනීම,
@@ -66,7 +66,7 @@ type Msg = {
   ref?: string;
   choices?: { label: string; kind: "yes" | "no" }[];
   list?: ListItem[];
-  action?: "biz" | "board" | "fuel";
+  action?: "biz" | "board" | "fuel" | "mphone";
   items?: RichItem[];
   link?: { href: string; label: string };
 };
@@ -389,42 +389,49 @@ export function LiveChat() {
     }
 
     if (key === "mphone") {
+      // ✅ Office Phones වගේමයි — කළමනාකරුවන්ගේ නම් සහිත බොත්තම් panel එක,
+      //    නමක් එබුවම ඒ කළමනාකරුගේ දුරකථන අංකය විතරක් පෙන්වයි
       setTyping(true);
       try {
         const sb = createAnonClient();
         const [{ data: u }, { data: c }] = await Promise.all([
-          sb.from("business_units").select("slug,name_en,name_si"),
-          sb.from("business_contacts").select("business_slug,name,phone,role_en,role_si").limit(200),
+          sb.from("business_units").select("slug,name_en,name_si").order("order"),
+          sb.from("business_contacts").select("id,business_slug,name,phone,role_en,role_si").limit(200),
         ]);
         type U = { slug: string; name_en?: string; name_si?: string };
-        type C = { business_slug: string; name?: string; phone?: string; role_en?: string; role_si?: string };
+        type C = { id?: string; business_slug: string; name?: string; phone?: string; role_en?: string; role_si?: string };
         const units = (u ?? []) as U[];
         const contacts = (c ?? []) as C[];
         setTyping(false);
+        if (flowRef.current !== my) return;
         if (!contacts.length) {
           push({ from: "bot", text: si ? "දැනට දුරකථන තොරතුරු නොමැත." : "No phone details available right now." });
           return;
         }
+        // ව්‍යාපාර අංශ පිළිවෙළට, ඊට පස්සේ නමින් sort කරයි
+        const unitIndex = new Map(units.map((un, i) => [un.slug, i] as const));
+        const sorted = [...contacts].sort((a, b) => {
+          const d = (unitIndex.get(a.business_slug) ?? 999) - (unitIndex.get(b.business_slug) ?? 999);
+          return d !== 0 ? d : String(a.name ?? "").localeCompare(String(b.name ?? ""));
+        });
         push({
           from: "bot",
           bold: si ? "📞 කළමනාකරුවන්ගේ දුරකථන" : "📞 Managers’ Phone Numbers",
-          text: si ? "අංශය · නම · දුරකථන අංකය" : "Division · Name · Phone",
+          text: si ? "අදාළ කළමනාකරුගේ නම ඔබන්න — දුරකථන අංකය එවන්නම්." : "Tap a manager’s name below — I’ll show the phone number.",
+          card: "choices",
+          action: "mphone",
+          list: sorted.map((ct) => {
+            const unit = units.find((x) => x.slug === ct.business_slug);
+            const unitName = si ? unit?.name_si || unit?.name_en || ct.business_slug : unit?.name_en || ct.business_slug;
+            const manager = (ct.name ?? "").replace(/\s*\(manager\)\s*$/i, "").trim();
+            const role = si ? ct.role_si || ct.role_en : ct.role_en || ct.role_si;
+            return {
+              label: manager || unitName,
+              sub: `🏢 ${unitName}${role ? ` · ${role}` : ""}`,
+              value: String(ct.id ?? ""),
+            };
+          }),
         });
-        // 4 blocks per message — කියවන්න ලේසි
-        for (let i = 0; i < contacts.length; i += 4) {
-          if (flowRef.current !== my) return;
-          const chunk = contacts.slice(i, i + 4);
-          const text = chunk
-            .map((ct) => {
-              const unit = units.find((x) => x.slug === ct.business_slug);
-              const unitName = si ? unit?.name_si || unit?.name_en || ct.business_slug : unit?.name_en || ct.business_slug;
-              const manager = (ct.name ?? "").replace(/\s*\(manager\)\s*$/i, "").trim();
-              return `🏢 ${unitName}\n👤 ${manager || "—"}\n📞 ${ct.phone || "—"}`;
-            })
-            .join("\n\n");
-          push({ from: "bot", text });
-          await sleep(260);
-        }
       } catch {
         setTyping(false);
         push({ from: "bot", text: si ? "⚠ දත්ත ලබාගත නොහැකි විය." : "⚠ Could not load data." });
@@ -674,8 +681,8 @@ export function LiveChat() {
     void logEvent("gallery", "", items.length, sessionRef.current);
   }
 
-  // ── business / board / fuel button එකක් එබුවම ──
-  async function pickFromList(action: "biz" | "board" | "fuel", value: string, label: string) {
+  // ── business / board / fuel / manager-phone button එකක් එබුවම ──
+  async function pickFromList(action: "biz" | "board" | "fuel" | "mphone", value: string, label: string) {
     push({ from: "me", text: label });
     if (action === "fuel") {
       if (value === "__all") await showAllFuelPrices();
@@ -710,7 +717,7 @@ export function LiveChat() {
             .join("\n\n"),
           chips: si ? ["ව්‍යාපාර කළමනාකරුවන්", "සජීවී චැට්"] : ["Business Managers", "Live Chat"],
         });
-      } else {
+      } else if (action === "board") {
         const { data } = await sb
           .from("board_members")
           .select("name_en,name_si,position_en,position_si,phone,email")
@@ -727,6 +734,33 @@ export function LiveChat() {
           bold: (si ? r.name_si || r.name_en : r.name_en) ?? label,
           text: `${(si ? r.position_si || r.position_en : r.position_en) ?? ""}\n📞 ${r.phone || "—"}${r.email ? `\n📧 ${r.email}` : ""}`,
           chips: si ? ["කාර්යාල දුරකථන", "ඇමතුමක් ඉල්ලන්න"] : ["Office Phones", "Request a Call"],
+        });
+      } else {
+        // 📞 Managers Phones — තෝරපු කළමනාකරුගේ දුරකථන අංකය (contact id එකෙන් හොයයි)
+        const [{ data: c }, { data: u }] = await Promise.all([
+          sb.from("business_contacts").select("id,business_slug,name,phone,role_en,role_si,location,note_en,note_si").eq("id", value).limit(1),
+          sb.from("business_units").select("slug,name_en,name_si"),
+        ]);
+        setTyping(false);
+        type MC = { business_slug: string; name?: string; phone?: string; role_en?: string; role_si?: string; location?: string; note_en?: string; note_si?: string };
+        const ct = (c ?? [])[0] as MC | undefined;
+        if (!ct) {
+          push({ from: "bot", text: si ? "තොරතුරු හමු නොවීය." : "Details not found." });
+          return;
+        }
+        const units = (u ?? []) as { slug: string; name_en?: string; name_si?: string }[];
+        const unit = units.find((x) => x.slug === ct.business_slug);
+        const unitName = (si ? unit?.name_si || unit?.name_en : unit?.name_en) ?? ct.business_slug;
+        const manager = (ct.name ?? "").replace(/\s*\(manager\)\s*$/i, "").trim() || label;
+        const role = si ? ct.role_si || ct.role_en : ct.role_en || ct.role_si;
+        const note = si ? ct.note_si || ct.note_en : ct.note_en || ct.note_si;
+        const phone = (ct.phone ?? "").trim();
+        push({
+          from: "bot",
+          bold: `👤 ${manager}`,
+          text: `🏢 ${unitName}${role ? `\n🏷 ${role}` : ""}\n📞 ${phone || "—"}${ct.location ? `\n📍 ${ct.location}` : ""}${note ? `\n📝 ${note}` : ""}`,
+          chips: si ? ["කළමනාකරු දුරකථන", "ව්‍යාපාර කළමනාකරුවන්"] : ["Managers Phones", "Business Managers"],
+          link: phone ? { href: `tel:${phone.replace(/[^\d+]/g, "")}`, label: si ? `📞 ${phone} කෙලින්ම අමතන්න` : `📞 Call ${phone}` } : undefined,
         });
       }
     } catch {
