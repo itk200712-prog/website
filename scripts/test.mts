@@ -151,6 +151,9 @@ ok("chat: typing shows only when joined", bot.shouldShowTyping("joined", true) =
 ok("chat: typing hidden when closed", bot.shouldShowTyping("closed", true) === false);
 ok("chat: typing hidden when open/waiting", bot.shouldShowTyping("open", true) === false);
 ok("chat: typing hidden when not typing", bot.shouldShowTyping("joined", false) === false);
+ok("chat: live composer locked until officer joins (open)", bot.canUseLiveChat("open") === false);
+ok("chat: live composer locked when closed", bot.canUseLiveChat("closed") === false);
+ok("chat: live composer unlocks when joined", bot.canUseLiveChat("joined") === true);
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

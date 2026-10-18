@@ -230,3 +230,13 @@ export function hasClearableHistory(messages: { sender: string }[]): boolean {
 export function shouldShowTyping(status: string, typing: boolean): boolean {
   return status === "joined" && typing;
 }
+
+/**
+ * Live Chat එකේ පණිවිඩ ලියන්න (composer එක unlock වෙන්න) පුළුවන්ද?
+ * නීතිය: නිලධාරියෙක් ඇත්තටම join වී ඇති විට (status="joined") විතරයි.
+ * ඊට කලින් visitor ට කෙලින්ම live chat පටන් ගන්න බෑ — Baymax හරහා
+ * ඇමතුමක් ඉල්ලා, නිලධාරියා join වෙනකම් රැඳී සිටිය යුතුයි.
+ */
+export function canUseLiveChat(status: string): boolean {
+  return status === "joined";
+}

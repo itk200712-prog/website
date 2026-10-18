@@ -17,7 +17,7 @@
 // ============================================================================
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Fuel, Images, Loader2, MessageCircle, Minus, Newspaper, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Fuel, Images, Loader2, Lock, MessageCircle, Minus, Newspaper, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { tokens } from "@/lib/search";
@@ -30,6 +30,7 @@ import {
   detectNameIntro,
   detectNews,
   detectSmalltalk,
+  canUseLiveChat,
   hasClearableHistory,
   replyIsSi,
   shouldShowTyping,
@@ -283,10 +284,37 @@ export function LiveChat() {
   // ─────────────────────────────────────────────────────────────────────────
   async function runAction(key: ActionKey) {
     if (key === "live") {
-      setTab("live");
+      // ✅ නිලධාරියෙක් දැනටමත් join වී ඇත්නම් විතරක් Live Chat එක කෙලින්ම අරිනවා
+      if (canUseLiveChat(liveStatus) || officerJoined) {
+        setTab("live");
+        setPanel(null);
+        setLiveUsed(true);       // ✅ live chat පටන් ගත්තා → polling on
+        setOfficerJoined(false);
+        void logEvent("live_agent", "", 0, sessionRef.current);
+        return;
+      }
+      // 🔒 direct live chat නෑ — Baymax හරහා ඇමතුමක් ඉල්ලා නිලධාරියා join වෙනකම් ඉන්න ඕන
+      setTab("chat");
       setPanel(null);
-      setLiveUsed(true);       // ✅ live chat පටන් ගත්තා → polling on
-      void logEvent("live_agent", "", 0, sessionRef.current);
+      void logEvent("live_locked", "", 0, sessionRef.current);
+      if (sessionActive) {
+        push({
+          from: "bot",
+          bold: si ? "⏳ ඔබේ ඉල්ලීම ලැබී ඇත" : "⏳ Your request has been received",
+          text: si
+            ? "නිලධාරියෙක් join වුණු ගමන් මෙතැන කොළ පාට දැනුම්දීමක් එනවා — ඒ බොත්තම ඔබලා Live Chat එකට එන්න පුළුවන්. කරුණාකර ටිකක් රැඳී සිටින්න."
+            : "As soon as an officer joins, a green button will appear here — tap it to enter the live chat. Please hang tight a moment.",
+        });
+        return;
+      }
+      push({
+        from: "bot",
+        bold: si ? "🔒 Live Chat එක පටන් ගන්නේ නිලධාරියෙක් join වුණාමයි" : "🔒 Live chat starts when an officer joins",
+        text: si
+          ? "මෙතැනින් කෙලින්ම chat පටන් ගන්න බෑ. මුලින් පහතින් ඔබේ විස්තර එවන්න — අපේ නිලධාරියෙක් join වුණු ගමන් ඔබට දැනුම් දීලා Live Chat එක unlock කරනවා."
+          : "You can't start chatting from here directly. First send your details below — the moment our officer joins, we'll notify you and unlock the live chat.",
+      });
+      void runAction("contact");
       return;
     }
     const my = ++flowRef.current;          // පරණ flow එක නවත්වයි
@@ -1121,6 +1149,11 @@ export function LiveChat() {
   async function sendLive() {
     const body = liveText.trim();
     if (!body || !sessionKey || liveBusy) return;
+    // 🔒 නිලධාරියෙක් join වී නැත්නම් පණිවිඩ යැවිය නොහැකියි
+    if (!canUseLiveChat(liveStatus)) {
+      setLiveErr(si ? "🔒 නිලධාරියෙක් join වන තුරු පණිවිඩ යැවිය නොහැකිය" : "🔒 You can send messages once an officer joins");
+      return;
+    }
     setLiveUsed(true);
     setLiveText("");
     setLiveBusy(true);
@@ -1548,6 +1581,7 @@ export function LiveChat() {
   //    එකවර පෙන්වන්නේ එක button එකයි: closed banner එක තියෙද්දී පොඩි රතු එක හැංගෙනවා.
   const clearable = hasClearableHistory(liveMsgs);
   const showTypingNow = shouldShowTyping(liveStatus, agentTyping);
+  const canChat = canUseLiveChat(liveStatus);   // 🔒 joined විට විතරක් composer unlock
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -1677,6 +1711,7 @@ export function LiveChat() {
             <button
               onClick={() => {
                 setTab("live");
+                setLiveUsed(true);
                 setOfficerJoined(false);
                 setUnread(0);
               }}
@@ -2117,11 +2152,15 @@ export function LiveChat() {
                       : `🟢 ${agentName || "An officer"} is connected`
                     : liveStatus === "closed"
                       ? si
-                        ? "chat එක අවසන් — නැවත ලිවිය හැක"
-                        : "Chat closed — you can write again"
-                      : si
-                        ? "⏳ නිලධාරියෙක් සම්බන්ධ වෙනතුරු රැඳී සිටින්න"
-                        : "⏳ Waiting for an officer to join"}
+                        ? "මේ chat එක අවසන් වී ඇත"
+                        : "This chat has ended"
+                      : sessionActive
+                        ? si
+                          ? "⏳ නිලධාරියෙක් සම්බන්ධ වෙනතුරු රැඳී සිටින්න"
+                          : "⏳ Waiting for an officer to join"
+                        : si
+                          ? "🔒 තවම පටන් අරගෙන නෑ — Baymax එකෙන් ඉල්ලන්න"
+                          : "🔒 Not started yet — request via Baymax"}
                 </span>
                 <button
                   onClick={() => {
@@ -2143,9 +2182,17 @@ export function LiveChat() {
               <div ref={liveBoxRef} className="flex-1 overflow-y-auto px-3.5 py-3 space-y-2 bg-slate-50 min-h-[160px]">
                 {liveMsgs.length === 0 && (
                   <div className="max-w-[88%] rounded-2xl rounded-bl-md bg-white border border-slate-200 px-3.5 py-2.5 text-[12px] text-slate-600 shadow-sm">
-                    {si
-                      ? "ආයුබෝවන් 👋 ඔබේ ප්‍රශ්නය පහත ලියන්න — නිලධාරියෙක් මෙතනම පිළිතුරු දෙනවා. විනාඩි කීපයක් ඇතුළත කෙනෙක් නොඑන්නේ නම් “ඇමතුමක් ඉල්ලන්න” බොත්තමෙන් අංකය තබන්න."
-                      : "Hello 👋 Type your question below — an officer will reply here shortly. If no one joins within a few minutes, use “Request a Call” to leave your number."}
+                    {canChat
+                      ? si
+                        ? "ආයුබෝවන් 👋 නිලධාරියෙක් සම්බන්ධ වී ඇත — ඔබේ ප්‍රශ්නය පහත ලියන්න, මෙතැනම පිළිතුරු ලැබෙනවා."
+                        : "Hello 👋 An officer is connected — type your question below and they'll reply right here."
+                      : sessionActive
+                        ? si
+                          ? "ඔබේ ඉල්ලීම අපේ කාර්යාලයට ලැබී ඇත ✅ නිලධාරියෙක් සම්බන්ධ වුණු ගමන් මෙම chat එක unlock වෙනවා — ඒ මොහොතේ ඔබට දැනුම් දෙනවා."
+                          : "Your request has reached our office ✅ This chat will unlock the moment an officer joins — we'll notify you then."
+                        : si
+                          ? "🔒 මෙතැනින් කෙලින්ම chat කරන්න බෑ. නිලධාරියෙක් සම්බන්ධ කරගන්න පහත බොත්තමෙන් Baymax හරහා ඇමතුමක් ඉල්ලන්න — නිලධාරියා join වුණාම මෙම chat එක unlock වෙනවා."
+                          : "🔒 You can't chat from here directly. Use the button below to request a call via Baymax — this chat unlocks when an officer joins."}
                   </div>
                 )}
                 {showTypingNow && (
@@ -2218,6 +2265,8 @@ export function LiveChat() {
                   </button>
                   )}
                 </div>
+                {canChat ? (
+                  <>
                 {!visitorName.trim() && (
                   <input
                     value={visitorName}
@@ -2250,6 +2299,42 @@ export function LiveChat() {
                 <div className="mt-1 text-center text-[9px] text-slate-400">
                   {si ? "නිලධාරියෙක් සම්බන්ධ වූ පසු පිළිතුරු මෙතනම පේනවා" : "Officer replies appear right here"}
                 </div>
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-center">
+                    <div className="flex items-center justify-center gap-1.5 text-[11.5px] font-extrabold text-amber-800">
+                      {sessionActive && liveStatus !== "closed" ? <Clock size={13} /> : <Lock size={13} />}
+                      {liveStatus === "closed"
+                        ? si
+                          ? "මේ chat එක අවසන් වී ඇත"
+                          : "This chat has ended"
+                        : sessionActive
+                          ? si
+                            ? "නිලධාරියෙක් join වෙන තුරු රැඳී සිටින්න"
+                            : "Waiting for an officer to join"
+                          : si
+                            ? "Live Chat එක තවම පටන් අරගෙන නෑ"
+                            : "Live chat hasn't started yet"}
+                    </div>
+                    <p className="mt-1 text-[10.5px] leading-relaxed text-amber-700">
+                      {sessionActive && liveStatus !== "closed"
+                        ? si
+                          ? "ඔබේ ඉල්ලීම කාර්යාලයට ලැබී ඇත. නිලධාරියෙක් join වුණු ගමන් මෙතැනින් කෙලින්ම කතා කරන්න පුළුවන් — ඔබට ශබ්ද දැනුම්දීමකුත් එනවා."
+                          : "Your request is with our office. The moment an officer joins, you can chat right here — you'll get a sound notification too."
+                        : si
+                          ? "මෙතැනින් කෙලින්ම පණිවිඩ යැවිය නොහැකියි. නිලධාරියෙක් සම්බන්ධ කරගන්න Baymax හරහා ඇමතුමක් ඉල්ලන්න."
+                          : "You can't send messages from here directly. Request a call via Baymax to reach an officer."}
+                    </p>
+                    {!(sessionActive && liveStatus !== "closed") && (
+                      <button
+                        onClick={() => void runAction("contact")}
+                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 py-2 text-[11.5px] font-extrabold text-white transition hover:opacity-95"
+                      >
+                        <PhoneCall size={13} /> {si ? "Baymax හරහා ඇමතුමක් ඉල්ලන්න" : "Request a call via Baymax"}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
