@@ -785,11 +785,13 @@ const schSettings = sched.parseScheduleSettings((k) => ({
   backup_schedule_to_mega: "1",
   backup_schedule_keep: "8",
   backup_schedule_mega_folder: "MPCS Backups",
+  backup_schedule_encrypt: "0",
 }[k]));
 ok("schedule: settings parse + normalize + rows roundtrip",
   schSettings.enabled === true && schSettings.intervalDays === 3 && schSettings.timeHHMM === "09:00" &&
-  schSettings.toMega === true && schSettings.keepCount === 8 &&
-  sched.scheduleSettingsRows(schSettings).length === 8 &&
+  schSettings.toMega === true && schSettings.keepCount === 8 && schSettings.encrypt === false &&
+  sched.parseScheduleSettings(() => undefined).encrypt === true &&
+  sched.scheduleSettingsRows(schSettings).length === 9 &&
   sched.parseScheduleSettings((k) => Object.fromEntries(sched.scheduleSettingsRows(schSettings).map((r) => [r.key, r.value]))[k]).intervalDays === 3 &&
   sched.parseScheduleSettings(() => undefined).enabled === false &&
   sched.parseScheduleSettings((k) => k === "backup_schedule_interval_days" ? "99" : undefined).intervalDays === 30);
@@ -813,12 +815,16 @@ ok("schedule: cron SQL = every 15 min to site route with secret header + bucket"
   cronSqlSample.includes("'x-backup-secret', 's3cr3t'") &&
   cronSqlSample.includes("storage.buckets") &&
   readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("mpcs-auto-backup-check"));
-ok("schedule: route is secret-gated, builds the SAME full ZIP as manual, uploads Supabase+MEGA, records history",
+ok("schedule: route is secret-gated, builds the SAME full ZIP as manual (Encryption Password encrypt option), uploads Supabase+MEGA, records history",
   scheduledBackupSrc.includes('req.headers.get("x-backup-secret")') &&
   scheduledBackupSrc.includes("unauthorized") &&
   scheduledBackupSrc.includes("generateBackupZip") &&
   scheduledBackupSrc.includes("buildFullBackupZip") &&
   scheduledBackupSrc.includes("createClient(SUPA_BASE, SERVICE_KEY") &&
+  scheduledBackupSrc.includes('"backup_encryption_password"') &&
+  scheduledBackupSrc.includes("settings.encrypt") &&
+  scheduledBackupSrc.includes("encryptPassword: encryptPassword || undefined") &&
+  scheduledBackupSrc.includes("encryptionConfigured") &&
   scheduledBackupSrc.includes('"application/zip"') &&
   scheduledBackupSrc.includes('await import("megajs")') &&
   scheduledBackupSrc.includes("uploadToMega") &&
@@ -827,8 +833,10 @@ ok("schedule: route is secret-gated, builds the SAME full ZIP as manual, uploads
   scheduledBackupSrc.includes("backup_history") &&
   backupSrc.includes("client?: BackupClient") &&
   backupSrc.includes("opts?.client ?? (await authedClient())"));
-ok("schedule: Admin card (interval/time/destinations/MEGA/cron SQL/test run) + secrets in backup_secrets",
+ok("schedule: Admin card (interval/time/destinations/encrypt/MEGA/cron SQL/test run) + secrets in backup_secrets",
   adminBackupSrc.includes("Scheduled Auto-Backup") &&
+  adminBackupSrc.includes("sch.encrypt") &&
+  adminBackupSrc.includes("Encryption Password එකෙන් encrypt කරන්න") &&
   adminBackupSrc.includes("saveSchedule") &&
   adminBackupSrc.includes("testScheduleRun") &&
   adminBackupSrc.includes("buildCronSql") &&

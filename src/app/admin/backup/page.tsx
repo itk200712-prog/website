@@ -131,13 +131,17 @@ export default function AdminBackupPage() {
       setSch(next);
       void logActivity(
         "BACKUP_SCHEDULE",
-        `Scheduled auto-backup ${next.enabled ? "enabled" : "disabled"} · every ${next.intervalDays} day(s) at ${next.timeHHMM} · to ${[next.toSupabase ? "Supabase" : "", next.toMega ? "MEGA" : ""].filter(Boolean).join("+") || "none"}`
+        `Scheduled auto-backup ${next.enabled ? "enabled" : "disabled"} · every ${next.intervalDays} day(s) at ${next.timeHHMM} · to ${[next.toSupabase ? "Supabase" : "", next.toMega ? "MEGA" : ""].filter(Boolean).join("+") || "none"}${next.encrypt ? " · 🔒 encrypted" : ""}`
       );
-      show(
-        next.enabled
-          ? `✅ Save වුණා — පළමු auto backup එක: ${nextScheduleDate(next)} දවසේ ${next.timeHHMM} ට (Cron SQL එක run කරලා නැත්නම් පහතින් run කරන්න)`
-          : "✅ Save වුණා — Scheduled auto-backup එක off කරලා"
-      );
+      if (next.enabled && next.encrypt && secrets && !secrets.encryption) {
+        show("✅ Save වුණා — හැබැයි ⚠ Encryption Password එක තාම set කරලා නෑ! ඉහළ card එකෙන් set කළේ නැත්නම් auto backup එක encrypt නොවී යනවා");
+      } else {
+        show(
+          next.enabled
+            ? `✅ Save වුණා — පළමු auto backup එක: ${nextScheduleDate(next)} දවසේ ${next.timeHHMM} ට (Cron SQL එක run කරලා නැත්නම් පහතින් run කරන්න)`
+            : "✅ Save වුණා — Scheduled auto-backup එක off කරලා"
+        );
+      }
     } catch (e) {
       show(`⚠ ${(e as Error).message}`);
     }
@@ -165,10 +169,10 @@ export default function AdminBackupPage() {
         body: JSON.stringify({ force: true }),
       });
       const j = (await r.json().catch(() => null)) as {
-        ok?: boolean; file?: string; destinations?: string[]; reason?: string; detail?: string; warnings?: string[];
+        ok?: boolean; file?: string; destinations?: string[]; reason?: string; detail?: string; warnings?: string[]; encrypted?: boolean;
       } | null;
       if (j?.ok) {
-        show(`✅ Test backup එක හරි! ${j.file ?? ""} → ${(j.destinations ?? []).join(" + ")}${j.warnings?.length ? ` · ⚠ ${j.warnings.join("; ")}` : ""}`);
+        show(`✅ Test backup එක හරි! ${j.file ?? ""}${j.encrypted ? " 🔒" : ""} → ${(j.destinations ?? []).join(" + ")}${j.warnings?.length ? ` · ⚠ ${j.warnings.join("; ")}` : ""}`);
         await loadBackupHistory();
       } else {
         show(`⚠ Test එක අසාර්ථකයි: ${j?.detail || j?.reason || `HTTP ${r.status}`}`);
@@ -764,6 +768,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           දවස් කීයකට වරක්ද, කීයටද කියා තෝරලා Save කරන්න — ඊට පස්සේ ඒ දවසේ ඒ වෙලාවට backup එක
           ඉබේම අරගෙන තෝරපු තැනට (Supabase සහ/හෝ MEGA) upload වෙනවා. පළමු එක <b>අදින් දවස් {sch.intervalDays}කට පස්සේ</b> යයි.
           මේක <b>manual Download එකට සම්පූර්ණයෙන්ම සමාන FULL ZIP එකමයි</b> — schema + logins (password සහිතව) + images + registers ඔක්කොම එක්ක.
+          කැමති නම් පහළින් <b>Encryption Password එකෙන් encrypt</b> කරන්නත් පුළුවන් — එතකොට Import කරද්දී ඒ password එකම ඉල්ලනවා.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -825,6 +830,19 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
             <input type="checkbox" className="mt-0.5" checked={sch.toMega} onChange={(e) => setSch({ ...sch, toMega: e.target.checked })} />
             <span><b>MEGA එකටත් දාන්න</b><br /><span className="text-slate-500">ඔයාගේ MEGA ගිණුමේ folder එකකට auto upload වෙනවා</span></span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={sch.encrypt} onChange={(e) => setSch({ ...sch, encrypt: e.target.checked })} />
+            <span>
+              <b>🔒 Encryption Password එකෙන් encrypt කරන්න</b><br />
+              <span className="text-slate-500">ඉහළ දාපු Encryption Password එකමයි — Import කරද්දී ඒකම දෙද්දී විතරයි ඇරෙන්නේ</span>
+              {sch.encrypt && secrets && !secrets.encryption && (
+                <span className="mt-1 block font-bold text-rose-600">⚠ Encryption Password එක තාම set කරලා නෑ — ඉහළින් set කරන්න. නැත්නම් encrypt නොවී යයි!</span>
+              )}
+              {sch.encrypt && secrets?.encryption && (
+                <span className="mt-1 block font-bold text-emerald-600">✓ Encryption Password එක set කරලා තියෙනවා</span>
+              )}
+            </span>
           </label>
         </div>
 

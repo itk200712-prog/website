@@ -8,8 +8,10 @@
 //    + Registers XLSX/CSV + manifest + RECOVERY). එකම generateBackupZip()
 //    builder එක service-role client එකකින් දුවන නිසා කිසිවක් අඩු වෙන්නේ නෑ.
 //  · ගමනාන්ත: Supabase private 'backups' bucket එක සහ/හෝ MEGA folder එක.
-//  · රහස් (cron secret, MEGA email/password) backup_secrets එකේ — server එක
-//    service-role key එකෙන් විතරක් කියවයි; browser එකට කිසිවක් එන්නේ නෑ.
+//  · රහස් (cron secret, MEGA email/password, encryption password) backup_secrets
+//    එකේ — server එක service-role key එකෙන් විතරක් කියවයි; browser එකට එන්නේ නෑ.
+//  · settings වල encrypt on නම් ZIP එක Encryption Password එකෙන් encrypt වෙනවා
+//    (manual encrypted backup එක වගේම Admin Import එකෙන් restore කළ හැක).
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -67,8 +69,11 @@ async function loadSchedule(): Promise<BackupScheduleSettings> {
   return parseScheduleSettings((k) => map.get(k));
 }
 
-async function loadSecrets(): Promise<{ cronSecret: string; megaEmail: string; megaPassword: string }> {
-  const keys = Object.values(SCHEDULE_SECRET_KEYS).join(",");
+/** auto backup එක encrypt කරන password key එක — manual backup එකේ එකමයි */
+const ENCRYPTION_SECRET_KEY = "backup_encryption_password";
+
+async function loadSecrets(): Promise<{ cronSecret: string; megaEmail: string; megaPassword: string; encryptionPassword: string }> {
+  const keys = [...Object.values(SCHEDULE_SECRET_KEYS), ENCRYPTION_SECRET_KEY].join(",");
   const rows = (await restGet(`backup_secrets?select=key,value&key=in.(${keys})`, SERVICE_KEY)) as
     | { key: string; value: string }[]
     | null;
@@ -77,6 +82,7 @@ async function loadSecrets(): Promise<{ cronSecret: string; megaEmail: string; m
     cronSecret: (map.get(SCHEDULE_SECRET_KEYS.cronSecret) ?? "").trim(),
     megaEmail: (map.get(SCHEDULE_SECRET_KEYS.megaEmail) ?? "").trim(),
     megaPassword: map.get(SCHEDULE_SECRET_KEYS.megaPassword) ?? "",
+    encryptionPassword: map.get(ENCRYPTION_SECRET_KEY) ?? "",
   };
 }
 
@@ -93,7 +99,9 @@ async function lastScheduledSuccessDate(): Promise<string | null> {
 }
 
 // ── FULL backup ZIP — manual Download එක හදන builder එකමයි (service-role) ──
-async function buildFullBackupZip(): Promise<{ zip: Buffer; totalRows: number; tables: number; images: number }> {
+// encryptPassword දීලා ඇත්නම් database.sql එක manual encrypted backup එක වගේම
+// AES-GCM වලින් encrypt වෙනවා → Import එකේදී ඒ password එකම දීලා restore කළ හැක.
+async function buildFullBackupZip(encryptPassword = ""): Promise<{ zip: Buffer; totalRows: number; tables: number; images: number }> {
   const sb = createClient(SUPA_BASE, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     // Node runtime එකේ realtime init එකට ws ඕනේ (අපි realtime පාවිච්චි කරන්නේ නෑ)
@@ -102,6 +110,7 @@ async function buildFullBackupZip(): Promise<{ zip: Buffer; totalRows: number; t
   let meta = { tableCounts: {} as Record<string, number>, imageCount: 0 };
   const blob = await generateBackupZip(() => {}, {
     client: sb as unknown as BackupClient,
+    encryptPassword: encryptPassword || undefined,
     onMeta: (m) => {
       meta = m;
     },
@@ -212,6 +221,7 @@ async function recordHistory(input: {
   rows: number;
   status: string;
   detail: string;
+  encrypted?: boolean;
 }): Promise<void> {
   try {
     await fetch(`${SUPA_BASE}/rest/v1/backup_history`, {
@@ -223,7 +233,7 @@ async function recordHistory(input: {
         actor_role: "system",
         file_name: input.fileName,
         file_size: input.fileSize,
-        encrypted: false,
+        encrypted: !!input.encrypted,
         tables_count: input.tables,
         rows_count: input.rows,
         status: input.status,
@@ -238,13 +248,14 @@ async function recordHistory(input: {
 
 /** GET — Admin card එකේ status එකට (රහස් කිසිවක් එවන්නේ නෑ) */
 export async function GET() {
-  if (!SERVICE_KEY) return json({ ok: true, serverConfigured: false, cronReady: false, megaConfigured: false });
+  if (!SERVICE_KEY) return json({ ok: true, serverConfigured: false, cronReady: false, megaConfigured: false, encryptionConfigured: false });
   const [settings, secrets] = await Promise.all([loadSchedule(), loadSecrets()]);
   return json({
     ok: true,
     serverConfigured: true,
     cronReady: Boolean(secrets.cronSecret),
     megaConfigured: Boolean(secrets.megaEmail && secrets.megaPassword),
+    encryptionConfigured: Boolean(secrets.encryptionPassword),
     enabled: settings.enabled,
   });
 }
@@ -278,42 +289,50 @@ export async function POST(req: NextRequest) {
   }
 
   const fileName = autoBackupFileName();
+  // 🔒 settings වල encrypt on නම් manual එකේ Encryption Password එකම පාවිච්චි කරයි.
+  // password එක save කරලා නැත්නම් backup එක නවත්වන්නේ නැතුව unencrypted යවනවා — history එකේ සටහන් වෙනවා.
+  const encPw = settings.encrypt ? secrets.encryptionPassword : "";
+  const encrypted = Boolean(encPw);
+  const encryptWarning = settings.encrypt && !encPw ? "⚠ Encryption Password එක save කරලා නැති නිසා encrypt නොවී ගියා" : "";
   let built: Awaited<ReturnType<typeof buildFullBackupZip>>;
   try {
-    built = await buildFullBackupZip();
+    built = await buildFullBackupZip(encPw);
   } catch (e) {
     const detail = `FULL ZIP build failed: ${(e as Error).message}`;
-    await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed", detail });
+    await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed", detail, encrypted });
     return json({ ok: false, reason: "build_failed", detail }, 500);
   }
 
+  // ගමනාන්ත දෙකම ඇත්නම් සමගාමීව upload කරයි (60s සීමාව ඇතුළේ ඉවර වෙන්න)
   const done: string[] = [];
   const failed: string[] = [];
+  const uploads: Promise<void>[] = [];
   if (settings.toSupabase) {
-    try {
-      await uploadToSupabase(fileName, built.zip, settings.keepCount);
-      done.push("Supabase");
-    } catch (e) {
-      failed.push(`Supabase: ${(e as Error).message}`);
-    }
+    uploads.push(
+      uploadToSupabase(fileName, built.zip, settings.keepCount)
+        .then(() => void done.push("Supabase"))
+        .catch((e: Error) => void failed.push(`Supabase: ${e.message}`))
+    );
   }
   if (settings.toMega) {
     if (secrets.megaEmail && secrets.megaPassword) {
-      try {
-        await uploadToMega(secrets.megaEmail, secrets.megaPassword, settings.megaFolder, fileName, built.zip, settings.keepCount);
-        done.push("MEGA");
-      } catch (e) {
-        failed.push(`MEGA: ${(e as Error).message}`);
-      }
+      uploads.push(
+        uploadToMega(secrets.megaEmail, secrets.megaPassword, settings.megaFolder, fileName, built.zip, settings.keepCount)
+          .then(() => void done.push("MEGA"))
+          .catch((e: Error) => void failed.push(`MEGA: ${e.message}`))
+      );
     } else {
       failed.push("MEGA: email/password save කරලා නෑ");
     }
   }
+  await Promise.all(uploads);
 
   const status = done.length && !failed.length ? "success" : done.length ? "partial" : "failed";
   const detail = [
     force ? "Manual test run" : `Every ${settings.intervalDays} day(s) at ${settings.timeHHMM} (LK)`,
     `FULL ZIP = manual backup (schema + logins + ${built.images} images + registers)`,
+    encrypted ? "🔒 Encrypted (Encryption Password)" : "Not encrypted",
+    encryptWarning,
     done.length ? `Saved to: ${done.join(" + ")}` : "",
     failed.length ? `Failed: ${failed.join("; ")}` : "",
   ]
@@ -327,6 +346,7 @@ export async function POST(req: NextRequest) {
     rows: built.totalRows,
     status,
     detail,
+    encrypted,
   });
 
   if (!done.length) return json({ ok: false, reason: "upload_failed", detail }, 500);
@@ -337,7 +357,8 @@ export async function POST(req: NextRequest) {
     rows: built.totalRows,
     tables: built.tables,
     images: built.images,
+    encrypted,
     destinations: done,
-    warnings: failed,
+    warnings: [encryptWarning, ...failed].filter(Boolean),
   });
 }

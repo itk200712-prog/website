@@ -20,6 +20,8 @@ export type BackupScheduleSettings = {
   /** තබා ගන්නා අලුත්ම auto-backup ගාණ (ඊට වඩා පරණ ඒවා මැකේ) */
   keepCount: number;
   megaFolder: string;
+  /** true නම් auto backup එකත් backup_encryption_password එකෙන් encrypt වෙනවා (manual encrypted backup වගේම Import වෙයි) */
+  encrypt: boolean;
 };
 
 export const SCHEDULE_SETTING_KEYS = {
@@ -31,6 +33,7 @@ export const SCHEDULE_SETTING_KEYS = {
   toMega: "backup_schedule_to_mega",
   keep: "backup_schedule_keep",
   megaFolder: "backup_schedule_mega_folder",
+  encrypt: "backup_schedule_encrypt",
 } as const;
 
 export const SCHEDULE_SECRET_KEYS = {
@@ -48,6 +51,7 @@ export const DEFAULT_SCHEDULE: BackupScheduleSettings = {
   toMega: false,
   keepCount: 8,
   megaFolder: "MPCS Backups",
+  encrypt: true,
 };
 
 function onOff(value: string | undefined, fallback: boolean): boolean {
@@ -75,6 +79,7 @@ export function parseScheduleSettings(get: (key: string) => string | undefined):
     toMega: onOff(get(SCHEDULE_SETTING_KEYS.toMega), false),
     keepCount: Number.isFinite(keep) ? Math.min(30, Math.max(2, keep)) : DEFAULT_SCHEDULE.keepCount,
     megaFolder: (get(SCHEDULE_SETTING_KEYS.megaFolder) ?? "").trim() || DEFAULT_SCHEDULE.megaFolder,
+    encrypt: onOff(get(SCHEDULE_SETTING_KEYS.encrypt), true),
   };
 }
 
@@ -89,6 +94,7 @@ export function scheduleSettingsRows(s: BackupScheduleSettings): { key: string; 
     { key: SCHEDULE_SETTING_KEYS.toMega, value: s.toMega ? "1" : "0" },
     { key: SCHEDULE_SETTING_KEYS.keep, value: String(s.keepCount) },
     { key: SCHEDULE_SETTING_KEYS.megaFolder, value: s.megaFolder },
+    { key: SCHEDULE_SETTING_KEYS.encrypt, value: s.encrypt ? "1" : "0" },
   ];
 }
 
