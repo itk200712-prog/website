@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  DatabaseBackup, Download, Eye, EyeOff, History, KeyRound, RefreshCw, ShieldCheck, UploadCloud, Save,
+  CalendarClock, Copy, DatabaseBackup, Download, Eye, EyeOff, History, KeyRound, Play, RefreshCw, ShieldCheck, UploadCloud, Save,
 } from "lucide-react";
 import { AdminTopbar, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
@@ -22,6 +22,10 @@ import {
   BACKUP_FORMAT_VERSION, decryptBackupText, isEncryptedBackupText, sha256Hex, summarizeInserts,
   type BackupManifest, type ParsedInsert,
 } from "@/lib/backup-utils";
+import {
+  buildCronSql, DEFAULT_SCHEDULE, lkDateParts, nextScheduleDate, parseScheduleSettings,
+  SCHEDULE_SECRET_KEYS, SCHEDULE_SETTING_KEYS, scheduleSettingsRows, type BackupScheduleSettings,
+} from "@/lib/scheduled-backup";
 import { logActivity } from "@/lib/activity";
 
 function formatFileSize(size?: number | null): string {
@@ -70,6 +74,15 @@ export default function AdminBackupPage() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [intervalDays, setIntervalDays] = useState(7);
+  // 📅 Scheduled auto-backup (දවස් ගාණ + වෙලාව + Supabase/MEGA)
+  const [sch, setSch] = useState<BackupScheduleSettings>(DEFAULT_SCHEDULE);
+  const [megaEmail, setMegaEmail] = useState("");
+  const [megaPwInput, setMegaPwInput] = useState("");
+  const [megaPwSaved, setMegaPwSaved] = useState(false);
+  const [cronSecret, setCronSecret] = useState("");
+  const [showCronSql, setShowCronSql] = useState(false);
+  const [savingSch, setSavingSch] = useState(false);
+  const [testingSch, setTestingSch] = useState(false);
   const [safetyFirst, setSafetyFirst] = useState(true); // 🛡 import එකට කලින් auto safety-backup
   const [confirmText, setConfirmText] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -91,6 +104,79 @@ export default function AdminBackupPage() {
     setHistoryError(result.error);
     setHistoryLoading(false);
     return result.entries;
+  }
+
+  // 📅 Scheduled settings save — anchor එක අදට වැටෙන නිසා පළමු auto backup එක
+  // අදින් දවස් interval එකකට පස්සේ තෝරපු වෙලාවට යයි.
+  async function saveSchedule() {
+    if (sch.enabled && !sch.toSupabase && !sch.toMega) {
+      return show("⚠ Backup එක යන තැනක් තෝරන්න — Supabase හරි MEGA හරි එකක්වත් on කරන්න");
+    }
+    if (sch.toMega && !megaEmail.trim()) return show("⚠ MEGA email එක දාන්න");
+    if (sch.toMega && !megaPwSaved && !megaPwInput.trim()) return show("⚠ MEGA password එක දාන්න");
+    setSavingSch(true);
+    try {
+      const sb = await authedClient();
+      const next: BackupScheduleSettings = { ...sch, anchorDate: lkDateParts().dateStr };
+      const { error } = await sb.from("system_settings").upsert(scheduleSettingsRows(next), { onConflict: "key" });
+      if (error) throw new Error(error.message);
+      const emailErr = await setBackupSecret(SCHEDULE_SECRET_KEYS.megaEmail, megaEmail.trim());
+      if (emailErr) throw new Error(emailErr);
+      if (megaPwInput.trim()) {
+        const pwErr = await setBackupSecret(SCHEDULE_SECRET_KEYS.megaPassword, megaPwInput.trim());
+        if (pwErr) throw new Error(pwErr);
+        setMegaPwSaved(true);
+        setMegaPwInput("");
+      }
+      setSch(next);
+      void logActivity(
+        "BACKUP_SCHEDULE",
+        `Scheduled auto-backup ${next.enabled ? "enabled" : "disabled"} · every ${next.intervalDays} day(s) at ${next.timeHHMM} · to ${[next.toSupabase ? "Supabase" : "", next.toMega ? "MEGA" : ""].filter(Boolean).join("+") || "none"}`
+      );
+      show(
+        next.enabled
+          ? `✅ Save වුණා — පළමු auto backup එක: ${nextScheduleDate(next)} දවසේ ${next.timeHHMM} ට (Cron SQL එක run කරලා නැත්නම් පහතින් run කරන්න)`
+          : "✅ Save වුණා — Scheduled auto-backup එක off කරලා"
+      );
+    } catch (e) {
+      show(`⚠ ${(e as Error).message}`);
+    }
+    setSavingSch(false);
+  }
+
+  async function generateCronSecret() {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    const secret = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const err = await setBackupSecret(SCHEDULE_SECRET_KEYS.cronSecret, secret);
+    if (err) return show(`⚠ ${err}`);
+    setCronSecret(secret);
+    setShowCronSql(true);
+    show("✅ අලුත් Cron secret එක හැදුවා — දැන් පහත SQL එක copy කරලා Supabase SQL Editor එකේ run කරන්න (පරණ SQL එක run කරලා තිබ්බොත් ආයේ run කරන්න)");
+  }
+
+  async function testScheduleRun() {
+    if (!cronSecret) return show("⚠ මුලින්ම Cron secret එකක් හදන්න");
+    setTestingSch(true);
+    try {
+      const r = await fetch("/api/scheduled-backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-backup-secret": cronSecret },
+        body: JSON.stringify({ force: true }),
+      });
+      const j = (await r.json().catch(() => null)) as {
+        ok?: boolean; file?: string; destinations?: string[]; reason?: string; detail?: string; warnings?: string[];
+      } | null;
+      if (j?.ok) {
+        show(`✅ Test backup එක හරි! ${j.file ?? ""} → ${(j.destinations ?? []).join(" + ")}${j.warnings?.length ? ` · ⚠ ${j.warnings.join("; ")}` : ""}`);
+        await loadBackupHistory();
+      } else {
+        show(`⚠ Test එක අසාර්ථකයි: ${j?.detail || j?.reason || `HTTP ${r.status}`}`);
+      }
+    } catch (e) {
+      show(`⚠ ${(e as Error).message}`);
+    }
+    setTestingSch(false);
   }
 
   useEffect(() => {
@@ -126,6 +212,21 @@ export default function AdminBackupPage() {
           .maybeSingle();
         const iv = parseInt(ivRow?.value ?? "", 10);
         if (iv > 0) setIntervalDays(iv);
+        // 📅 Scheduled auto-backup settings + රහස් තත්ත්වය
+        const { data: schRows } = await sb
+          .from("system_settings")
+          .select("key,value")
+          .in("key", Object.values(SCHEDULE_SETTING_KEYS));
+        const schMap = new Map(((schRows ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
+        setSch(parseScheduleSettings((k) => schMap.get(k)));
+        const { data: secRows } = await sb
+          .from("backup_secrets")
+          .select("key,value")
+          .in("key", Object.values(SCHEDULE_SECRET_KEYS));
+        const secMap = new Map(((secRows ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
+        setMegaEmail(secMap.get(SCHEDULE_SECRET_KEYS.megaEmail) ?? "");
+        setMegaPwSaved(Boolean((secMap.get(SCHEDULE_SECRET_KEYS.megaPassword) ?? "").trim()));
+        setCronSecret(secMap.get(SCHEDULE_SECRET_KEYS.cronSecret) ?? "");
       }
     })();
   }, []);
@@ -649,15 +750,186 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         )}
       </div>
 
+      {/* 📅 SCHEDULED AUTO-BACKUP — දවස් ගාණ + වෙලාව + Supabase/MEGA */}
+      <div className="card p-6 mt-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+            <CalendarClock size={19} className="text-indigo-600" /> Scheduled Auto-Backup
+          </h3>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${sch.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+            {sch.enabled ? "AUTO ON" : "AUTO OFF"}
+          </span>
+        </div>
+        <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
+          දවස් කීයකට වරක්ද, කීයටද කියා තෝරලා Save කරන්න — ඊට පස්සේ ඒ දවසේ ඒ වෙලාවට backup එක
+          ඉබේම අරගෙන තෝරපු තැනට (Supabase සහ/හෝ MEGA) upload වෙනවා. පළමු එක <b>අදින් දවස් {sch.intervalDays}කට පස්සේ</b> යයි.
+          (මෙය data-only backup එකක් — සම්පූර්ණ ZIP backup එකත් මාසෙකට වරක්වත් ගන්න.)
+        </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={sch.enabled} onChange={(e) => setSch({ ...sch, enabled: e.target.checked })} />
+            <span><b>Auto-backup on කරන්න</b><br /><span className="text-slate-500">නියමිත දවසේ/වෙලාවට ඉබේම ගනී</span></span>
+          </label>
+          <div>
+            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">දවස් කීයකට වරක්ද?</label>
+            <div className="mt-1 flex items-center gap-1.5">
+              {[1, 3, 7, 14].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setSch({ ...sch, intervalDays: d })}
+                  className={`rounded-lg px-2 py-1.5 text-[11px] font-extrabold ${sch.intervalDays === d ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                >
+                  {d}යි
+                </button>
+              ))}
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={sch.intervalDays}
+                onChange={(e) => setSch({ ...sch, intervalDays: Math.min(30, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+                className="w-16 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-[12px] outline-none focus:border-indigo-400 focus:bg-white"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">වෙලාව (ශ්‍රී ලංකා)</label>
+            <input
+              type="time"
+              value={sch.timeHHMM}
+              onChange={(e) => setSch({ ...sch, timeHHMM: e.target.value || "09:00" })}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
+            />
+          </div>
+          <div>
+            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">තබා ගන්නා copies</label>
+            <input
+              type="number"
+              min={2}
+              max={30}
+              value={sch.keepCount}
+              onChange={(e) => setSch({ ...sch, keepCount: Math.min(30, Math.max(2, parseInt(e.target.value, 10) || 8)) })}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
+            />
+            <div className="mt-0.5 text-[10px] text-slate-400">ඊට වඩා පරණ auto-backup ඉබේම මැකේ</div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={sch.toSupabase} onChange={(e) => setSch({ ...sch, toSupabase: e.target.checked })} />
+            <span><b>Supabase එකටත් දාන්න</b><br /><span className="text-slate-500">private “backups” bucket එකට (site එක ඇතුළේම copy එකක්)</span></span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={sch.toMega} onChange={(e) => setSch({ ...sch, toMega: e.target.checked })} />
+            <span><b>MEGA එකටත් දාන්න</b><br /><span className="text-slate-500">ඔයාගේ MEGA ගිණුමේ folder එකකට auto upload වෙනවා</span></span>
+          </label>
+        </div>
+
+        {sch.toMega && (
+          <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50/60 p-4">
+            <div className="text-[12px] font-extrabold text-slate-800">🔴 MEGA ගිණුම</div>
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+              Backup වලටම <b>වෙන්ම හදපු MEGA ගිණුමක්</b> පාවිච්චි කරන්න. එහි <b>2FA දාලා තියෙන්න බෑ</b> (auto login හිරවෙනවා).
+              Password එක superadmin ලට විතරක් පෙනෙන රහස් තැනක save වෙනවා; ආයෙත් සම්පූර්ණයෙන් පෙන්වන්නේ නෑ.
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <input
+                type="email"
+                value={megaEmail}
+                onChange={(e) => setMegaEmail(e.target.value)}
+                placeholder="MEGA email එක"
+                autoComplete="off"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400"
+              />
+              <input
+                type="password"
+                value={megaPwInput}
+                onChange={(e) => setMegaPwInput(e.target.value)}
+                placeholder={megaPwSaved ? "Password එක save වෙලා ✓ (අලුත් එකක් දාන්න නම් ලියන්න)" : "MEGA password එක"}
+                autoComplete="new-password"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400"
+              />
+              <input
+                type="text"
+                value={sch.megaFolder}
+                onChange={(e) => setSch({ ...sch, megaFolder: e.target.value })}
+                placeholder="Folder නම (උදා: MPCS Backups)"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[11.5px] leading-relaxed text-amber-800">
+          <b>⏰ Timer එක (එක වරක් විතරයි):</b> {cronSecret ? "Cron secret එක තියෙනවා ✓" : "මුලින්ම Cron secret එකක් හදන්න"} —
+          පහත SQL එක copy කරලා <b>Supabase → SQL Editor</b> එකේ <b>එක වරක්</b> run කරන්න. ඊට පස්සේ දවස්/වෙලාව වෙනස් කරන හැම එකම මෙතැනින් විතරයි.
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" onClick={() => void generateCronSecret()} className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-extrabold text-white hover:bg-amber-700">
+              <KeyRound size={12} className="mr-1 inline" /> {cronSecret ? "අලුත් secret එකක් හදන්න" : "Cron secret එක හදන්න"}
+            </button>
+            {cronSecret && (
+              <button
+                type="button"
+                onClick={() => {
+                  const sql = buildCronSql(window.location.origin, cronSecret);
+                  void navigator.clipboard?.writeText(sql).then(
+                    () => show("✅ SQL එක copy වුණා — Supabase SQL Editor එකේ paste කරලා Run කරන්න"),
+                    () => setShowCronSql(true)
+                  );
+                }}
+                className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-extrabold text-amber-700 ring-1 ring-amber-300 hover:bg-amber-100"
+              >
+                <Copy size={12} className="mr-1 inline" /> SQL එක copy කරන්න
+              </button>
+            )}
+            {cronSecret && (
+              <button type="button" onClick={() => setShowCronSql((v) => !v)} className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-extrabold text-amber-700 ring-1 ring-amber-300 hover:bg-amber-100">
+                {showCronSql ? "SQL එක හංගන්න" : "SQL එක බලන්න"}
+              </button>
+            )}
+          </div>
+          {showCronSql && cronSecret && (
+            <textarea
+              readOnly
+              value={buildCronSql(typeof window !== "undefined" ? window.location.origin : "", cronSecret)}
+              className="mt-2 h-44 w-full rounded-xl border border-amber-200 bg-white p-3 font-mono text-[10.5px] text-slate-700 outline-none"
+              onFocus={(e) => e.target.select()}
+            />
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button onClick={() => void saveSchedule()} disabled={savingSch} className="btn btn-primary !py-2.5 !px-4 !text-[12px]">
+            <Save size={13} /> {savingSch ? "Saving…" : "Save schedule"}
+          </button>
+          <button onClick={() => void testScheduleRun()} disabled={testingSch || savingSch} className="btn btn-outline !py-2.5 !px-4 !text-[12px]">
+            <Play size={13} /> {testingSch ? "Backup කරනවා…" : "දැන්ම Test එකක් දුවවන්න"}
+          </button>
+          <span className="text-[11px] text-slate-500">
+            {(() => {
+              const last = history.find((h) => h.action === "scheduled");
+              return sch.enabled
+                ? `ඊළඟ auto backup: ${nextScheduleDate(sch)} · ${sch.timeHHMM}${last ? ` · අන්තිම එක: ${formatHistoryTime(last.created_at)} (${last.status})` : " · තාම එකක්වත් ගිහින් නෑ"}`
+                : last
+                  ? `අන්තිම scheduled එක: ${formatHistoryTime(last.created_at)} (${last.status})`
+                  : "Scheduled එක off කරලා තියෙන්නේ";
+            })()}
+          </span>
+        </div>
+      </div>
+
       {/* EXTRA SAFETY — scheduled + cloud */}
       <div className="card p-6 mt-6">
         <h3 className="text-lg font-extrabold text-slate-900">🛡️ අමතර ආරක්ෂාව</h3>
         <div className="grid gap-4 sm:grid-cols-2 mt-3 text-[12px] text-slate-600">
           <div className="rounded-2xl border border-slate-200 p-4">
-            <div className="font-extrabold text-slate-800">📅 Scheduled auto-backup (උසස්)</div>
+            <div className="font-extrabold text-slate-800">📅 Scheduled auto-backup</div>
             <p className="mt-1">
-              Repo එකේ <span className="font-mono">supabase/functions/scheduled-backup</span> එක deploy කළොත් සතියකට වරක් data-only backup එකක් ඉබේම{" "}
-              <span className="font-mono">backups</span> bucket එකට වැටෙනවා. සක්‍රිය කරන පියවර backup ZIP එකේ <b>RECOVERY.txt</b> එකේ ඇත. (මේ පිටුවේ උඩ තියන මතක් කිරීමේ banner එක දැනටමත් ක්‍රියාත්මකයි.)
+              උඩ තියෙන <b>Scheduled Auto-Backup</b> card එකෙන් දවස් ගාණයි වෙලාවයි තෝරලා Save කරන්න —
+              backup එක ඉබේම Supabase එකට සහ/හෝ MEGA එකට යනවා. සියල්ල Backup History එකේ “Scheduled” කියා සටහන් වෙනවා.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 p-4">

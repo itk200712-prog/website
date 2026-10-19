@@ -553,7 +553,13 @@ export async function getBackupSecrets(): Promise<{ download: string; importPw: 
 }
 
 export async function setBackupSecret(
-  key: "backup_download_password" | "backup_import_password" | "backup_encryption_password",
+  key:
+    | "backup_download_password"
+    | "backup_import_password"
+    | "backup_encryption_password"
+    | "mega_email"
+    | "mega_password"
+    | "backup_cron_secret",
   value: string
 ) {
   const sb = await authedClient();

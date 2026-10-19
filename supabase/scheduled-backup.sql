@@ -1,11 +1,12 @@
 -- ============================================================================
--- Scheduled auto-backup setup — මේ file එක Supabase SQL Editor එකේ run කරන්න
--- කලින්: supabase functions deploy scheduled-backup
---        supabase secrets set BACKUP_CRON_SECRET=<රහස් වචනයක්>
--- ⚠ පහත placeholders තුන පුරවන්න: <PROJECT_REF>, <ANON_KEY>, <CRON_SECRET>
+-- Scheduled auto-backup timer — මේ file එක Supabase SQL Editor එකේ run කරන්න
+-- විනාඩි 15කට වරක් site එකේ /api/scheduled-backup එක check කරයි.
+-- ඇත්ත දවස (දවස් 3න්/7න්…) සහ වෙලාව තෝරන්නේ Admin → Backup & Restore එකෙන්.
+-- ⚠ <CRON_SECRET> වෙනුවට Admin → Backup & Restore → Scheduled card එකේ
+--    ඇති Cron secret එක දාන්න. (Admin එකේ "Copy SQL" එකෙන් ලෑස්ති එකම ගන්නත් පුළුවන්.)
 -- ============================================================================
 
--- 1) private backups bucket එක
+-- 1) private backups bucket එක (Supabase destination එකට)
 insert into storage.buckets (id, name, public)
 values ('backups', 'backups', false)
 on conflict (id) do nothing;
@@ -14,20 +15,20 @@ on conflict (id) do nothing;
 create extension if not exists pg_net with schema extensions;
 create extension if not exists pg_cron;
 
--- 3) සතියකට වරක් — ඉරිදා 20:30 UTC (= සඳුදා පාන්දර 2:00 ශ්‍රී ලංකා වේලාවෙන්)
+-- 3) පරණ weekly job එක (තියේ නම්) සහ මේ job එක පිරිසිදු කර නැවත දායි
 select cron.unschedule('weekly-site-backup')
 where exists (select 1 from cron.job where jobname = 'weekly-site-backup');
+select cron.unschedule('mpcs-auto-backup-check')
+where exists (select 1 from cron.job where jobname = 'mpcs-auto-backup-check');
 
 select cron.schedule(
-  'weekly-site-backup',
-  '30 20 * * 0',
+  'mpcs-auto-backup-check',
+  '*/15 * * * *',
   $$
   select net.http_post(
-    url     := 'https://<PROJECT_REF>.supabase.co/functions/v1/scheduled-backup',
+    url     := 'https://website-blond-eta-94.vercel.app/api/scheduled-backup',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer <ANON_KEY>',
-      'apikey', '<ANON_KEY>',
       'x-backup-secret', '<CRON_SECRET>'
     ),
     body    := '{}'::jsonb
@@ -35,5 +36,4 @@ select cron.schedule(
   $$
 );
 
--- පරීක්ෂාවට: select * from cron.job;
--- අතින් වරක් දුවවන්න: ඉහත net.http_post(...) කොටස් එක එලෙසම run කරන්න.
+-- පරීක්ෂාවට: select jobname, schedule, active from cron.job;

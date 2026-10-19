@@ -416,9 +416,10 @@ ok("restore: partial restore (onlyTables) supported", backupSrc.includes("onlyTa
 const adminBackupSrc = readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8");
 ok("admin backup: preview + type-to-confirm RESTORE + safety backup + last-backup reminder",
   adminBackupSrc.includes("prepareImport") && adminBackupSrc.includes('confirmText !== "RESTORE"') && adminBackupSrc.includes("SAFETY-backup") && adminBackupSrc.includes("backup_interval_days"));
-ok("scheduled backup: Edge Function + pg_cron SQL in repo",
-  readFileSync(join(root, "supabase/functions/scheduled-backup/index.ts"), "utf8").includes("Deno.serve") &&
-  readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("cron.schedule"));
+ok("scheduled backup: site API route + pg_cron SQL in repo (no Edge Function deploy needed)",
+  readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8").includes("backupDueDecision") &&
+  readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("cron.schedule") &&
+  readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("mpcs-auto-backup-check"));
 
 console.log("\n── 16) Baymax Gemini AI fallback (server-side only key) ──");
 const baymaxAi = await import("../src/lib/baymax-ai.ts");
@@ -646,7 +647,7 @@ ok("data: uploaded sheets can be deleted one-by-one or all (members + voters, co
   dataSrc.includes("DATA_DELETE") &&
   dataSrc.includes('<ImportPanel kind="member"') &&
   dataSrc.includes('<ImportPanel kind="voter"'));
-const scheduledBackupSrc = readFileSync(join(root, "supabase/functions/scheduled-backup/index.ts"), "utf8");
+const scheduledBackupSrc = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
 ok("backup: separate encryption password + saved download/import history (actor/date/time)",
   backupTables.includes("backup_history") &&
   backupSrc.includes("backup_encryption_password") &&
@@ -659,7 +660,7 @@ ok("backup: separate encryption password + saved download/import history (actor/
   adminBackupSrc.includes('action: "import"') &&
   schema.includes("create table if not exists public.backup_history") &&
   schema.includes("backup_history_super") &&
-  scheduledBackupSrc.includes('{ name: "backup_history", pk: "id" }') &&
+  backupSrc.includes('{ name: "backup_history", pk: "id" }') &&
   scheduledBackupSrc.includes('action: "scheduled"'));
 
 console.log("\n── 21) Baymax professional upgrade (greeting · identity · complete answers · links) ──");
@@ -772,6 +773,66 @@ ok("identity: 'you said google/gemini before' is answered by fixed identity, not
   bot.detectBotIdentityIntent("ඔයා කලින් කීවෙ google කියා gemini කියා") === "model" &&
   bot.detectBotIdentityIntent("oya kalin kiwwe google kiyala") === "model" &&
   bot.detectBotIdentityIntent("you said you are gemini") === "model");
+
+console.log("\n── 23) Scheduled auto-backup (interval days + time → Supabase/MEGA) ──");
+const sched = await import("../src/lib/scheduled-backup.ts");
+const schSettings = sched.parseScheduleSettings((k) => ({
+  backup_schedule_enabled: "1",
+  backup_schedule_interval_days: "3",
+  backup_schedule_time: "9:00",
+  backup_schedule_anchor: "2026-10-16",
+  backup_schedule_to_supabase: "1",
+  backup_schedule_to_mega: "1",
+  backup_schedule_keep: "8",
+  backup_schedule_mega_folder: "MPCS Backups",
+}[k]));
+ok("schedule: settings parse + normalize + rows roundtrip",
+  schSettings.enabled === true && schSettings.intervalDays === 3 && schSettings.timeHHMM === "09:00" &&
+  schSettings.toMega === true && schSettings.keepCount === 8 &&
+  sched.scheduleSettingsRows(schSettings).length === 8 &&
+  sched.parseScheduleSettings((k) => Object.fromEntries(sched.scheduleSettingsRows(schSettings).map((r) => [r.key, r.value]))[k]).intervalDays === 3 &&
+  sched.parseScheduleSettings(() => undefined).enabled === false &&
+  sched.parseScheduleSettings((k) => k === "backup_schedule_interval_days" ? "99" : undefined).intervalDays === 30);
+const lkAt = (day: number, h: number, m: number) => new Date(Date.UTC(2026, 9, day, h, m) - 330 * 60_000);
+ok("schedule: due logic (anchor+3 days at/after 09:00 LK, once per due day)",
+  sched.isScheduleDay(schSettings, "2026-10-16") === false &&
+  sched.isScheduleDay(schSettings, "2026-10-19") === true &&
+  sched.isScheduleDay(schSettings, "2026-10-20") === false &&
+  sched.backupDueDecision(schSettings, null, lkAt(19, 10, 0)).due === true &&
+  sched.backupDueDecision(schSettings, null, lkAt(19, 8, 0)).reason === "before_time" &&
+  sched.backupDueDecision(schSettings, null, lkAt(18, 10, 0)).reason === "not_schedule_day" &&
+  sched.backupDueDecision(schSettings, "2026-10-19", lkAt(19, 12, 0)).reason === "already_done_today" &&
+  sched.backupDueDecision({ ...schSettings, enabled: false }, null, lkAt(19, 10, 0)).reason === "disabled" &&
+  sched.nextScheduleDate(schSettings, lkAt(17, 10, 0)) === "2026-10-19" &&
+  sched.lkDateParts(new Date(Date.UTC(2026, 9, 19, 3, 0))).dateStr === "2026-10-19" &&
+  sched.autoBackupFileName(lkAt(19, 10, 0)) === "database-2026-10-19.sql.gz");
+const cronSqlSample = sched.buildCronSql("https://example.vercel.app/", "s3cr3t");
+ok("schedule: cron SQL = every 15 min to site route with secret header + bucket",
+  cronSqlSample.includes("*/15 * * * *") &&
+  cronSqlSample.includes("https://example.vercel.app/api/scheduled-backup") &&
+  cronSqlSample.includes("'x-backup-secret', 's3cr3t'") &&
+  cronSqlSample.includes("storage.buckets") &&
+  readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("mpcs-auto-backup-check"));
+ok("schedule: route is secret-gated, gzips dump, uploads Supabase+MEGA, records history",
+  scheduledBackupSrc.includes('req.headers.get("x-backup-secret")') &&
+  scheduledBackupSrc.includes("unauthorized") &&
+  scheduledBackupSrc.includes("gzipSync") &&
+  scheduledBackupSrc.includes('await import("megajs")') &&
+  scheduledBackupSrc.includes("uploadToMega") &&
+  scheduledBackupSrc.includes("uploadToSupabase") &&
+  scheduledBackupSrc.includes("BACKUP_TABLES") &&
+  scheduledBackupSrc.includes("force") &&
+  scheduledBackupSrc.includes("backup_history"));
+ok("schedule: Admin card (interval/time/destinations/MEGA/cron SQL/test run) + secrets in backup_secrets",
+  adminBackupSrc.includes("Scheduled Auto-Backup") &&
+  adminBackupSrc.includes("saveSchedule") &&
+  adminBackupSrc.includes("testScheduleRun") &&
+  adminBackupSrc.includes("buildCronSql") &&
+  adminBackupSrc.includes("generateCronSecret") &&
+  adminBackupSrc.includes("megaEmail") &&
+  backupSrc.includes('"mega_password"') &&
+  backupSrc.includes('"backup_cron_secret"') &&
+  backupTables.includes("backup_secrets"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
