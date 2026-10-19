@@ -202,11 +202,22 @@ reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒව�
   දාන්න AI ට උපදෙස් ඇත; search grounding එකෙන් ලැබෙන සෘජු source links
   «🔗 අදාළ සබැඳි» ලෙස පිළිතුර අගට එකතු වේ. Chat බුබුළුවල සියලුම
   `https://…` / `www.…` ලිපින දැන් ඔබා යන්න පුළුවන් clickable links.
+- **API keys 5ක් + auto rotation:** Admin → Live Chat එකෙන් Gemini keys
+  **5ක් දක්වා** save කරන්න පුළුවන් (`backup_secrets` හි `gemini_api_key`,
+  `gemini_api_key_2` … `_5` slots; පළමු slot එක පරණ නමම නිසා දැනට ඇති key
+  එක එලෙසම වැඩ කරයි). Server එක Key 1න් පටන් ගෙන, එහි quota/limit ඉවර
+  වුණොත් (429) හෝ key එක වලංගු නැත්නම් (400/401/403) **auto ඊළඟ key එකට**
+  මාරු වේ — Key 1 → 2 → 3 → 4 → 5. `GEMINI_API_KEY` env එකක් ඇත්නම් එය
+  rotation එකේ මුලින්ම එයි. Keys ඔක්කොම Backup ZIP එකේත් යනවා
+  (`backup_secrets` table එකම backup වෙන නිසා අලුත් දෙයක් කරන්න ඕනේ නෑ).
+- **සිංහල නම:** සිංහල පිළිතුරුවල නිර්මාණකරුගේ නම හැමවිටම **ඉඳුවර තත්සර**
+  (ඉන්ඳුවර නෙවෙයි) — canned පිළිතුරුවලත්, AI system instruction එකේත්
+  එලෙසම ස්ථිර කර ඇත.
 
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 277 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links)
+npx -y tsx scripts/test.mts   # 282 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation
 npm run build                 # production build
 ```
 

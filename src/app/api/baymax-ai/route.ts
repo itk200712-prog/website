@@ -11,8 +11,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildGeminiRequest,
+  collectApiKeys,
   DEFAULT_GEMINI_MODEL,
   extractGeminiResult,
+  GEMINI_API_KEY_SLOTS,
   isAiEnabledValue,
   modelFallbackChain,
   normalizeAiHistory,
@@ -77,7 +79,8 @@ async function supabaseRest(path: string, key: string): Promise<unknown[] | null
 type AiConfig = {
   enabled: boolean;
   model: string;
-  apiKey: string;
+  /** rotation පිළිවෙළට ඇති keys (env key එක මුලින්ම, පසුව Admin එකෙන් දාපු 1–5) */
+  apiKeys: string[];
   /** server එකට key එක කියවන්න විදිහක් තියෙනවද (env key හෝ service-role key) */
   serverConfigured: boolean;
 };
@@ -100,16 +103,19 @@ async function loadConfig(): Promise<AiConfig> {
     model = normalizeGeminiModel(map.get("chat_ai_model"));
   }
 
-  let apiKey = envKey;
-  if (!apiKey && serviceKey) {
+  // Admin එකෙන් දාපු keys 5ම (slot පිළිවෙළට) — එකක් limit වුණොත් ඊළඟ එක
+  let storedKeys: string[] = [];
+  if (serviceKey) {
     const rows = (await supabaseRest(
-      "backup_secrets?select=value&key=eq.gemini_api_key",
+      `backup_secrets?select=key,value&key=in.(${GEMINI_API_KEY_SLOTS.join(",")})`,
       serviceKey
-    )) as { value: string }[] | null;
-    apiKey = String(rows?.[0]?.value ?? "").trim();
+    )) as { key: string; value: string }[] | null;
+    const bySlot = new Map((rows ?? []).map((r) => [r.key, r.value]));
+    storedKeys = GEMINI_API_KEY_SLOTS.map((slot) => bySlot.get(slot) ?? "");
   }
+  const apiKeys = collectApiKeys([envKey, ...storedKeys]);
 
-  return { enabled, model, apiKey, serverConfigured: Boolean(envKey || serviceKey) };
+  return { enabled, model, apiKeys, serverConfigured: Boolean(envKey || serviceKey) };
 }
 
 /** Admin → Live Chat එකේ setup status එක පෙන්වන්න (key එක return වෙන්නේ නෑ) */
@@ -119,7 +125,8 @@ export async function GET(req: NextRequest) {
   return json({
     ok: true,
     enabled: c.enabled,
-    configured: Boolean(c.apiKey),
+    configured: c.apiKeys.length > 0,
+    keys: c.apiKeys.length,
     serverConfigured: c.serverConfigured,
     model: c.model,
   });
@@ -200,7 +207,8 @@ type GeminiAnswer = { ok: true; answer: string; model: string } | { ok: false; s
  * Model එකක් නැත්නම් (404) හෝ එහි quota ඉවර නම් (429) ඊළඟ model එකට යනවා;
  * quota එක model එක අනුව වෙනස් නිසා එකක් බ්ලොක් වුණත් අනිකෙන් උත්තරේ එන්න පුළුවන්.
  */
-async function callGeminiWithFallbacks(
+/** එක් key එකකින් model fallback chain එකම උත්සාහ කරයි */
+async function tryWithKey(
   apiKey: string,
   selectedModel: string,
   question: string,
@@ -228,6 +236,29 @@ async function callGeminiWithFallbacks(
   return { ok: false, status: lastStatus };
 }
 
+/**
+ * Key rotation: පළමු key එකෙන් පටන් ගනී. එහි quota/limit ඉවර නම් (429)
+ * හෝ key එක වලංගු නැත්නම් (400/401/403) ඊළඟ key එකට auto මාරු වේ —
+ * Key 1 → Key 2 → Key 3 … keys ඉවර වෙනකම්ම.
+ */
+async function callGeminiWithFallbacks(
+  apiKeys: string[],
+  selectedModel: string,
+  question: string,
+  language: BaymaxAiLanguage,
+  history: AiHistoryTurn[]
+): Promise<GeminiAnswer> {
+  let lastStatus = 0;
+  for (const apiKey of apiKeys) {
+    const result = await tryWithKey(apiKey, selectedModel, question, language, history);
+    if (result.ok) return result;
+    lastStatus = result.status;
+    // quota ඉවරයි (429) හෝ key එක වැරදියි (400/401/403) නම් විතරක් ඊළඟ key එකට
+    if (![400, 401, 403, 429].includes(lastStatus)) break;
+  }
+  return { ok: false, status: lastStatus };
+}
+
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return json({ ok: false, reason: "forbidden" }, 403);
   if (rateLimited(req)) return json({ ok: false, reason: "rate_limited" }, 429);
@@ -246,9 +277,9 @@ export async function POST(req: NextRequest) {
   const c = await loadConfig();
   if (!c.enabled) return json({ ok: false, reason: "disabled" });
   if (!c.serverConfigured) return json({ ok: false, reason: "server_not_configured" });
-  if (!c.apiKey) return json({ ok: false, reason: "not_configured" });
+  if (!c.apiKeys.length) return json({ ok: false, reason: "not_configured" });
 
-  const result = await callGeminiWithFallbacks(c.apiKey, c.model, question, language, history);
+  const result = await callGeminiWithFallbacks(c.apiKeys, c.model, question, language, history);
   if (result.ok) return json({ ok: true, answer: result.answer, model: result.model });
   return json({
     ok: false,

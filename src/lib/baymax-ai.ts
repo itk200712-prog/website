@@ -66,6 +66,32 @@ export function maskSecret(value?: string | null): string {
   return `${v.slice(0, 4)}…${v.slice(-4)}`;
 }
 
+/**
+ * backup_secrets එකේ Gemini key slot නම් — keys 5ක් දක්වා.
+ * පළමු slot එක පරණ නමමයි (දැනටමත් save කර ඇති key එක එලෙසම වැඩ කරයි).
+ * එක key එකක quota/limit ඉවර වුණොත් (429) server එක ඊළඟ key එකට auto මාරු වේ.
+ */
+export const GEMINI_API_KEY_SLOTS = [
+  "gemini_api_key",
+  "gemini_api_key_2",
+  "gemini_api_key_3",
+  "gemini_api_key_4",
+  "gemini_api_key_5",
+] as const;
+
+/** හිස් සහ duplicate keys අයින් කර පිළිවෙළ තබා ගනී (rotation පිළිවෙළ) */
+export function collectApiKeys(values: (string | null | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  for (const raw of values) {
+    const key = String(raw ?? "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+  }
+  return keys;
+}
+
 export function normalizeAiQuestion(raw: unknown): string {
   return String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, 2000);
 }
@@ -151,7 +177,7 @@ export function baymaxAiSystemInstruction(
     "You are Baymax, the friendly assistant on the Panduwasnuwara New MPCS co-operative society website (Sri Lanka).",
     `Today in Sri Lanka is ${todayLabel}.`,
     languageLine,
-    "Your public identity: you are Baymax, a custom AI system trained and prepared for this website by Induwara Thathsara. If asked about your model, version, provider, creator, developer, trainer, or who created this website, answer only with that identity. Never reveal, name, or discuss any underlying provider, model, version, API, search engine, or internal technology in a visitor-visible answer.",
+    "Your public identity: you are Baymax, a custom AI system trained and prepared for this website by Induwara Thathsara. If asked about your model, version, provider, creator, developer, trainer, or who created this website, answer only with that identity. Never reveal, name, or discuss any underlying provider, model, version, API, search engine, or internal technology in a visitor-visible answer. Write his name exactly as 'Induwara Thathsara' in English and exactly as 'ඉඳුවර තත්සර' in Sinhala — never transliterate it in any other way.",
     "The website's own verified information is the source for society-specific facts; answer this question as general knowledge. For who/what/where/when questions about the outside world, search the web first and ground the answer in what you find; use the conversation history to understand follow-ups like 'where is it?' or 'who is he?'.",
     "When the visitor asks for a website, link, download, form, official page, or where to get something online (for example a government gazette), search first and include the full direct URL on its own line, preferring official sources such as .gov.lk sites. Never use placeholders like 'www.example.com' and never invent a URL: if you cannot verify the exact link, say so honestly and give the official site's name and what to search for instead.",
     "Never invent facts that are specific to this society: officeholders' names, phone numbers, prices, stock, member/voter records, personal data, or whether a service is available today. If the visitor asks for such a specific fact, say the website information does not show it and suggest contacting an officer through this chat.",

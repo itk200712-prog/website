@@ -18,7 +18,7 @@ import { authedClient } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { logActivity } from "@/lib/activity";
 import {
-  DEFAULT_GEMINI_MODEL, GEMINI_MODEL_OPTIONS, isAiEnabledValue, maskSecret, normalizeGeminiModel,
+  DEFAULT_GEMINI_MODEL, GEMINI_API_KEY_SLOTS, GEMINI_MODEL_OPTIONS, isAiEnabledValue, maskSecret, normalizeGeminiModel,
 } from "@/lib/baymax-ai";
 
 /** /api/baymax-ai එකෙන් එන reason එක admin ට තේරෙන වාක්‍යයකට */
@@ -85,8 +85,9 @@ export default function AdminLiveChatPage() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiModel, setAiModel] = useState<string>(DEFAULT_GEMINI_MODEL);
-  const [aiKeyInput, setAiKeyInput] = useState("");
-  const [aiKeyMask, setAiKeyMask] = useState("");
+  // 🔑 Keys 5ක් දක්වා — එකක් limit වුණොත් server එක auto ඊළඟ එකට මාරු වේ
+  const [aiKeyInputs, setAiKeyInputs] = useState<string[]>(() => GEMINI_API_KEY_SLOTS.map(() => ""));
+  const [aiKeyMasks, setAiKeyMasks] = useState<string[]>(() => GEMINI_API_KEY_SLOTS.map(() => ""));
   const [savingAi, setSavingAi] = useState(false);
   const [testingAi, setTestingAi] = useState(false);
   const [aiStatus, setAiStatus] = useState("");
@@ -114,12 +115,12 @@ export default function AdminLiveChatPage() {
       }
       setIsSuperAdmin(superAdmin);
       if (superAdmin) {
-        const { data: keyRow } = await sb
+        const { data: keyRows } = await sb
           .from("backup_secrets")
-          .select("value")
-          .eq("key", "gemini_api_key")
-          .maybeSingle();
-        setAiKeyMask(maskSecret((keyRow as { value?: string } | null)?.value));
+          .select("key,value")
+          .in("key", [...GEMINI_API_KEY_SLOTS]);
+        const bySlot = new Map(((keyRows ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
+        setAiKeyMasks(GEMINI_API_KEY_SLOTS.map((slot) => maskSecret(bySlot.get(slot))));
       }
       void refreshAiStatus();
 
@@ -194,13 +195,13 @@ export default function AdminLiveChatPage() {
   async function refreshAiStatus() {
     try {
       const r = await fetch("/api/baymax-ai", { cache: "no-store" });
-      const j = (await r.json()) as { ok?: boolean; serverConfigured?: boolean; configured?: boolean; enabled?: boolean };
+      const j = (await r.json()) as { ok?: boolean; serverConfigured?: boolean; configured?: boolean; keys?: number; enabled?: boolean };
       if (!j.ok) return;
       setAiStatus(
         !j.serverConfigured
           ? "🔴 Server setup එක අඩුයි — Vercel එකට SUPABASE_SERVICE_ROLE_KEY env එක දාලා redeploy කරන්න (පහත පියවර බලන්න)."
           : j.configured
-            ? `🟢 Server ready — Gemini key එක server එකට පේනවා${j.enabled ? " · AI on කරලා තියෙන්නේ" : " · AI තාම off"}`
+            ? `🟢 Server ready — API keys ${j.keys ?? 1}ක් server එකට පේනවා (එකක් limit වුණොත් auto ඊළඟ එකට මාරු වේ)${j.enabled ? " · AI on කරලා තියෙන්නේ" : " · AI තාම off"}`
             : "🟡 Server ready — තාම Gemini API key එකක් save කරලා නෑ."
       );
     } catch {
@@ -224,52 +225,61 @@ export default function AdminLiveChatPage() {
       return show(`⚠ ${error.message}`);
     }
 
-    let keyUpdated = false;
-    const newKey = aiKeyInput.trim();
-    if (newKey) {
+    // 🔑 අලුතින් ලියපු keys ඔක්කොම save කරයි (හිස් slot අලුතින් මොනවත් ලියලා නැත්නම් පරණ එකම තියේවි)
+    let keysUpdated = 0;
+    const pendingKeys = GEMINI_API_KEY_SLOTS.map((slot, i) => ({ slot, index: i, value: aiKeyInputs[i]?.trim() ?? "" })).filter((k) => k.value);
+    if (pendingKeys.length) {
       if (!isSuperAdmin) {
         setSavingAi(false);
         return show("⚠ API key එක save කරන්න superadmin ගිණුමෙන් login වෙන්න ඕනේ");
       }
-      if (newKey.length < 12) {
-        setSavingAi(false);
-        return show("⚠ මේක හරි Gemini API key එකක් වගේ නැහැ — ආයේ check කරන්න");
+      const nextMasks = [...aiKeyMasks];
+      const nextInputs = [...aiKeyInputs];
+      for (const pending of pendingKeys) {
+        if (pending.value.length < 12) {
+          setSavingAi(false);
+          return show(`⚠ Key ${pending.index + 1} එක හරි Gemini API key එකක් වගේ නැහැ — ආයේ check කරන්න`);
+        }
+        const { error: keyErr } = await sb
+          .from("backup_secrets")
+          .upsert({ key: pending.slot, value: pending.value }, { onConflict: "key" });
+        if (keyErr) {
+          setSavingAi(false);
+          return show(`⚠ ${keyErr.message}`);
+        }
+        nextMasks[pending.index] = maskSecret(pending.value);
+        nextInputs[pending.index] = "";
+        keysUpdated++;
       }
-      const { error: keyErr } = await sb
-        .from("backup_secrets")
-        .upsert({ key: "gemini_api_key", value: newKey }, { onConflict: "key" });
-      if (keyErr) {
-        setSavingAi(false);
-        return show(`⚠ ${keyErr.message}`);
-      }
-      setAiKeyMask(maskSecret(newKey));
-      setAiKeyInput("");
-      keyUpdated = true;
+      setAiKeyMasks(nextMasks);
+      setAiKeyInputs(nextInputs);
     }
 
     setAiModel(model);
     setSavingAi(false);
     void logActivity(
       "AI_SETTINGS",
-      `Baymax Gemini AI ${aiEnabled ? "enabled" : "disabled"} · model ${model}${keyUpdated ? " · API key updated" : ""}`
+      `Baymax Gemini AI ${aiEnabled ? "enabled" : "disabled"} · model ${model}${keysUpdated ? ` · API keys updated (${keysUpdated})` : ""}`
     );
     show("✅ Gemini AI settings saved — Baymax එකේ වහාම බලපානවා");
     void refreshAiStatus();
   }
 
-  async function clearAiKey() {
+  async function clearAiKey(index: number) {
     if (!isSuperAdmin) return;
+    const slot = GEMINI_API_KEY_SLOTS[index];
+    if (!slot) return;
     setSavingAi(true);
     const sb = await authedClient();
     const { error } = await sb
       .from("backup_secrets")
-      .upsert({ key: "gemini_api_key", value: "" }, { onConflict: "key" });
+      .upsert({ key: slot, value: "" }, { onConflict: "key" });
     setSavingAi(false);
     if (error) return show(`⚠ ${error.message}`);
-    setAiKeyMask("");
-    setAiKeyInput("");
-    void logActivity("AI_SETTINGS", "Baymax Gemini API key cleared");
-    show("✅ Gemini API key එක ඉවත් කළා");
+    setAiKeyMasks((xs) => xs.map((m, i) => (i === index ? "" : m)));
+    setAiKeyInputs((xs) => xs.map((v, i) => (i === index ? "" : v)));
+    void logActivity("AI_SETTINGS", `Baymax Gemini API key ${index + 1} cleared`);
+    show(`✅ Key ${index + 1} එක ඉවත් කළා`);
     void refreshAiStatus();
   }
 
@@ -526,27 +536,53 @@ export default function AdminLiveChatPage() {
 
           <div className="md:col-span-2">
             <label className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">
-              <KeyRound size={11} /> Gemini API key එක
+              <KeyRound size={11} /> Gemini API keys — 5ක් දක්වා (auto මාරු වේ)
             </label>
-            <input
-              type="password"
-              value={aiKeyInput}
-              onChange={(e) => setAiKeyInput(e.target.value)}
-              disabled={!isSuperAdmin}
-              autoComplete="new-password"
-              placeholder={aiKeyMask ? "අලුත් key එකක් දාන්න නම් මෙතැන paste කරන්න (හිස් තිබ්බොත් පරණ එකම තියේවි)" : "Gemini API key එක මෙතැන paste කරන්න…"}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white disabled:opacity-50"
-            />
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+              Keys කීපයක් දාන්න පුළුවන්. වැඩ කරන්නේ <b>Key 1</b> එකෙන් පටන් ගෙන — එහි limit/quota එක ඉවර වුණොත්
+              server එක <b>auto Key 2 → Key 3 → …</b> විදිහට ඊළඟ එකට මාරු වෙනවා. ඒ නිසා keys කීපයක් දාලා තිබ්බොත් බය වෙන්න දෙයක් නෑ.
+              හිස් තියෙන slot එකකට මොනවත් නොලිව්වොත් දැනට ඇති key එක එලෙසම තියේවි.
+            </p>
+            <div className="mt-2 space-y-2">
+              {GEMINI_API_KEY_SLOTS.map((slot, i) => (
+                <div key={slot} className="flex flex-wrap items-center gap-2">
+                  <span className="w-14 shrink-0 rounded-lg bg-indigo-50 px-2 py-1 text-center text-[10.5px] font-black text-indigo-700">
+                    Key {i + 1}
+                  </span>
+                  <input
+                    type="password"
+                    value={aiKeyInputs[i] ?? ""}
+                    onChange={(e) => setAiKeyInputs((xs) => xs.map((v, xi) => (xi === i ? e.target.value : v)))}
+                    disabled={!isSuperAdmin}
+                    autoComplete="new-password"
+                    placeholder={aiKeyMasks[i] ? "අලුත් key එකක් දාන්න නම් මෙතැන paste කරන්න" : `Gemini API key ${i + 1} එක මෙතැන paste කරන්න…`}
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white disabled:opacity-50"
+                  />
+                  <span className="text-[10.5px] font-semibold text-slate-500">
+                    {aiKeyMasks[i] ? <>🔒 <b>{aiKeyMasks[i]}</b></> : "තාම නෑ"}
+                  </span>
+                  {aiKeyMasks[i] && isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => void clearAiKey(i)}
+                      disabled={savingAi}
+                      className="inline-flex items-center gap-1 text-[10.5px] font-bold text-rose-600 hover:underline disabled:opacity-50"
+                    >
+                      <Trash2 size={11} /> ඉවත් කරන්න
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
             <div className="mt-1.5 text-[11px] text-slate-500">
               {!isSuperAdmin
-                ? "🔒 API key එක බලන්න/වෙනස් කරන්න superadmin ගිණුමෙන් login වෙන්න ඕනේ."
-                : aiKeyMask
-                  ? <>🔒 දැනට save වී ඇති key එක: <b>{aiKeyMask}</b> (සම්පූර්ණ එක ආයෙත් පෙන්වන්නේ නෑ)</>
-                  : "තාම key එකක් save කරලා නෑ."}{" "}
+                ? "🔒 API keys බලන්න/වෙනස් කරන්න superadmin ගිණුමෙන් login වෙන්න ඕනේ. "
+                : "🔒 Save වූ keys සම්පූර්ණයෙන් ආයෙත් පෙන්වන්නේ නෑ (mask එක විතරයි). "}
               Key එකක් නැත්නම්{" "}
               <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="font-bold text-indigo-700 hover:underline">
                 Google AI Studio එකෙන් නොමිලේ ගන්න →
-              </a>
+              </a>{" "}
+              (වෙනස් Google ගිණුම්/projects වලින් keys කීපයක් ගත්තොත් quota එක වෙන වෙනම ලැබෙනවා.)
             </div>
           </div>
         </div>
@@ -558,11 +594,6 @@ export default function AdminLiveChatPage() {
           <button onClick={() => void testAi()} disabled={testingAi || savingAi} className="btn btn-outline !py-2.5 !px-4 !text-[12px]">
             <Sparkles size={13} /> {testingAi ? "Testing…" : "Test කරන්න"}
           </button>
-          {aiKeyMask && isSuperAdmin && (
-            <button onClick={() => void clearAiKey()} disabled={savingAi} className="inline-flex items-center gap-1.5 text-[11.5px] font-bold text-rose-600 hover:underline">
-              <Trash2 size={12} /> Key එක ඉවත් කරන්න
-            </button>
-          )}
         </div>
 
         {aiStatus && (

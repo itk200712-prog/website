@@ -26,6 +26,7 @@ import { BOARD, BUSINESSES, FUEL_PRICES, GALLERY, NEWS, RURAL_BANK_BRANCHES, SET
 import { looksLikeNicAttempt, normalizeNic, normalizePhone, validateNic, validatePhone } from "@/lib/auth";
 import {
   BAYMAX_CREATOR_NAME,
+  BAYMAX_CREATOR_NAME_SI,
   BAYMAX_CREATOR_PHONE,
   detectBanking,
   detectBotIdentityIntent,
@@ -1858,7 +1859,7 @@ export function LiveChat() {
           from: "bot",
           bold: rsi ? "👤 වෙබ් අඩවි Admin" : "👤 Website Admin",
           text: rsi
-            ? `මේ වෙබ් අඩවියේ Admin: ${BAYMAX_CREATOR_NAME}\n📞 දුරකථන අංකය: ${BAYMAX_CREATOR_PHONE}`
+            ? `මේ වෙබ් අඩවියේ Admin: ${BAYMAX_CREATOR_NAME_SI}\n📞 දුරකථන අංකය: ${BAYMAX_CREATOR_PHONE}`
             : `Website Admin: ${BAYMAX_CREATOR_NAME}\n📞 Phone: ${BAYMAX_CREATOR_PHONE}`,
           chips: menuChips,
           link: { href: `tel:+94${BAYMAX_CREATOR_PHONE.slice(1)}`, label: rsi ? "දැන් අමතන්න" : "Call now" },
@@ -1868,7 +1869,7 @@ export function LiveChat() {
           from: "bot",
           bold: `🤖 ${botName}`,
           text: rsi
-            ? `මේ වෙබ් අඩවිය නිර්මාණය කර සකස් කළේ ${BAYMAX_CREATOR_NAME} විසිනි.`
+            ? `මේ වෙබ් අඩවිය නිර්මාණය කර සකස් කළේ ${BAYMAX_CREATOR_NAME_SI} විසිනි.`
             : `This website was created and prepared by ${BAYMAX_CREATOR_NAME}.`,
           chips: menuChips,
         });
@@ -1877,7 +1878,7 @@ export function LiveChat() {
           from: "bot",
           bold: `🤖 ${botName}`,
           text: rsi
-            ? `මාව සකස් කර පුහුණු කළේ ${BAYMAX_CREATOR_NAME} විසිනි. මම මේ වෙබ් අඩවියට එන ඔබවැනි අමුත්තන්ට උදව් කරන්න විශේෂයෙන් සූදානම් කළ AI සහායකයෙක්මි.`
+            ? `මාව සකස් කර පුහුණු කළේ ${BAYMAX_CREATOR_NAME_SI} විසිනි. මම මේ වෙබ් අඩවියට එන ඔබවැනි අමුත්තන්ට උදව් කරන්න විශේෂයෙන් සූදානම් කළ AI සහායකයෙක්මි.`
             : `I was created and trained by ${BAYMAX_CREATOR_NAME}. I'm an AI assistant prepared specially to help visitors of this website.`,
           chips: menuChips,
         });
@@ -1886,7 +1887,7 @@ export function LiveChat() {
           from: "bot",
           bold: `🤖 ${botName}`,
           text: rsi
-            ? `මම ${botName} — මේ වෙබ් අඩවිය වෙනුවෙන් විශේෂයෙන් පුහුණු කර සකස් කළ AI පද්ධතියක්. මාව සකස් කළේ ${BAYMAX_CREATOR_NAME} විසිනි.\nඔබට දැනගැනීමට අවශ්‍ය ඕනෑම දෙයක් අහන්න — මම උදව් කරන්නම්.`
+            ? `මම ${botName} — මේ වෙබ් අඩවිය වෙනුවෙන් විශේෂයෙන් පුහුණු කර සකස් කළ AI පද්ධතියක්. මාව සකස් කළේ ${BAYMAX_CREATOR_NAME_SI} විසිනි.\nඔබට දැනගැනීමට අවශ්‍ය ඕනෑම දෙයක් අහන්න — මම උදව් කරන්නම්.`
             : `I'm ${botName} — a custom AI system trained and prepared for this website by ${BAYMAX_CREATOR_NAME}.\nAsk me anything you'd like to know — I'm happy to help.`,
           chips: menuChips,
         });
@@ -2010,7 +2011,7 @@ export function LiveChat() {
             from: "bot",
             bold: `🤖 ${botName}`,
             text: rsi
-              ? `මම ${botName} — ${SITE.short_si} එකේ සජීවී චැට් සහායකයා. මාව පුහුණු කර සකස් කළේ ${BAYMAX_CREATOR_NAME} විසිනි.\nමට පුළුවන්: සාමාජිකයන් සොයන්න, ඉන්ධන මිල කියන්න, පුවත් හා ගැලරි පෙන්වන්න, කළමනාකරුවන්ගේ දුරකථන දෙන්න සහ නිලධාරියෙක් සම්බන්ධ කරන්න.\nඋත්සාහ කරන්න: “fuel prices” කියලා ලියන්න 😊`
+              ? `මම ${botName} — ${SITE.short_si} එකේ සජීවී චැට් සහායකයා. මාව පුහුණු කර සකස් කළේ ${BAYMAX_CREATOR_NAME_SI} විසිනි.\nමට පුළුවන්: සාමාජිකයන් සොයන්න, ඉන්ධන මිල කියන්න, පුවත් හා ගැලරි පෙන්වන්න, කළමනාකරුවන්ගේ දුරකථන දෙන්න සහ නිලධාරියෙක් සම්බන්ධ කරන්න.\nඋත්සාහ කරන්න: “fuel prices” කියලා ලියන්න 😊`
               : `I'm ${botName} — the live chat assistant of ${SITE.short_en}, trained and prepared by ${BAYMAX_CREATOR_NAME}.\nI can find members, share fuel prices, show news and the gallery, give managers' phone numbers and connect you with an officer.\nTry typing “fuel prices” 😊`,
             chips: menuChips,
           });

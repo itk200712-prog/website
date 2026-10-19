@@ -486,7 +486,7 @@ const adminLiveChatSrc = readFileSync(join(root, "src/app/admin/live-chat/page.t
 const baymaxAiRouteSrc = readFileSync(join(root, "src/app/api/baymax-ai/route.ts"), "utf8");
 ok("ai: Admin saves key to private backup_secrets, enable/model to public settings",
   adminLiveChatSrc.includes('.from("backup_secrets")') &&
-  adminLiveChatSrc.includes('key: "gemini_api_key"') &&
+  adminLiveChatSrc.includes("GEMINI_API_KEY_SLOTS") &&
   adminLiveChatSrc.includes('key: "chat_ai_enabled"') &&
   adminLiveChatSrc.includes('key: "chat_ai_model"') &&
   adminLiveChatSrc.includes("SUPABASE_SERVICE_ROLE_KEY"));
@@ -499,7 +499,7 @@ ok("ai: browser widget never touches the API key or secrets table",
   !liveChatSrc.includes("SUPABASE_SERVICE_ROLE_KEY"));
 ok("ai: server route reads secret with service role + sends x-goog-api-key",
   baymaxAiRouteSrc.includes("process.env.SUPABASE_SERVICE_ROLE_KEY") &&
-  baymaxAiRouteSrc.includes("backup_secrets?select=value&key=eq.gemini_api_key") &&
+  baymaxAiRouteSrc.includes("backup_secrets?select=key,value&key=in.(") &&
   baymaxAiRouteSrc.includes('"x-goog-api-key"') &&
   baymaxAiRouteSrc.includes("sameOrigin") &&
   baymaxAiRouteSrc.includes("server_not_configured") &&
@@ -740,6 +740,38 @@ ok("ai: server auto-continues MAX_TOKENS answers + identity/link/completeness in
   siInstruction.includes("full direct URL") &&
   siInstruction.includes("Never stop in the middle") &&
   siInstruction.includes("silently proofread"));
+
+console.log("\n── 22) Multi API keys (auto rotation) + correct Sinhala creator name ──");
+ok("keys: 5 slots, first keeps legacy name; collect trims/dedupes in order",
+  baymaxAi.GEMINI_API_KEY_SLOTS.length === 5 &&
+  baymaxAi.GEMINI_API_KEY_SLOTS[0] === "gemini_api_key" &&
+  baymaxAi.GEMINI_API_KEY_SLOTS[4] === "gemini_api_key_5" &&
+  JSON.stringify(baymaxAi.collectApiKeys([" k1 ", "", "k2", "k1", null, undefined, " k3 "])) === JSON.stringify(["k1", "k2", "k3"]) &&
+  JSON.stringify(baymaxAi.collectApiKeys(["", "  "])) === JSON.stringify([]));
+ok("keys: server rotates Key1→Key2→… on quota/invalid and reports key count only",
+  baymaxAiRouteSrc.includes("for (const apiKey of apiKeys)") &&
+  baymaxAiRouteSrc.includes("[400, 401, 403, 429].includes(lastStatus)") &&
+  baymaxAiRouteSrc.includes("tryWithKey(apiKey") &&
+  baymaxAiRouteSrc.includes("collectApiKeys([envKey, ...storedKeys])") &&
+  baymaxAiRouteSrc.includes("keys: c.apiKeys.length") &&
+  !baymaxAiRouteSrc.includes("!c.apiKey)"));
+ok("keys: Admin UI has 5 key slots with per-key remove (superadmin only inputs)",
+  adminLiveChatSrc.includes("aiKeyInputs") &&
+  adminLiveChatSrc.includes("aiKeyMasks") &&
+  adminLiveChatSrc.includes("GEMINI_API_KEY_SLOTS.map((slot, i)") &&
+  adminLiveChatSrc.includes("clearAiKey(i)") &&
+  adminLiveChatSrc.includes("Key {i + 1}") &&
+  adminLiveChatSrc.includes("auto Key 2"));
+ok("name: Sinhala creator name is ඉඳුවර තත්සර everywhere (canned + AI instruction)",
+  bot.BAYMAX_CREATOR_NAME_SI === "ඉඳුවර තත්සර" &&
+  liveChatSrc.includes("BAYMAX_CREATOR_NAME_SI") &&
+  siInstruction.includes("ඉඳුවර තත්සර") &&
+  !liveChatSrc.includes("ඉන්ඳුවර") &&
+  !siInstruction.includes("ඉන්ඳුවර"));
+ok("identity: 'you said google/gemini before' is answered by fixed identity, not AI",
+  bot.detectBotIdentityIntent("ඔයා කලින් කීවෙ google කියා gemini කියා") === "model" &&
+  bot.detectBotIdentityIntent("oya kalin kiwwe google kiyala") === "model" &&
+  bot.detectBotIdentityIntent("you said you are gemini") === "model");
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

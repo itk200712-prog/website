@@ -197,6 +197,8 @@ export type GreetingProfile = {
 
 /** Baymax සහ මේ website එක නිර්මාණය කර පුහුණු කළ පුද්ගලයා (identity පිළිතුරු සඳහා) */
 export const BAYMAX_CREATOR_NAME = "Induwara Thathsara";
+/** සිංහලෙන් නම ලියන නිවැරදි ආකාරය — "ඉන්ඳුවර" නෙවෙයි, "ඉඳුවර" */
+export const BAYMAX_CREATOR_NAME_SI = "ඉඳුවර තත්සර";
 export const BAYMAX_CREATOR_PHONE = "0764247716";
 
 const GENERIC_PROFILE_NAMES = new Set([
@@ -315,6 +317,10 @@ export function detectBotIdentityIntent(raw: string): BotIdentityIntent | null {
   if (/(you|baymax|bot|ඔයා|ඔබ|බොට්|\b(oya|oba)\b).{0,25}(model|මොඩල්)/.test(c)) return "model";
   if (/(model|මොඩල්).{0,25}(you|baymax|bot|ඔයා|ඔබ|බොට්|\b(oya|oba)\b)/.test(c)) return "model";
   if (botRef && /(what ai|which ai|මොන ai|මොකක්ද ai)/.test(c)) return "model";
+  const providerWord = /(google|gemini|flash|gpt|chatgpt|openai|claude|llama)/.test(c);
+  // "ඔයා කලින් කීවෙ google කියා…" — කලින් කිව්ව දේ ගැන අහන විටත් identity එකමයි
+  const saidRef = /(කීව|කිව්ව|කියුවා|කීවෙ|කිව්වෙ|කියුවේ|said|told|\b(kiwwa|kiwwe|kiwwada|kuwwa)\b)/.test(c);
+  if (providerWord && botRef && saidRef) return "model";
   if (
     words <= 6 &&
     /(are you|you are|ඔයා|ඔබ|\b(oya|oba)\b).{0,30}(google|gemini|flash|gpt|chatgpt|openai|claude|llama)/.test(c)
