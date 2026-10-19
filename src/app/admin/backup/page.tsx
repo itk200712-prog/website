@@ -763,7 +763,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
           දවස් කීයකට වරක්ද, කීයටද කියා තෝරලා Save කරන්න — ඊට පස්සේ ඒ දවසේ ඒ වෙලාවට backup එක
           ඉබේම අරගෙන තෝරපු තැනට (Supabase සහ/හෝ MEGA) upload වෙනවා. පළමු එක <b>අදින් දවස් {sch.intervalDays}කට පස්සේ</b> යයි.
-          (මෙය data-only backup එකක් — සම්පූර්ණ ZIP backup එකත් මාසෙකට වරක්වත් ගන්න.)
+          මේක <b>manual Download එකට සම්පූර්ණයෙන්ම සමාන FULL ZIP එකමයි</b> — schema + logins (password සහිතව) + images + registers ඔක්කොම එක්ක.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

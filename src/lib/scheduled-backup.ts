@@ -166,9 +166,9 @@ export function backupDueDecision(
   return { due: true, reason: "due", todayStr, nextDate };
 }
 
-/** `database-2026-10-19.sql.gz` ආකාරයේ auto-backup file නාමය */
+/** manual download එකේ නමමයි — `mpcs-full-backup-2026-10-19.zip` (එකම FULL ZIP එක) */
 export function autoBackupFileName(now: Date = new Date()): string {
-  return `database-${lkDateParts(now).dateStr}.sql.gz`;
+  return `mpcs-full-backup-${lkDateParts(now).dateStr}.zip`;
 }
 
 /** pg_cron එකට දාන SQL එක — Admin card එකේ copy කරගන්න පෙන්වනවා */

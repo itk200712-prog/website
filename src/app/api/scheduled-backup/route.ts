@@ -3,17 +3,19 @@
 //  · Supabase pg_cron එක විනාඩි 15කට වරක් මේ route එක කැඳවයි
 //    (x-backup-secret header එක backup_secrets හි backup_cron_secret විය යුතුයි).
 //  · දවස/වෙලාව Admin → Backup & Restore settings අනුවයි (ශ්‍රී ලංකා වේලාව).
-//  · Backup = සියලු data tables වල SQL dump එක (gzip) → තෝරපු තැන්වලට:
-//    Supabase private 'backups' bucket එක සහ/හෝ MEGA folder එක.
+//  · Backup = MANUAL backup එකට සම්පූර්ණයෙන්ම සමාන FULL ZIP එකමයි
+//    (schema.sql + database.sql — logins/passwords + images base64 + tables 28ම
+//    + Registers XLSX/CSV + manifest + RECOVERY). එකම generateBackupZip()
+//    builder එක service-role client එකකින් දුවන නිසා කිසිවක් අඩු වෙන්නේ නෑ.
+//  · ගමනාන්ත: Supabase private 'backups' bucket එක සහ/හෝ MEGA folder එක.
 //  · රහස් (cron secret, MEGA email/password) backup_secrets එකේ — server එක
 //    service-role key එකෙන් විතරක් කියවයි; browser එකට කිසිවක් එන්නේ නෑ.
-//  ⚠ මෙය data-only backup එකකි (images/logins නෑ) — සම්පූර්ණ backup එකට
-//    Admin එකෙන් ගන්න ZIP එකමයි ප්‍රධාන backup එක.
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { gzipSync } from "node:zlib";
-import { BACKUP_TABLES } from "@/lib/backup";
+import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
+import { generateBackupZip, type BackupClient } from "@/lib/backup";
 import {
   autoBackupFileName,
   backupDueDecision,
@@ -90,69 +92,32 @@ async function lastScheduledSuccessDate(): Promise<string | null> {
   return Number.isNaN(d.getTime()) ? null : lkDateParts(d).dateStr;
 }
 
-// ── SQL dump ──
-function sqlVal(v: unknown): string {
-  if (v === null || v === undefined) return "NULL";
-  if (typeof v === "number" && Number.isFinite(v)) return String(v);
-  if (typeof v === "boolean") return v ? "TRUE" : "FALSE";
-  const s = typeof v === "object" ? JSON.stringify(v) : String(v);
-  return `'${s.replace(/'/g, "''")}'`;
-}
-const col = (c: string) => `"${c.replace(/"/g, '""')}"`;
-
-async function buildSqlDump(): Promise<{ sql: string; totalRows: number; tables: number; warnings: string[] }> {
-  const tables = BACKUP_TABLES.filter((t) => t.name !== "site_images_backup");
-  const lines: string[] = [
-    "-- Panduwasnuwara New MPCS — SCHEDULED AUTO-BACKUP (data only)",
-    `-- Generated: ${new Date().toISOString()}`,
-    "-- Restore: FINAL SQL (schema) run කරලා මෙම file එක run කරන්න.",
-    "-- (Images/logins සහිත සම්පූර්ණ backup එක Admin → Backup & Restore ZIP එකයි.)",
-    "",
-  ];
-  const warnings: string[] = [];
-  let totalRows = 0;
-
-  for (const t of tables) {
-    lines.push(`-- ${t.name}`);
-    let tableRows = 0;
-    for (let offset = 0; offset < 2_000_000; offset += 1000) {
-      const rows = (await restGet(
-        `${t.name}?select=*&order=${encodeURIComponent(t.pk)}.asc&limit=1000&offset=${offset}`,
-        SERVICE_KEY
-      )) as Record<string, unknown>[] | null;
-      if (rows === null) {
-        warnings.push(t.name);
-        lines.push(`-- ⚠ ${t.name}: fetch failed`);
-        break;
-      }
-      if (rows.length) {
-        const cols = Object.keys(rows[0]);
-        const sets = cols.filter((c) => c !== t.pk).map((c) => `${col(c)} = EXCLUDED.${col(c)}`).join(", ");
-        const values = rows
-          .map((r) => `(${cols.map((c) => sqlVal(r[c])).join(", ")})`)
-          .join(",\n  ");
-        lines.push(
-          `INSERT INTO public.${t.name} (${cols.map(col).join(", ")}) VALUES\n  ${values}` +
-            (sets ? `\nON CONFLICT (${col(t.pk)}) DO UPDATE SET ${sets};` : `\nON CONFLICT (${col(t.pk)}) DO NOTHING;`)
-        );
-        tableRows += rows.length;
-      }
-      if (rows.length < 1000) break;
-    }
-    totalRows += tableRows;
-    lines.push("");
-  }
-
-  return { sql: lines.join("\n"), totalRows, tables: tables.length, warnings };
+// ── FULL backup ZIP — manual Download එක හදන builder එකමයි (service-role) ──
+async function buildFullBackupZip(): Promise<{ zip: Buffer; totalRows: number; tables: number; images: number }> {
+  const sb = createClient(SUPA_BASE, SERVICE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    // Node runtime එකේ realtime init එකට ws ඕනේ (අපි realtime පාවිච්චි කරන්නේ නෑ)
+    realtime: { transport: ws as never },
+  });
+  let meta = { tableCounts: {} as Record<string, number>, imageCount: 0 };
+  const blob = await generateBackupZip(() => {}, {
+    client: sb as unknown as BackupClient,
+    onMeta: (m) => {
+      meta = m;
+    },
+  });
+  const zip = Buffer.from(await blob.arrayBuffer());
+  const totalRows = Object.values(meta.tableCounts).reduce((a, b) => a + b, 0);
+  return { zip, totalRows, tables: Object.keys(meta.tableCounts).length, images: meta.imageCount };
 }
 
 // ── Supabase Storage destination ──
-async function uploadToSupabase(fileName: string, gz: Buffer, keep: number): Promise<void> {
+async function uploadToSupabase(fileName: string, zip: Buffer, keep: number): Promise<void> {
   const path = `auto/${fileName}`;
   const res = await fetch(`${SUPA_BASE}/storage/v1/object/backups/${path}`, {
     method: "POST",
-    headers: svcHeaders({ "Content-Type": "application/gzip", "x-upsert": "true" }),
-    body: new Uint8Array(gz),
+    headers: svcHeaders({ "Content-Type": "application/zip", "x-upsert": "true" }),
+    body: new Uint8Array(zip),
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Supabase storage upload failed (${res.status})`);
@@ -169,7 +134,7 @@ async function uploadToSupabase(fileName: string, gz: Buffer, keep: number): Pro
       const files = (await listRes.json()) as { name: string }[];
       const stale = files
         .map((f) => f.name)
-        .filter((n) => n.startsWith("database-") && (n.endsWith(".sql.gz") || n.endsWith(".sql")))
+        .filter((n) => n.startsWith("mpcs-full-backup-") || n.startsWith("database-"))
         .slice(keep)
         .map((n) => `auto/${n}`);
       if (stale.length) {
@@ -208,7 +173,7 @@ async function uploadToMega(
   password: string,
   folderName: string,
   fileName: string,
-  gz: Buffer,
+  zip: Buffer,
   keep: number
 ): Promise<void> {
   const mega = (await import("megajs")) as unknown as {
@@ -218,11 +183,11 @@ async function uploadToMega(
   try {
     let folder = (storage.root.children ?? []).find((f) => f.directory && f.name === folderName);
     if (!folder) folder = await storage.mkdir(folderName);
-    await folder.upload({ name: fileName, size: gz.length }, gz).complete;
+    await folder.upload({ name: fileName, size: zip.length }, zip).complete;
 
     // අලුත්ම keep ගාණ තියාගෙන පරණ auto-backup මකයි
     const mine = (folder.children ?? [])
-      .filter((f) => !f.directory && (f.name ?? "").startsWith("database-"))
+      .filter((f) => !f.directory && ((f.name ?? "").startsWith("mpcs-full-backup-") || (f.name ?? "").startsWith("database-")))
       .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0) || String(b.name).localeCompare(String(a.name)));
     for (const stale of mine.slice(keep)) {
       try {
@@ -313,14 +278,20 @@ export async function POST(req: NextRequest) {
   }
 
   const fileName = autoBackupFileName();
-  const dump = await buildSqlDump();
-  const gz = gzipSync(Buffer.from(dump.sql, "utf8"), { level: 6 });
+  let built: Awaited<ReturnType<typeof buildFullBackupZip>>;
+  try {
+    built = await buildFullBackupZip();
+  } catch (e) {
+    const detail = `FULL ZIP build failed: ${(e as Error).message}`;
+    await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed", detail });
+    return json({ ok: false, reason: "build_failed", detail }, 500);
+  }
 
   const done: string[] = [];
   const failed: string[] = [];
   if (settings.toSupabase) {
     try {
-      await uploadToSupabase(fileName, gz, settings.keepCount);
+      await uploadToSupabase(fileName, built.zip, settings.keepCount);
       done.push("Supabase");
     } catch (e) {
       failed.push(`Supabase: ${(e as Error).message}`);
@@ -329,7 +300,7 @@ export async function POST(req: NextRequest) {
   if (settings.toMega) {
     if (secrets.megaEmail && secrets.megaPassword) {
       try {
-        await uploadToMega(secrets.megaEmail, secrets.megaPassword, settings.megaFolder, fileName, gz, settings.keepCount);
+        await uploadToMega(secrets.megaEmail, secrets.megaPassword, settings.megaFolder, fileName, built.zip, settings.keepCount);
         done.push("MEGA");
       } catch (e) {
         failed.push(`MEGA: ${(e as Error).message}`);
@@ -342,18 +313,18 @@ export async function POST(req: NextRequest) {
   const status = done.length && !failed.length ? "success" : done.length ? "partial" : "failed";
   const detail = [
     force ? "Manual test run" : `Every ${settings.intervalDays} day(s) at ${settings.timeHHMM} (LK)`,
+    `FULL ZIP = manual backup (schema + logins + ${built.images} images + registers)`,
     done.length ? `Saved to: ${done.join(" + ")}` : "",
     failed.length ? `Failed: ${failed.join("; ")}` : "",
-    dump.warnings.length ? `Table warnings: ${dump.warnings.join(", ")}` : "",
   ]
     .filter(Boolean)
     .join(" · ");
 
   await recordHistory({
     fileName,
-    fileSize: gz.length,
-    tables: dump.tables,
-    rows: dump.totalRows,
+    fileSize: built.zip.length,
+    tables: built.tables,
+    rows: built.totalRows,
     status,
     detail,
   });
@@ -362,9 +333,10 @@ export async function POST(req: NextRequest) {
   return json({
     ok: true,
     file: fileName,
-    size: gz.length,
-    rows: dump.totalRows,
-    tables: dump.tables,
+    size: built.zip.length,
+    rows: built.totalRows,
+    tables: built.tables,
+    images: built.images,
     destinations: done,
     warnings: failed,
   });

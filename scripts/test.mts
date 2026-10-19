@@ -805,7 +805,7 @@ ok("schedule: due logic (anchor+3 days at/after 09:00 LK, once per due day)",
   sched.backupDueDecision({ ...schSettings, enabled: false }, null, lkAt(19, 10, 0)).reason === "disabled" &&
   sched.nextScheduleDate(schSettings, lkAt(17, 10, 0)) === "2026-10-19" &&
   sched.lkDateParts(new Date(Date.UTC(2026, 9, 19, 3, 0))).dateStr === "2026-10-19" &&
-  sched.autoBackupFileName(lkAt(19, 10, 0)) === "database-2026-10-19.sql.gz");
+  sched.autoBackupFileName(lkAt(19, 10, 0)) === "mpcs-full-backup-2026-10-19.zip");
 const cronSqlSample = sched.buildCronSql("https://example.vercel.app/", "s3cr3t");
 ok("schedule: cron SQL = every 15 min to site route with secret header + bucket",
   cronSqlSample.includes("*/15 * * * *") &&
@@ -813,16 +813,20 @@ ok("schedule: cron SQL = every 15 min to site route with secret header + bucket"
   cronSqlSample.includes("'x-backup-secret', 's3cr3t'") &&
   cronSqlSample.includes("storage.buckets") &&
   readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("mpcs-auto-backup-check"));
-ok("schedule: route is secret-gated, gzips dump, uploads Supabase+MEGA, records history",
+ok("schedule: route is secret-gated, builds the SAME full ZIP as manual, uploads Supabase+MEGA, records history",
   scheduledBackupSrc.includes('req.headers.get("x-backup-secret")') &&
   scheduledBackupSrc.includes("unauthorized") &&
-  scheduledBackupSrc.includes("gzipSync") &&
+  scheduledBackupSrc.includes("generateBackupZip") &&
+  scheduledBackupSrc.includes("buildFullBackupZip") &&
+  scheduledBackupSrc.includes("createClient(SUPA_BASE, SERVICE_KEY") &&
+  scheduledBackupSrc.includes('"application/zip"') &&
   scheduledBackupSrc.includes('await import("megajs")') &&
   scheduledBackupSrc.includes("uploadToMega") &&
   scheduledBackupSrc.includes("uploadToSupabase") &&
-  scheduledBackupSrc.includes("BACKUP_TABLES") &&
   scheduledBackupSrc.includes("force") &&
-  scheduledBackupSrc.includes("backup_history"));
+  scheduledBackupSrc.includes("backup_history") &&
+  backupSrc.includes("client?: BackupClient") &&
+  backupSrc.includes("opts?.client ?? (await authedClient())"));
 ok("schedule: Admin card (interval/time/destinations/MEGA/cron SQL/test run) + secrets in backup_secrets",
   adminBackupSrc.includes("Scheduled Auto-Backup") &&
   adminBackupSrc.includes("saveSchedule") &&

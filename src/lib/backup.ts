@@ -5,7 +5,7 @@
 // Restore = wipe + re-insert + storage re-upload + URL rewrite (project මාරු වුණත්)
 // ============================================================================
 
-import { createClient, authedClient } from "@/lib/supabase/client";
+import { authedClient } from "@/lib/supabase/client";
 import {
   BACKUP_FORMAT_VERSION,
   buildManifest,
@@ -19,6 +19,13 @@ export { parseBackupSql } from "@/lib/backup-utils";
 export type { ParsedInsert };
 
 export type BackupTable = { name: string; pk: string };
+
+/**
+ * Backup හදන client එක — browser එකේදී authedClient (superadmin session),
+ * server එකේදී (scheduled auto-backup) service-role client එකක් inject කරයි.
+ * දෙකම එකම builder එක පාවිච්චි කරන නිසා auto backup එක manual එකට සමානමයි.
+ */
+export type BackupClient = Awaited<ReturnType<typeof authedClient>>;
 
 export const BACKUP_TABLES: BackupTable[] = [
   { name: "profiles", pk: "id" },
@@ -87,7 +94,6 @@ const TYPE_MAP: Record<string, string> = {
 async function fetchSchemaCols(tables: BackupTable[]): Promise<Record<string, ColType[]>> {
   const out: Record<string, ColType[]> = {};
   try {
-    const sb = createClient();
     const res = await fetch(`${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "")}/rest/v1/`, {
       headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "", Accept: "application/openapi+json" },
     });
@@ -203,10 +209,10 @@ export function scanImagePathsInRows(tables: { name: string; rows: Record<string
 }
 
 /** storage bucket එකේ සියලු ගොනු — folder කොච්චර ගැඹුරට තිබුණත්, pagination සහිතව */
-async function listAllStorageFiles(): Promise<string[]> {
+async function listAllStorageFiles(client?: BackupClient): Promise<string[]> {
   const out: string[] = [];
   try {
-    const sb = await authedClient();
+    const sb = client ?? (await authedClient());
     async function walk(prefix: string, depth: number): Promise<void> {
       if (depth > 6) return;
       for (let offset = 0; offset < 10000; offset += 100) {
@@ -225,10 +231,10 @@ async function listAllStorageFiles(): Promise<string[]> {
   return out;
 }
 
-async function collectImagePaths(tables: { name: string; rows: Record<string, unknown>[] }[]): Promise<string[]> {
+async function collectImagePaths(tables: { name: string; rows: Record<string, unknown>[] }[], client?: BackupClient): Promise<string[]> {
   const paths = new Set<string>(scanImagePathsInRows(tables));
   // bucket list එකත් (දත්ත වල reference නැති, අයින් වෙන්න තිබුණු ගොනුත් backup වේ)
-  for (const p of await listAllStorageFiles()) paths.add(p);
+  for (const p of await listAllStorageFiles(client)) paths.add(p);
   return [...paths];
 }
 
@@ -288,9 +294,16 @@ END $$;`);
 
 /* ------------------------------------------------------------- GENERATE -- */
 export async function generateBackupSql(
-  onProgress: (msg: string, pct: number) => void
-): Promise<{ sql: string; tableCounts: Record<string, number>; imageCount: number }> {
-  const sb = await authedClient();
+  onProgress: (msg: string, pct: number) => void,
+  client?: BackupClient
+): Promise<{
+  sql: string;
+  tableCounts: Record<string, number>;
+  imageCount: number;
+  /** ZIP registers වලට ආයෙත් fetch නොකර පාවිච්චි කරන්න (දෙපාරක් ගන්න එක නවත්වයි) */
+  registerRows: { members: Record<string, unknown>[]; voters: Record<string, unknown>[] };
+}> {
+  const sb = client ?? (await authedClient());
   const lines: string[] = [];
 
   lines.push(`-- ============================================================`);
@@ -316,17 +329,29 @@ export async function generateBackupSql(
     const t = BACKUP_TABLES[i];
     onProgress(`Exporting ${t.name}…`, 8 + Math.round((i / BACKUP_TABLES.length) * 40));
     try {
-      // ⚠ Supabase PostgREST max-rows = 1000 — ඒ නිසා පිටු ගණනකින් කියවයි (52k+ rows සම්පූර්ණ වේ)
+      // ⚠ Supabase PostgREST max-rows = 1000 — ඒ නිසා පිටු ගණනකින් කියවයි (52k+ rows සම්පූර්ණ වේ).
+      // පිටු 4 බැගින් සමාන්තරව ගනියි — manual එකත්, server auto-backup එකත් වේගවත් වෙන්නයි.
       const rows: Record<string, unknown>[] = [];
-      for (let from = 0; from < 2_000_000; from += 1000) {
-        const { data, error } = await sb.from(t.name).select("*").range(from, from + 999);
-        if (error) {
-          lines.push(`-- ⚠ ${t.name}: ${error.message}`);
-          break;
+      let failed = false;
+      for (let from = 0; from < 2_000_000 && !failed; from += 4000) {
+        const pages = await Promise.all(
+          [0, 1, 2, 3].map((i) => sb.from(t.name).select("*").range(from + i * 1000, from + i * 1000 + 999))
+        );
+        let shortPage = false;
+        for (const pg of pages) {
+          if (pg.error) {
+            lines.push(`-- ⚠ ${t.name}: ${pg.error.message}`);
+            failed = true;
+            break;
+          }
+          const got = (pg.data as Record<string, unknown>[]) ?? [];
+          rows.push(...got);
+          if (got.length < 1000) {
+            shortPage = true;
+            break;
+          }
         }
-        const got = (data as Record<string, unknown>[]) ?? [];
-        rows.push(...got);
-        if (got.length < 1000) break;
+        if (shortPage) break;
       }
       gathered.push({ name: t.name, rows });
     } catch (e) {
@@ -344,13 +369,20 @@ export async function generateBackupSql(
 
   // images
   onProgress("Downloading site images…", 55);
-  const paths = await collectImagePaths(gathered);
+  const paths = await collectImagePaths(gathered, client);
   const imgRows: { path: string; b64: string; type: string }[] = [];
-  for (let i = 0; i < paths.length; i++) {
-    onProgress(`Image ${i + 1}/${paths.length} — ${paths[i].slice(0, 40)}…`, 55 + Math.round((i / Math.max(paths.length, 1)) * 30));
-    const url = `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "")}/storage/v1/object/public/site-images/${paths[i]}`;
-    const f = await fetchBase64(url);
-    if (f) imgRows.push({ path: paths[i], b64: f.b64, type: f.type });
+  // එකවර 6 ගණනේ බාගත කරයි (manual එකත් වේගවත් වෙනවා, server auto-backup එකටත් ඕනෙමයි) — පිළිවෙළ එලෙසමයි
+  for (let i = 0; i < paths.length; i += 6) {
+    onProgress(`Image ${Math.min(i + 6, paths.length)}/${paths.length}…`, 55 + Math.round((i / Math.max(paths.length, 1)) * 30));
+    const batch = paths.slice(i, i + 6);
+    const fetched = await Promise.all(
+      batch.map(async (p) => {
+        const url = `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "")}/storage/v1/object/public/site-images/${p}`;
+        const f = await fetchBase64(url);
+        return f ? { path: p, b64: f.b64, type: f.type } : null;
+      })
+    );
+    for (const f of fetched) if (f) imgRows.push(f);
   }
 
   // image INSERTs
@@ -390,7 +422,15 @@ export async function generateBackupSql(
   const tableCounts: Record<string, number> = {};
   for (const g of gathered) tableCounts[g.name] = g.rows.length;
   tableCounts["site_images_backup"] = imgRows.length;
-  return { sql: lines.join("\n"), tableCounts, imageCount: imgRows.length };
+  return {
+    sql: lines.join("\n"),
+    tableCounts,
+    imageCount: imgRows.length,
+    registerRows: {
+      members: gathered.find((g) => g.name === "member_rows")?.rows ?? [],
+      voters: gathered.find((g) => g.name === "voter_rows")?.rows ?? [],
+    },
+  };
 }
 
 /* --------------------------------------------------------------- PARSE --- */
@@ -667,7 +707,11 @@ export async function recordBackupHistory(input: {
  * ========================================================================== */
 export async function generateBackupZip(
   onProgress: (msg: string, pct: number) => void,
-  opts?: { encryptPassword?: string } // දීලා ඇත්නම් database.sql එක AES-GCM වලින් encrypt වේ
+  opts?: {
+    encryptPassword?: string; // දීලා ඇත්නම් database.sql එක AES-GCM වලින් encrypt වේ
+    client?: BackupClient; // server scheduled-backup එක service-role client එක inject කරයි
+    onMeta?: (meta: { tableCounts: Record<string, number>; imageCount: number }) => void;
+  }
 ): Promise<Blob> {
   const zipMod = await import("jszip");
   const JSZip = zipMod.default;
@@ -684,7 +728,8 @@ export async function generateBackupZip(
   }
 
   // 1) database.sql (images base64 + login accounts සමඟ)
-  const { sql, tableCounts, imageCount } = await generateBackupSql((msg, pct) => onProgress(msg, Math.round(pct * 0.72)));
+  const { sql, tableCounts, imageCount, registerRows } = await generateBackupSql((msg, pct) => onProgress(msg, Math.round(pct * 0.72)), opts?.client);
+  opts?.onMeta?.({ tableCounts, imageCount });
   const databasePlainSha256 = await sha256Hex(sql);
   const dbContent = opts?.encryptPassword ? await encryptBackupText(sql, opts.encryptPassword) : sql;
   await addFile("database.sql", dbContent);
@@ -702,7 +747,7 @@ export async function generateBackupZip(
   } catch { /* schema embed බැරි වුණත් backup එක හැදේ */ }
 
   // 2) registers → XLSX
-  const sb = await authedClient();
+  const sb = opts?.client ?? (await authedClient());
 
   async function allRows(table: "member_rows" | "voter_rows") {
     const out: Record<string, unknown>[] = [];
@@ -730,7 +775,7 @@ export async function generateBackupZip(
   }
 
   onProgress("Exporting Member Register (XLSX)…", 80);
-  const members = await allRows("member_rows");
+  const members = registerRows.members.length ? registerRows.members : await allRows("member_rows");
   const mSheet = sheet(members, "member_no");
   const mWb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(mWb, XLSX.utils.json_to_sheet(mSheet), "Members");
@@ -738,7 +783,7 @@ export async function generateBackupZip(
   await addFile("Members-Register.xlsx", mBuf);
 
   onProgress("Exporting Voter Register (XLSX)…", 87);
-  const voters = await allRows("voter_rows");
+  const voters = registerRows.voters.length ? registerRows.voters : await allRows("voter_rows");
   const vWb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(vWb, XLSX.utils.json_to_sheet(sheet(voters, "voter_no")), "Voters");
   const vBuf = XLSX.write(vWb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
