@@ -30,7 +30,8 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// FULL ZIP එක හදලා upload කරන්න විනාඩි කිහිපයක් යන්න පුළුවන් — 60s මදි (504 timeout වෙනවා)
+export const maxDuration = 300;
 
 function json(body: Record<string, unknown>, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -289,6 +290,7 @@ export async function POST(req: NextRequest) {
   }
 
   const fileName = autoBackupFileName();
+  const startedAt = Date.now();
   // 🔒 settings වල encrypt on නම් manual එකේ Encryption Password එකම පාවිච්චි කරයි.
   // password එක save කරලා නැත්නම් backup එක නවත්වන්නේ නැතුව unencrypted යවනවා — history එකේ සටහන් වෙනවා.
   const encPw = settings.encrypt ? secrets.encryptionPassword : "";
@@ -303,7 +305,7 @@ export async function POST(req: NextRequest) {
     return json({ ok: false, reason: "build_failed", detail }, 500);
   }
 
-  // ගමනාන්ත දෙකම ඇත්නම් සමගාමීව upload කරයි (60s සීමාව ඇතුළේ ඉවර වෙන්න)
+  // ගමනාන්ත දෙකම ඇත්නම් සමගාමීව upload කරයි (වේගය වැඩි වෙන්න)
   const done: string[] = [];
   const failed: string[] = [];
   const uploads: Promise<void>[] = [];
@@ -335,6 +337,7 @@ export async function POST(req: NextRequest) {
     encryptWarning,
     done.length ? `Saved to: ${done.join(" + ")}` : "",
     failed.length ? `Failed: ${failed.join("; ")}` : "",
+    `Took ${Math.round((Date.now() - startedAt) / 1000)}s`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -357,6 +360,7 @@ export async function POST(req: NextRequest) {
     rows: built.totalRows,
     tables: built.tables,
     images: built.images,
+    seconds: Math.round((Date.now() - startedAt) / 1000),
     encrypted,
     destinations: done,
     warnings: [encryptWarning, ...failed].filter(Boolean),

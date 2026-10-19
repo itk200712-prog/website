@@ -323,41 +323,53 @@ export async function generateBackupSql(
   onProgress("Reading table schemas…", 5);
   const schemaCols = await fetchSchemaCols(BACKUP_TABLES);
 
-  // gather rows
-  const gathered: { name: string; rows: Record<string, unknown>[] }[] = [];
-  for (let i = 0; i < BACKUP_TABLES.length; i++) {
-    const t = BACKUP_TABLES[i];
-    onProgress(`Exporting ${t.name}…`, 8 + Math.round((i / BACKUP_TABLES.length) * 40));
-    try {
-      // ⚠ Supabase PostgREST max-rows = 1000 — ඒ නිසා පිටු ගණනකින් කියවයි (52k+ rows සම්පූර්ණ වේ).
-      // පිටු 4 බැගින් සමාන්තරව ගනියි — manual එකත්, server auto-backup එකත් වේගවත් වෙන්නයි.
-      const rows: Record<string, unknown>[] = [];
-      let failed = false;
-      for (let from = 0; from < 2_000_000 && !failed; from += 4000) {
-        const pages = await Promise.all(
-          [0, 1, 2, 3].map((i) => sb.from(t.name).select("*").range(from + i * 1000, from + i * 1000 + 999))
-        );
-        let shortPage = false;
-        for (const pg of pages) {
-          if (pg.error) {
-            lines.push(`-- ⚠ ${t.name}: ${pg.error.message}`);
-            failed = true;
-            break;
-          }
-          const got = (pg.data as Record<string, unknown>[]) ?? [];
-          rows.push(...got);
-          if (got.length < 1000) {
-            shortPage = true;
-            break;
-          }
+  // gather rows — tables 3 බැගින් සමාන්තරව (server auto-backup එක timeout වෙන්නේ නැති වෙන්න).
+  // ⚠ Supabase PostgREST max-rows = 1000 — ඒ නිසා table එකක් ඇතුළේ පිටු 4 බැගින් කියවයි (52k+ rows සම්පූර්ණ වේ).
+  const gathered: { name: string; rows: Record<string, unknown>[] }[] = new Array(BACKUP_TABLES.length);
+  const gatherWarnings: (string | undefined)[] = new Array(BACKUP_TABLES.length);
+  let nextTableIdx = 0;
+  let tablesDone = 0;
+
+  async function fetchTableRows(t: (typeof BACKUP_TABLES)[number]): Promise<{ rows: Record<string, unknown>[]; warning?: string }> {
+    const rows: Record<string, unknown>[] = [];
+    for (let from = 0; from < 2_000_000; from += 4000) {
+      const pages = await Promise.all(
+        [0, 1, 2, 3].map((i) => sb.from(t.name).select("*").range(from + i * 1000, from + i * 1000 + 999))
+      );
+      let shortPage = false;
+      for (const pg of pages) {
+        if (pg.error) return { rows, warning: `-- ⚠ ${t.name}: ${pg.error.message}` };
+        const got = (pg.data as Record<string, unknown>[]) ?? [];
+        rows.push(...got);
+        if (got.length < 1000) {
+          shortPage = true;
+          break;
         }
-        if (shortPage) break;
       }
-      gathered.push({ name: t.name, rows });
-    } catch (e) {
-      lines.push(`-- ⚠ ${t.name}: ${(e as Error).message}`);
+      if (shortPage) break;
+    }
+    return { rows };
+  }
+
+  async function gatherWorker() {
+    for (;;) {
+      const idx = nextTableIdx++;
+      if (idx >= BACKUP_TABLES.length) return;
+      const t = BACKUP_TABLES[idx];
+      onProgress(`Exporting ${t.name}…`, 8 + Math.round((tablesDone / BACKUP_TABLES.length) * 40));
+      try {
+        const { rows, warning } = await fetchTableRows(t);
+        gathered[idx] = { name: t.name, rows };
+        gatherWarnings[idx] = warning;
+      } catch (e) {
+        gathered[idx] = { name: t.name, rows: [] };
+        gatherWarnings[idx] = `-- ⚠ ${t.name}: ${(e as Error).message}`;
+      }
+      tablesDone++;
     }
   }
+  await Promise.all(Array.from({ length: Math.min(3, BACKUP_TABLES.length) }, () => gatherWorker()));
+  for (const w of gatherWarnings) if (w) lines.push(w);
 
   // DDL
   onProgress("Writing table DDL…", 50);
@@ -371,10 +383,10 @@ export async function generateBackupSql(
   onProgress("Downloading site images…", 55);
   const paths = await collectImagePaths(gathered, client);
   const imgRows: { path: string; b64: string; type: string }[] = [];
-  // එකවර 6 ගණනේ බාගත කරයි (manual එකත් වේගවත් වෙනවා, server auto-backup එකටත් ඕනෙමයි) — පිළිවෙළ එලෙසමයි
-  for (let i = 0; i < paths.length; i += 6) {
-    onProgress(`Image ${Math.min(i + 6, paths.length)}/${paths.length}…`, 55 + Math.round((i / Math.max(paths.length, 1)) * 30));
-    const batch = paths.slice(i, i + 6);
+  // එකවර 10 ගණනේ බාගත කරයි (manual එකත් වේගවත් වෙනවා, server auto-backup එකටත් ඕනෙමයි) — පිළිවෙළ එලෙසමයි
+  for (let i = 0; i < paths.length; i += 10) {
+    onProgress(`Image ${Math.min(i + 10, paths.length)}/${paths.length}…`, 55 + Math.round((i / Math.max(paths.length, 1)) * 30));
+    const batch = paths.slice(i, i + 10);
     const fetched = await Promise.all(
       batch.map(async (p) => {
         const url = `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "")}/storage/v1/object/public/site-images/${p}`;
@@ -405,14 +417,23 @@ export async function generateBackupSql(
   for (const t of gathered) {
     const pk = BACKUP_TABLES.find((x) => x.name === t.name)!.pk;
     lines.push(`-- ${t.name} (${t.rows.length} rows)`);
+    // select("*") නිසා හැම row එකේම columns එකමයි — prefix/sets එක වරක් හැදුවාම ඇති (වේගය)
+    const firstCols = t.rows.length ? Object.keys(t.rows[0]) : [];
+    const firstSets = firstCols.filter((c) => c !== pk).map((c) => `${colName(c)} = EXCLUDED.${colName(c)}`).join(", ");
+    const firstPrefix = `INSERT INTO public.${t.name} (${firstCols.map(colName).join(", ")}) VALUES (`;
+    const firstSuffix = firstSets ? `) ON CONFLICT (${colName(pk)}) DO UPDATE SET ${firstSets};` : `) ON CONFLICT (${colName(pk)}) DO NOTHING;`;
     for (const r of t.rows) {
       const cols = Object.keys(r);
       if (!cols.length) continue;
-      const sets = cols.filter((c) => c !== pk).map((c) => `${colName(c)} = EXCLUDED.${colName(c)}`).join(", ");
-      lines.push(
-        `INSERT INTO public.${t.name} (${cols.map(colName).join(", ")}) VALUES (${cols.map((c) => sqlVal(r[c])).join(", ")})` +
-          (sets ? ` ON CONFLICT (${colName(pk)}) DO UPDATE SET ${sets};` : ` ON CONFLICT (${colName(pk)}) DO NOTHING;`)
-      );
+      if (cols.length === firstCols.length && cols.every((c, ci) => c === firstCols[ci])) {
+        lines.push(firstPrefix + cols.map((c) => sqlVal(r[c])).join(", ") + firstSuffix);
+      } else {
+        const sets = cols.filter((c) => c !== pk).map((c) => `${colName(c)} = EXCLUDED.${colName(c)}`).join(", ");
+        lines.push(
+          `INSERT INTO public.${t.name} (${cols.map(colName).join(", ")}) VALUES (${cols.map((c) => sqlVal(r[c])).join(", ")})` +
+            (sets ? ` ON CONFLICT (${colName(pk)}) DO UPDATE SET ${sets};` : ` ON CONFLICT (${colName(pk)}) DO NOTHING;`)
+        );
+      }
     }
     lines.push(``);
   }
@@ -722,17 +743,23 @@ export async function generateBackupZip(
 
   // manifest එකට — ZIP එකට දාන හැම file එකකම SHA-256 hash + size
   const files: Record<string, { sha256: string; size: number }> = {};
-  async function addFile(name: string, content: string | ArrayBuffer) {
-    zip.file(name, content);
-    files[name] = { sha256: await sha256Hex(content), size: new Blob([content]).size };
+  async function addFile(name: string, content: string | ArrayBuffer, store = false) {
+    // bytes එක වරක් හදලා hash + size + zip තුනටම පාවිච්චි කරයි (වේගය).
+    // store=true: දැනටමත් compressed/encrypted දේ ආයෙත් deflate කරන්නේ නෑ (CPU නාස්තියක්).
+    const bytes = typeof content === "string" ? new TextEncoder().encode(content) : new Uint8Array(content);
+    zip.file(name, bytes, store ? { compression: "STORE" } : undefined);
+    files[name] = { sha256: await sha256Hex(bytes), size: bytes.byteLength };
   }
 
   // 1) database.sql (images base64 + login accounts සමඟ)
   const { sql, tableCounts, imageCount, registerRows } = await generateBackupSql((msg, pct) => onProgress(msg, Math.round(pct * 0.72)), opts?.client);
   opts?.onMeta?.({ tableCounts, imageCount });
-  const databasePlainSha256 = await sha256Hex(sql);
-  const dbContent = opts?.encryptPassword ? await encryptBackupText(sql, opts.encryptPassword) : sql;
-  await addFile("database.sql", dbContent);
+  const [databasePlainSha256, dbContent] = await Promise.all([
+    sha256Hex(sql),
+    opts?.encryptPassword ? encryptBackupText(sql, opts.encryptPassword) : Promise.resolve(sql),
+  ]);
+  // encrypted නම් cipher එක ආයෙත් compress කරන්න බෑ — STORE (වේගය)
+  await addFile("database.sql", dbContent, !!opts?.encryptPassword);
 
   // 1b) schema.sql — canonical schema (tables + RLS + functions + live chat RPC logic).
   //     fresh Supabase project එකකට restore කරද්දී මුලින්ම run කළ යුත්තේ මෙයයි.
@@ -779,15 +806,16 @@ export async function generateBackupZip(
   const mSheet = sheet(members, "member_no");
   const mWb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(mWb, XLSX.utils.json_to_sheet(mSheet), "Members");
-  const mBuf = XLSX.write(mWb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-  await addFile("Members-Register.xlsx", mBuf);
+  const mBuf = XLSX.write(mWb, { type: "array", bookType: "xlsx", compression: true }) as ArrayBuffer;
+  await addFile("Members-Register.xlsx", mBuf, true);
 
   onProgress("Exporting Voter Register (XLSX)…", 87);
   const voters = registerRows.voters.length ? registerRows.voters : await allRows("voter_rows");
+  const vSheet = sheet(voters, "voter_no");
   const vWb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(vWb, XLSX.utils.json_to_sheet(sheet(voters, "voter_no")), "Voters");
-  const vBuf = XLSX.write(vWb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-  await addFile("Voters-Register.xlsx", vBuf);
+  XLSX.utils.book_append_sheet(vWb, XLSX.utils.json_to_sheet(vSheet), "Voters");
+  const vBuf = XLSX.write(vWb, { type: "array", bookType: "xlsx", compression: true }) as ArrayBuffer;
+  await addFile("Voters-Register.xlsx", vBuf, true);
 
   // 3) CSV (Excel/Numbers වලට backup එකක් විදිහට — UTF-8 BOM සමඟ Sinhala හරි)
   const csvOf = (rows: Record<string, string | number>[]) => {
@@ -796,7 +824,7 @@ export async function generateBackupZip(
     return "\ufeff" + [keys.map(esc).join(","), ...rows.map((r) => keys.map((k) => esc(r[k])).join(","))].join("\r\n");
   };
   await addFile("Members-Register.csv", csvOf(mSheet as unknown as Record<string, string | number>[]));
-  await addFile("Voters-Register.csv", csvOf(sheet(voters, "voter_no") as unknown as Record<string, string | number>[]));
+  await addFile("Voters-Register.csv", csvOf(vSheet as unknown as Record<string, string | number>[]));
 
   // 4) README
   await addFile(
@@ -864,7 +892,7 @@ export async function generateBackupZip(
   );
 
   onProgress("Creating ZIP archive…", 93);
-  return await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } }, (meta) =>
+  return await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 } }, (meta) =>
     onProgress("Compressing… " + Math.round(meta.percent) + "%", 93 + Math.round(meta.percent * 0.07))
   );
 }

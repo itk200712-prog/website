@@ -390,8 +390,11 @@ console.log("\n── 15) Backup extras: manifest · encryption · preview · sa
 const bu = await import("../src/lib/backup-utils.ts");
 ok("utils: sha256Hex('abc') known vector", (await bu.sha256Hex("abc")) === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 const encSample = await bu.encryptBackupText("SELECT 'ආයුබෝවන්';", "Test@123");
-ok("utils: encrypt → envelope detected", bu.isEncryptedBackupText(encSample) === true);
-ok("utils: decrypt round-trips (Sinhala safe)", (await bu.decryptBackupText(encSample, "Test@123")) === "SELECT 'ආයුබෝවන්';");
+const legacyV1Sample = "MPCS-ENCRYPTED-BACKUP v1\n9Mu1jsfD2vQZ2drxRl5RTQ==.XfEaDpQNQLtDBOZT.oicR4AofDOts8OFD/JRoCuzFVeeJ/e65wkQC5+2MKQkom08=";
+ok("utils: encrypt → envelope detected", bu.isEncryptedBackupText(encSample) === true && encSample.startsWith(bu.ENCRYPTED_PREFIX_V2));
+ok("utils: decrypt round-trips (Sinhala safe) + legacy v1 still opens",
+  (await bu.decryptBackupText(encSample, "Test@123")) === "SELECT 'ආයුබෝවන්';" &&
+  (await bu.decryptBackupText(legacyV1Sample, "Test@123")) === "SELECT 'legacy-v1';");
 let wrongPwThrew = false;
 try { await bu.decryptBackupText(encSample, "wrong-password"); } catch { wrongPwThrew = true; }
 ok("utils: wrong encryption password rejected", wrongPwThrew);
@@ -825,6 +828,9 @@ ok("schedule: route is secret-gated, builds the SAME full ZIP as manual (Encrypt
   scheduledBackupSrc.includes("settings.encrypt") &&
   scheduledBackupSrc.includes("encryptPassword: encryptPassword || undefined") &&
   scheduledBackupSrc.includes("encryptionConfigured") &&
+  scheduledBackupSrc.includes("export const maxDuration = 300") &&
+  backupSrc.includes("gatherWorker") &&
+  backupSrc.includes('compression: "STORE"') &&
   scheduledBackupSrc.includes('"application/zip"') &&
   scheduledBackupSrc.includes('await import("megajs")') &&
   scheduledBackupSrc.includes("uploadToMega") &&

@@ -8,6 +8,8 @@
 
 export const BACKUP_FORMAT_VERSION = 2;
 export const ENCRYPTED_PREFIX = "MPCS-ENCRYPTED-BACKUP v1";
+/** v2 = gzip කරලා encrypt කරනවා — file එක ~4 ගුණයකින් කුඩායි (auto-backup timeout නැති වෙන්න) */
+export const ENCRYPTED_PREFIX_V2 = "MPCS-ENCRYPTED-BACKUP v2";
 
 /* --------------------------------------------------------------- PARSE --- */
 export type ParsedInsert = { table: string; cols: string[]; values: unknown[] };
@@ -126,32 +128,59 @@ async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey>
 }
 
 export function isEncryptedBackupText(text: string): boolean {
-  return text.trimStart().startsWith(ENCRYPTED_PREFIX);
+  const t = text.trimStart();
+  return t.startsWith(ENCRYPTED_PREFIX) || t.startsWith(ENCRYPTED_PREFIX_V2);
 }
 
-/** database.sql text එක password එකකින් encrypt කරයි (AES-GCM) */
+/** native gzip (browser + Node දෙකේම තියෙනවා) — නැත්නම් null (v1 fallback එකට) */
+async function gzipBytes(input: Uint8Array): Promise<Uint8Array | null> {
+  if (typeof CompressionStream === "undefined") return null;
+  const stream = new Blob([input.buffer as ArrayBuffer]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function gunzipBytes(input: Uint8Array): Promise<Uint8Array> {
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("මේ browser එකේ v2 encrypted backup එක අරින්න බෑ — අලුත් Chrome එකක් පාවිච්චි කරන්න");
+  }
+  const stream = new Blob([input.buffer as ArrayBuffer]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/** database.sql text එක password එකකින් encrypt කරයි (v2: gzip → AES-GCM) */
 export async function encryptBackupText(plain: string, password: string): Promise<string> {
   if (!password) throw new Error("Encryption password එකක් අවශ්‍යයි");
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(password, salt);
-  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv.buffer as ArrayBuffer }, key, new TextEncoder().encode(plain));
-  return `${ENCRYPTED_PREFIX}\n${u8ToB64(salt)}.${u8ToB64(iv)}.${u8ToB64(new Uint8Array(cipher))}`;
+  const plainBytes = new TextEncoder().encode(plain);
+  const gz = await gzipBytes(plainBytes).catch(() => null);
+  const payload = gz ?? plainBytes;
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv.buffer as ArrayBuffer },
+    key,
+    payload.buffer as ArrayBuffer
+  );
+  const prefix = gz ? ENCRYPTED_PREFIX_V2 : ENCRYPTED_PREFIX;
+  return `${prefix}\n${u8ToB64(salt)}.${u8ToB64(iv)}.${u8ToB64(new Uint8Array(cipher))}`;
 }
 
-/** encrypt කරපු backup එක ආපහු plain SQL එකට හරවයි — password වැරදි නම් throw කරයි */
+/** encrypt කරපු backup එක ආපහු plain SQL එකට හරවයි (v1 + v2 දෙකම) — password වැරදි නම් throw කරයි */
 export async function decryptBackupText(envelope: string, password: string): Promise<string> {
   const lines = envelope.trim().split(/\r?\n/);
-  if (!lines[0]?.startsWith(ENCRYPTED_PREFIX) || !lines[1]) throw new Error("මේක encrypted backup file එකක් නෙවෙයි");
+  const isV2 = !!lines[0]?.startsWith(ENCRYPTED_PREFIX_V2);
+  if ((!isV2 && !lines[0]?.startsWith(ENCRYPTED_PREFIX)) || !lines[1]) throw new Error("මේක encrypted backup file එකක් නෙවෙයි");
   const [saltB64, ivB64, dataB64] = lines[1].split(".");
   if (!saltB64 || !ivB64 || !dataB64) throw new Error("Encrypted backup එක corrupt වී ඇත");
   const key = await deriveKey(password, b64ToU8(saltB64));
+  let plain: ArrayBuffer;
   try {
-    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64ToU8(ivB64).buffer as ArrayBuffer }, key, b64ToU8(dataB64).buffer as ArrayBuffer);
-    return new TextDecoder().decode(plain);
+    plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64ToU8(ivB64).buffer as ArrayBuffer }, key, b64ToU8(dataB64).buffer as ArrayBuffer);
   } catch {
     throw new Error("Encryption password එක වැරදියි (හෝ file එක corrupt)");
   }
+  const bytes = isV2 ? await gunzipBytes(new Uint8Array(plain)) : new Uint8Array(plain);
+  return new TextDecoder().decode(bytes);
 }
 
 /* ------------------------------------------------------------- MANIFEST -- */
