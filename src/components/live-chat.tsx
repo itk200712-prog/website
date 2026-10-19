@@ -263,8 +263,8 @@ export function LiveChat() {
   /** Baymax හි පළමු (welcome) පණිවිඩය — reset කළාම ආයෙත් පේන්නේ මේක විතරයි */
   function makeWelcomeMessage(): Msg {
     const welcome = si
-      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය සහ අංශ ගැන — ඒ වගේම සාමාන්‍ය දැනුම ගැනත් සිංහලෙන් නිදහසේ අහන්න පුළුවන්.\nඋදා: “සභාපතිගේ නම”, “Maliban”, “සීගිරිය කොහෙද තියෙන්නේ?”`
-      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me freely about the society, services, membership and divisions — and general knowledge too.\nTry: “chairman name”, “Maliban” or “Where is Sigiriya?”`;
+      ? `මම ${botName} — ${SITE.short_si} සහායකයා.\nසමිතිය, සේවා, සාමාජිකත්වය සහ අංශ ගැන — ඒ වගේම සාමාන්‍ය දැනුම ගැනත් සිංහලෙන් නිදහසේ අහන්න පුළුවන්.`
+      : `I'm ${botName} — the ${SITE.short_en} assistant.\nAsk me freely about the society, services, membership and divisions — and general knowledge too.`;
     return {
       id: 0,
       from: "bot",
