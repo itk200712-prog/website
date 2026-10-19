@@ -174,10 +174,39 @@ reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒව�
 `/api/admin-reset-password` server route එකෙන් (service-role key එක server
 එකේ විතරයි); තමන්ගේම password එක වෙනස් කිරීම Admin → Profile එකෙනි.
 
+## 🤖 Baymax Professional Upgrade (2026-10-19)
+
+- **Greeting නම = sign-in වූ කෙනාගේ නම විතරක්:** `hi` කිව්වොත් sign in වී ඇති
+  සාමාන්‍ය user ට එම user ගේ, admin ට එම admin ගේ profile නමින් ආචාර කරයි
+  (`profiles.full_name` → `greetingDisplayName()`). Guest කෙනෙක්ට නමක් නෑ —
+  `Hi!` පමණයි. Chat එකේ කියපු නමක් හෝ browser එකේ (`mpcs_chat_name`) save වූ
+  නමක් greeting එකට **කවදාවත්** ගන්නේ නෑ — එකම browser එක වෙනත් කෙනෙක්
+  පාවිච්චි කළත් වැරදි නමක් එන්නේ නෑ. NIC එකක් නම ලෙස පාවිච්චි වෙන්නෙත් නෑ.
+- **Identity පිළිතුරු ස්ථිරයි (AI ට යන්නේ නෑ):** `detectBotIdentityIntent()`
+  («ඔයාගේ model එක මොකක්ද?» · «ඔයාව හැදුවේ කවුද?» · «මේ website එක හැදුවේ
+  කවුද?» · «website admin ගේ නම්බර් එක») සියලුම routing වලට කලින් දුවයි.
+  උත්තරය හැමවිටම: **Induwara Thathsara විසින් පුහුණු කර සකස් කළ AI පද්ධතිය**;
+  website admin අහන විට නම + **0764247716** (Call now බොත්තම සමඟ). යටින් ඇති
+  provider/model තාක්ෂණ නම් visitor ට පෙනෙන පිළිතුරක කවදාවත් එන්නේ නෑ;
+  AI system instruction එකෙත් එය තහනම් කර ඇත. «how do you make tea?»,
+  «search google for…» වගේ සාමාන්‍ය ප්‍රශ්න මේ detector එක අල්ලන්නේ නෑ.
+- **අඩක් උත්තර නෑ — සම්පූර්ණ පිළිතුරු:** AI `maxOutputTokens` 4096 දක්වා
+  වැඩි කළා; අකුරු 1,800න් මැදින් කප던 සීමාව ඉවත් කළා (ආරක්ෂිත උපරිමය
+  20,000). පිළිතුර `MAX_TOKENS` වලින් කැඩුණොත් server එක නැවතුණු තැනින්ම
+  **auto-continue** කර සම්පූර්ණ කරලා යවයි. AI ඉතිහාසයත් පිළිතුරක් මැදින්
+  නොකපා (අකුරු 4,000 දක්වා) තබා ගනී. System instruction එකෙන් නිවැරදි
+  අක්ෂර වින්‍යාසය/ව්‍යාකරණයත්, වාක්‍ය සම්පූර්ණයෙන් අවසන් කිරීමත් අවශ්‍ය කරයි.
+  පුවත් විස්තරත් chat එකේ කෙටි නොකර සම්පූර්ණයෙන්ම පෙන්වයි.
+- **Search + clickable links:** පිට තොරතුරු (උදා: ගැසට් පත්‍ර ගන්න site එක)
+  අහන විට web search කරලා නිල website එකේ **සම්පූර්ණ URL එක** පිළිතුරේ
+  දාන්න AI ට උපදෙස් ඇත; search grounding එකෙන් ලැබෙන සෘජු source links
+  «🔗 අදාළ සබැඳි» ලෙස පිළිතුර අගට එකතු වේ. Chat බුබුළුවල සියලුම
+  `https://…` / `www.…` ලිපින දැන් ඔබා යන්න පුළුවන් clickable links.
+
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 270 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls
+npx -y tsx scripts/test.mts   # 277 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links)
 npm run build                 # production build
 ```
 

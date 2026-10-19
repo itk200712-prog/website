@@ -12,13 +12,15 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   buildGeminiRequest,
   DEFAULT_GEMINI_MODEL,
-  extractGeminiText,
+  extractGeminiResult,
   isAiEnabledValue,
   modelFallbackChain,
   normalizeAiHistory,
   normalizeAiQuestion,
   normalizeGeminiModel,
+  withSourceLinks,
   type AiHistoryTurn,
+  type AiSourceLink,
   type BaymaxAiLanguage,
 } from "@/lib/baymax-ai";
 
@@ -125,6 +127,15 @@ export async function GET(req: NextRequest) {
 
 type GeminiResult = { ok: true; answer: string } | { ok: false; status: number };
 
+/** continuation කොටසක් පෙර පිළිතුරට අමුණනවා — වචනයක් මැදින් කැඩෙන්නේ නැතිව */
+function appendContinuation(current: string, next: string): string {
+  if (!current) return next;
+  if (!next) return current;
+  if (/\s$/.test(current) || /^\s/.test(next)) return current + next;
+  if (/^[.,!?;:%)]/.test(next)) return current + next;
+  return `${current} ${next}`;
+}
+
 async function callGemini(
   apiKey: string,
   model: string,
@@ -133,33 +144,52 @@ async function callGemini(
   useSearch: boolean,
   history: AiHistoryTurn[]
 ): Promise<GeminiResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25_000);
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
-        headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify(buildGeminiRequest(question, language, useSearch, history)),
-        signal: controller.signal,
-        cache: "no-store",
-      }
-    );
-    let payload: unknown = null;
+  let fullAnswer = "";
+  const sources: AiSourceLink[] = [];
+  let requestQuestion = question;
+  let requestHistory = history;
+
+  // පිළිතුර token සීමාවෙන් (MAX_TOKENS) මැදින් කැඩුණොත්, නැවතුණු තැනින්ම
+  // ඉතිරිය ලියවා ගෙන සම්පූර්ණ පිළිතුරක් විදිහට යවනවා — අඩක් උත්තර බෑ.
+  for (let pass = 0; pass < 3; pass++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25_000);
     try {
-      payload = await res.json();
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        {
+          method: "POST",
+          headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+          body: JSON.stringify(buildGeminiRequest(requestQuestion, language, pass === 0 && useSearch, requestHistory)),
+          signal: controller.signal,
+          cache: "no-store",
+        }
+      );
+      let payload: unknown = null;
+      try {
+        payload = await res.json();
+      } catch {
+        /* හිස් response එකක් වෙන්න පුළුවන් */
+      }
+      if (!res.ok) return { ok: false, status: res.status };
+      const result = extractGeminiResult(payload);
+      if (!result.text) return fullAnswer ? { ok: true, answer: withSourceLinks(fullAnswer, sources, language) } : { ok: false, status: 200 };
+      fullAnswer = pass === 0 ? result.text : appendContinuation(fullAnswer, result.text);
+      for (const s of result.sources) {
+        if (!sources.some((x) => x.uri === s.uri)) sources.push(s);
+      }
+      if (result.finishReason !== "MAX_TOKENS") break;
+      requestHistory = [...history, { role: "user", text: question }, { role: "model", text: fullAnswer }];
+      requestQuestion =
+        "Continue exactly where the previous answer stopped and finish it completely. Do not repeat anything already written, do not add a new introduction, and make sure the final sentence is complete.";
     } catch {
-      /* හිස් response එකක් වෙන්න පුළුවන් */
+      return fullAnswer ? { ok: true, answer: withSourceLinks(fullAnswer, sources, language) } : { ok: false, status: 0 };
+    } finally {
+      clearTimeout(timer);
     }
-    if (!res.ok) return { ok: false, status: res.status };
-    const answer = extractGeminiText(payload);
-    return answer ? { ok: true, answer } : { ok: false, status: 200 };
-  } catch {
-    return { ok: false, status: 0 };
-  } finally {
-    clearTimeout(timer);
   }
+
+  return fullAnswer ? { ok: true, answer: withSourceLinks(fullAnswer, sources, language) } : { ok: false, status: 200 };
 }
 
 type GeminiAnswer = { ok: true; answer: string; model: string } | { ok: false; status: number };

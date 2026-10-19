@@ -183,6 +183,149 @@ export function detectNameIntro(raw: string): string | null {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Signed-in greeting නම — guest කෙනෙක්ට හෝ වෙන visitor කෙනෙක් browser එකේ
+//  කියපු නමක් කවදාවත් greeting එකට ගන්නේ නෑ. නම එන්නේ sign in වී ඇති
+//  profile එකෙන්ම පමණයි: සාමාන්‍ය user නම් ඒ user ගෙ නම, admin නම් ඒ
+//  admin ගෙ නම. Profile එකක් නැති (guest) විට නම හිස් — "Hi" පමණයි.
+// ─────────────────────────────────────────────────────────────────────────────
+export type GreetingProfile = {
+  full_name?: string | null;
+  auth_email?: string | null;
+  nic?: string | null;
+  role?: string | null;
+} | null | undefined;
+
+/** Baymax සහ මේ website එක නිර්මාණය කර පුහුණු කළ පුද්ගලයා (identity පිළිතුරු සඳහා) */
+export const BAYMAX_CREATOR_NAME = "Induwara Thathsara";
+export const BAYMAX_CREATOR_PHONE = "0764247716";
+
+const GENERIC_PROFILE_NAMES = new Set([
+  "super administrator",
+  "super admin",
+  "superadmin",
+  "administrator",
+  "admin",
+  "member",
+  "user",
+  "guest",
+]);
+
+function tidyDisplayName(value: string): string {
+  const name = value.replace(/\s+/g, " ").trim().slice(0, 60).trim();
+  if (!name) return "";
+  // සිංහල නම් ඒ විදිහටම — Latin නම් all-lower/all-upper නම් Title Case කරයි
+  if (/\p{Script=Sinhala}/u.test(name)) return name.split(" ").slice(0, 4).join(" ");
+  if (name === name.toLowerCase() || name === name.toUpperCase()) {
+    return name
+      .toLowerCase()
+      .split(" ")
+      .slice(0, 4)
+      .map((w) => (w.includes(".") ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+      .join(" ");
+  }
+  return name.split(" ").slice(0, 4).join(" ");
+}
+
+/** NIC එකක් වගේ පෙනෙන අගයන් greeting නමක් ලෙස කවදාවත් පාවිච්චි කරන්නේ නෑ */
+function looksLikeNicValue(value: string): boolean {
+  const v = value.replace(/[\s-]/g, "");
+  return /^\d{12}$/.test(v) || /^\d{9}[vVxX]$/.test(v) || /^\d+$/.test(v);
+}
+
+export function greetingDisplayName(profile: GreetingProfile): string {
+  if (!profile) return "";
+  const full = tidyDisplayName(String(profile.full_name ?? ""));
+  if (full && !GENERIC_PROFILE_NAMES.has(full.toLowerCase())) return full;
+
+  const email = String(profile.auth_email ?? "").trim().toLowerCase();
+  const nic = String(profile.nic ?? "").trim();
+  // මුල සිටම සිටින root superadmin ගිණුම — profile නම සාමාන්‍ය label එකක්
+  // ("Super Administrator") වුවත් ඒ ගිණුමේ අයිතිකරුගේ නමින් ආචාර කරයි
+  if (nic.toUpperCase() === "SUPERADMIN") {
+    return tidyDisplayName(BAYMAX_CREATOR_NAME);
+  }
+  // custom username එකක් (උදා: ITKWEB) NIC slot එකේ තිබේ නම් එයයි username එක
+  if (nic && /[A-Za-z]/.test(nic) && !looksLikeNicValue(nic)) return tidyDisplayName(nic);
+  // ඊමේල් එකේ @ ට කලින් කොටස username එකක් ලෙස (අංක/ NIC නම් එපා)
+  const emailUser = email.split("@")[0]?.replace(/[._-]+/g, " ") ?? "";
+  if (emailUser && /[a-z]/i.test(emailUser) && !looksLikeNicValue(emailUser.replace(/\s/g, ""))) {
+    return tidyDisplayName(emailUser);
+  }
+  // අවසානයේ generic profile ලේබලය (උදා: "Super Administrator")
+  return full;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Bot / website identity ප්‍රශ්න — "ඔයාගේ model එක මොකක්ද?", "ඔයාව හැදුවේ
+//  කවුද?", "මේ website එක හැදුවේ කවුද?", "website admin ගේ නම්බර් එක".
+//  මේවා AI එකට යන්නේ නැතිව ස්ථිර නිවැරදි පිළිතුරු ලැබිය යුතුයි, ඒ නිසා
+//  live-chat එකේ සියල්ලටම කලින් මේ detector එක දුවයි.
+// ─────────────────────────────────────────────────────────────────────────────
+export type BotIdentityIntent = "model" | "creator" | "website_creator" | "website_admin_contact";
+
+export function detectBotIdentityIntent(raw: string): BotIdentityIntent | null {
+  const c = cleanText(raw);
+  if (!c) return null;
+  const words = c.split(" ").filter(Boolean).length;
+
+  const websiteRef =
+    /(website|web ?site|web ?page|webpage|site|වෙබ්|මේ අඩවිය|මෙම අඩවිය|අඩවිය|සයිට්)/.test(c);
+  const adminWord =
+    /(admin|administrator|webmaster|developer|ඇඩ්මින්|ඇඩ්මිනිස්ට්‍රේටර්|පරිපාලක|ඩිවලපර්)/.test(c);
+  const contactAsk =
+    /(name|number|phone|contact|telephone|mobile|call|who|නම|අංකය|අංකයක්|නම්බර්|නොම්බර|දුරකථන|දුරකතන|කවුද|කව්ද|සම්බන්ධ|සම්බන්ද)/.test(c);
+  const officeContext =
+    /(office|society|mpcs|කාර්යාල|සමිතිය|සමූපකාර|ඔෆිස්)/.test(c);
+
+  // 1) Website admin ගේ නම/අංකය — "website admin ge number eka" වගේ ඒවාත්
+  if (adminWord && contactAsk && (websiteRef || !officeContext)) {
+    return "website_admin_contact";
+  }
+
+  // නිර්මාණය සම්බන්ධ වචන (සිංහල/Singlish) — English වල loose "make/train"
+  // පාවිච්චි කරන්නේ නෑ: "how do you make tea?" / "train schedule" වගේ
+  // සාමාන්‍ය ප්‍රශ්න වරදවා අල්ලන්නේ නැති වෙන්නයි.
+  const creationSi =
+    /(හැදුව|හැදූ|හදපු|හදාගන|හදාගත්|සාදපු|සෑදුව|නිර්මාණය|නිර්මාණ|සකස් ?කළ|සකස් ?කල|සකසපු|පුහුණු ?කළ|පුහුණු ?කල|haduwa|haduwe|haduwada|hadapu|hadaganna|hadagat|sakas ?kala|nirmanaya|puhunu ?kala|train ?kala)/.test(c);
+  const creationEnForWebsite =
+    /(made|created|creator|built|developed|developer|designed|designer|author|owner|programmed|coded)/.test(c);
+
+  // 2) මේ website එක හැදුවේ කවුද?
+  if (websiteRef && (creationSi || creationEnForWebsite)) return "website_creator";
+
+  // 3) ඔයාව හැදුවේ/පුහුණු කළේ කවුද? · ඔයාව හදාගත්තේ කොහොමද?
+  //    Bot එක වස්තුව විදිහට (ඔයාව/ඔබව/…you) තිබිය යුතුයි — නැත්නම්
+  //    "ඔයා කේක් හදන්නේ කොහොමද?" වගේ ප්‍රශ්නත් අල්ලනවා.
+  const botObject =
+    /(ඔයාව|ඔබව|බොට්|බේමැක්ස්|baymax|\b(oyawa|obawa)\b)/.test(c);
+  const creationEnForBot =
+    /((made|created|built|developed|designed|trained|programmed|coded|invented) you|you were (made|created|built|developed|designed|trained|programmed)|your (creator|developer|maker|trainer|designer|author|owner))/.test(c);
+  const yourRef = /(your|ඔයාගේ|ඔයාගෙ|ඔබගේ|ඔබේ|\b(oyage|obage)\b)/.test(c);
+  const makerNoun = /(නිර්මාණකරු|හදපු කෙනා|හදපු කෙන|පුහුණු කළ කෙනා|creator|developer|maker|trainer)/.test(c);
+  if ((botObject && creationSi) || creationEnForBot || (yourRef && makerNoun)) return "creator";
+
+  // 4) Model / AI ප්‍රශ්න — "ඔයාගේ model එක මොකක්ද", "මොන AI එකද ඔයා",
+  //    "are you <provider>?" වගේ ඒවා. (Provider නම් මෙතැන ඇත්තේ හඳුනාගැනීමට
+  //    විතරයි — පිළිතුරේ ඒ වචන කවදාවත් එන්නේ නෑ.) "search google for…"
+  //    වගේ සෙවුම් ඉල්ලීම් අල්ලන්නේ නැති වෙන්න provider කොටස කෙටි
+  //    ප්‍රශ්නවලට විතරක් සීමා කර ඇත.
+  const botRef =
+    /(you|your|baymax|bot|chatbot|assistant|ඔයා|ඔයාව|ඔයාගේ|ඔයාගෙ|ඔබ|ඔබව|ඔබගේ|ඔබේ|බොට්|බේමැක්ස්|\b(oya|oyawa|oyage|oba|obawa|obage)\b)/.test(c);
+  if (yourRef && /(model|මොඩල්|version|\bai\b|තාක්ෂණ)/.test(c)) return "model";
+  if (/(you|baymax|bot|ඔයා|ඔබ|බොට්|\b(oya|oba)\b).{0,25}(model|මොඩල්)/.test(c)) return "model";
+  if (/(model|මොඩල්).{0,25}(you|baymax|bot|ඔයා|ඔබ|බොට්|\b(oya|oba)\b)/.test(c)) return "model";
+  if (botRef && /(what ai|which ai|මොන ai|මොකක්ද ai)/.test(c)) return "model";
+  if (
+    words <= 6 &&
+    /(are you|you are|ඔයා|ඔබ|\b(oya|oba)\b).{0,30}(google|gemini|flash|gpt|chatgpt|openai|claude|llama)/.test(c)
+  ) {
+    return "model";
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  ඉන්ධන — generic "fuel prices" → තෝරන මෙනුව · specific වර්ගය → ඒ මිල හරියටම
 // ─────────────────────────────────────────────────────────────────────────────
 export function detectFuel(raw: string): FuelIntent | null {

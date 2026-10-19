@@ -16,15 +16,19 @@
 //                          තේරුණේ නැති පණිවිඩ log කිරීම (src/lib/chatbot.ts)
 // ============================================================================
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Facebook, Fuel, Images, Loader2, Lock, MessageCircle, Minus, Newspaper, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
+import { authedClient } from "@/lib/supabase/client";
 import { tokens } from "@/lib/search";
 import { BOARD, BUSINESSES, FUEL_PRICES, GALLERY, NEWS, RURAL_BANK_BRANCHES, SETTINGS, SITE } from "@/lib/seed";
 import { looksLikeNicAttempt, normalizeNic, normalizePhone, validateNic, validatePhone } from "@/lib/auth";
 import {
+  BAYMAX_CREATOR_NAME,
+  BAYMAX_CREATOR_PHONE,
   detectBanking,
+  detectBotIdentityIntent,
   detectComplaint,
   detectFuel,
   detectGallery,
@@ -32,6 +36,7 @@ import {
   detectNews,
   detectOfficerRequest,
   detectSmalltalk,
+  greetingDisplayName,
   canUseLiveChat,
   getLiveChatHoursStatus,
   nextLiveChatOpenPhrase,
@@ -95,6 +100,39 @@ type Msg = {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * පණිවිඩයේ ඇති website links (https://… / www.… ) clickable කර පෙන්වයි —
+ * Baymax දෙන link එකක් visitor ට ඔබා කෙලින්ම ඒ පිටුවට යන්න පුළුවන් වෙන්නයි.
+ * React text විදිහටම render කරන නිසා HTML injection අවදානමක් නෑ.
+ */
+function LinkedText({ text, inverted = false }: { text: string; inverted?: boolean }) {
+  const parts = String(text ?? "").split(/((?:https?:\/\/|www\.)[^\s<]+)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (!/^(?:https?:\/\/|www\.)/.test(part)) return <Fragment key={i}>{part}</Fragment>;
+        const match = part.match(/^(.+?)([),.;!?]+)?$/);
+        const url = match?.[1] ?? part;
+        const trail = match?.[2] ?? "";
+        const href = url.startsWith("http") ? url : `https://${url}`;
+        return (
+          <Fragment key={i}>
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              className={inverted ? "font-semibold text-white underline break-all" : "font-semibold text-indigo-600 underline break-all"}
+            >
+              {url}
+            </a>
+            {trail}
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
 
 const ACTIONS = [
   { key: "find", en: "Find Member", si: "සාමාජික සොයන්න", icon: Search },
@@ -167,6 +205,11 @@ export function LiveChat() {
   const [agentName, setAgentName] = useState("");
   const [liveText, setLiveText] = useState("");
   const [visitorName, setVisitorName] = useState("");
+  // 👋 Greeting එකේ නම — sign in වී ඇති profile එකෙන් විතරක් (guest ට හිස්).
+  // visitor කෙනෙක් chat එකේ කියපු නම හෝ browser එකේ save වූ නම greeting
+  // එකට ගන්නේ නෑ — නැත්නම් වෙනත් කෙනෙක්ට ඒ නමින්ම ආචාර වෙන්න පුළුවන්.
+  const [signedInName, setSignedInName] = useState("");
+  const signedInNameRef = useRef("");
   const [liveBusy, setLiveBusy] = useState(false);
   const [liveErr, setLiveErr] = useState("");
   const [minimized, setMinimized] = useState(false);
@@ -283,6 +326,48 @@ export function LiveChat() {
     };
   }, []);
 
+  // 👋 Sign in වී ඇති පුද්ගලයාගේ නම (greeting සඳහා) — සාමාන්‍ය user නම් ඒ
+  // user ගේ, admin නම් ඒ admin ගේ profile නම. Sign in නැති guest ට නම හිස්,
+  // එවිට greeting එක "Hi" විතරයි. Chat එක open කරන හැම වරම refresh වේ.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const sb = await authedClient();
+        const { data: authData } = await sb.auth.getUser();
+        const user = authData?.user;
+        if (!user) {
+          if (alive) {
+            signedInNameRef.current = "";
+            setSignedInName("");
+          }
+          return;
+        }
+        const { data: profile } = await sb
+          .from("profiles")
+          .select("full_name,auth_email,nic,role")
+          .eq("id", user.id)
+          .maybeSingle();
+        const metaName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
+        const name = greetingDisplayName(
+          profile ?? { full_name: metaName, auth_email: user.email ?? "", nic: "", role: "" }
+        );
+        if (alive) {
+          signedInNameRef.current = name;
+          setSignedInName(name);
+        }
+      } catch {
+        if (alive) {
+          signedInNameRef.current = "";
+          setSignedInName("");
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
   // 🕘 කාර්යාල වේලාව තත්‍ය වේලාවෙන්ම තබා ගන්න (widget එක ඇරලා තියෙද්දී වේලාව පැන ගියත්)
   useEffect(() => {
     const id = setInterval(() => setLiveHours(getLiveChatHoursStatus()), 30_000);
@@ -314,10 +399,9 @@ export function LiveChat() {
       }
       setSessionKey(k);
       const n = localStorage.getItem("mpcs_chat_name");
-      if (n) {
-        setVisitorName(n);
-        convoRef.current.name = n;
-      }
+      // සටහන: මේ නම officer Live Chat එකේ නම පෙන්වීමට විතරයි — Baymax
+      // greeting එකට ගන්නේ නෑ (එයට sign-in profile නම පමණයි).
+      if (n) setVisitorName(n);
 
       // ✅ refresh කළත් chat එක close වෙන්නේ නෑ
       const t = localStorage.getItem("mpcs_chat_tab");
@@ -1670,7 +1754,7 @@ export function LiveChat() {
         ...aiHistoryRef.current,
         { role: "user" as const, text: q },
         { role: "model" as const, text: answer },
-      ].slice(-8);
+      ].slice(-12);
       convoRef.current.lastIntent = "ai";
       void logEvent("ai_answer", q, 0, sessionRef.current);
       return true;
@@ -1734,8 +1818,10 @@ export function LiveChat() {
     //  patterns ඔක්කොම src/lib/chatbot.ts එකේ — අලුත් වචන එතැනින් ට්‍රේන් කරන්න
     // ───────────────────────────────────────────────────────────────────────
     const rsi = replyIsSi(q, si);
-    const myName = (visitorName.trim() || convoRef.current.name || "").trim();
-    const firstName = myName ? myName.split(/\s+/)[0] : "";
+    // 👋 Greeting නම = sign in වී ඇති profile එකේ username/නම විතරක්.
+    // Guest ට සහ chat එකේ නම කියපු අයට නම හිස් — "Hi" පමණයි. වෙනත්
+    // visitor කෙනෙක් මේ browser එකේ කියපු නමක් කවදාවත් පාවිච්චි වෙන්නේ නෑ.
+    const firstName = (signedInNameRef.current || signedInName).trim();
     const menuChips = rsi ? MENU_CHIPS_SI : MENU_CHIPS_EN;
 
     // "මගේ නම ..." කියූ විට — නම මතක තබා, පස්සේ නමින් අමතන්න
@@ -1757,6 +1843,54 @@ export function LiveChat() {
           : `I'm ${botName} — the live assistant of ${SITE.short_en}.\nHow are you doing?`,
       });
       void logEvent("intent_name_intro", "", 0, sessionRef.current);
+      return;
+    }
+
+    // 🤖 Bot / website identity ප්‍රශ්න — model එක, හදපු කෙනා, website admin.
+    // මේවා AI එකට යන්නේ නැතිව ස්ථිර නිවැරදි පිළිතුරු ලැබෙනවා. පිළිතුරුවල
+    // යටින් ඇති provider/model තාක්ෂණ නම් කවදාවත් සඳහන් වෙන්නේ නෑ.
+    const identityIntent = detectBotIdentityIntent(q);
+    if (identityIntent) {
+      convoRef.current.lastIntent = `identity_${identityIntent}`;
+      void logEvent(`intent_identity_${identityIntent}`, q, 0, sessionRef.current);
+      if (identityIntent === "website_admin_contact") {
+        push({
+          from: "bot",
+          bold: rsi ? "👤 වෙබ් අඩවි Admin" : "👤 Website Admin",
+          text: rsi
+            ? `මේ වෙබ් අඩවියේ Admin: ${BAYMAX_CREATOR_NAME}\n📞 දුරකථන අංකය: ${BAYMAX_CREATOR_PHONE}`
+            : `Website Admin: ${BAYMAX_CREATOR_NAME}\n📞 Phone: ${BAYMAX_CREATOR_PHONE}`,
+          chips: menuChips,
+          link: { href: `tel:+94${BAYMAX_CREATOR_PHONE.slice(1)}`, label: rsi ? "දැන් අමතන්න" : "Call now" },
+        });
+      } else if (identityIntent === "website_creator") {
+        push({
+          from: "bot",
+          bold: `🤖 ${botName}`,
+          text: rsi
+            ? `මේ වෙබ් අඩවිය නිර්මාණය කර සකස් කළේ ${BAYMAX_CREATOR_NAME} විසිනි.`
+            : `This website was created and prepared by ${BAYMAX_CREATOR_NAME}.`,
+          chips: menuChips,
+        });
+      } else if (identityIntent === "creator") {
+        push({
+          from: "bot",
+          bold: `🤖 ${botName}`,
+          text: rsi
+            ? `මාව සකස් කර පුහුණු කළේ ${BAYMAX_CREATOR_NAME} විසිනි. මම මේ වෙබ් අඩවියට එන ඔබවැනි අමුත්තන්ට උදව් කරන්න විශේෂයෙන් සූදානම් කළ AI සහායකයෙක්මි.`
+            : `I was created and trained by ${BAYMAX_CREATOR_NAME}. I'm an AI assistant prepared specially to help visitors of this website.`,
+          chips: menuChips,
+        });
+      } else {
+        push({
+          from: "bot",
+          bold: `🤖 ${botName}`,
+          text: rsi
+            ? `මම ${botName} — මේ වෙබ් අඩවිය වෙනුවෙන් විශේෂයෙන් පුහුණු කර සකස් කළ AI පද්ධතියක්. මාව සකස් කළේ ${BAYMAX_CREATOR_NAME} විසිනි.\nඔබට දැනගැනීමට අවශ්‍ය ඕනෑම දෙයක් අහන්න — මම උදව් කරන්නම්.`
+            : `I'm ${botName} — a custom AI system trained and prepared for this website by ${BAYMAX_CREATOR_NAME}.\nAsk me anything you'd like to know — I'm happy to help.`,
+          chips: menuChips,
+        });
+      }
       return;
     }
 
@@ -1876,8 +2010,8 @@ export function LiveChat() {
             from: "bot",
             bold: `🤖 ${botName}`,
             text: rsi
-              ? `මම ${botName} — ${SITE.short_si} එකේ සජීවී චැට් සහායකයා.\nමට පුළුවන්: සාමාජිකයන් සොයන්න, ඉන්ධන මිල කියන්න, පුවත් හා ගැලරි පෙන්වන්න, කළමනාකරුවන්ගේ දුරකථන දෙන්න සහ නිලධාරියෙක් සම්බන්ධ කරන්න.\nඋත්සාහ කරන්න: “fuel prices” කියලා ලියන්න 😊`
-              : `I'm ${botName} — the live chat assistant of ${SITE.short_en}.\nI can find members, share fuel prices, show news and the gallery, give managers' phone numbers and connect you with an officer.\nTry typing “fuel prices” 😊`,
+              ? `මම ${botName} — ${SITE.short_si} එකේ සජීවී චැට් සහායකයා. මාව පුහුණු කර සකස් කළේ ${BAYMAX_CREATOR_NAME} විසිනි.\nමට පුළුවන්: සාමාජිකයන් සොයන්න, ඉන්ධන මිල කියන්න, පුවත් හා ගැලරි පෙන්වන්න, කළමනාකරුවන්ගේ දුරකථන දෙන්න සහ නිලධාරියෙක් සම්බන්ධ කරන්න.\nඋත්සාහ කරන්න: “fuel prices” කියලා ලියන්න 😊`
+              : `I'm ${botName} — the live chat assistant of ${SITE.short_en}, trained and prepared by ${BAYMAX_CREATOR_NAME}.\nI can find members, share fuel prices, show news and the gallery, give managers' phone numbers and connect you with an officer.\nTry typing “fuel prices” 😊`,
             chips: menuChips,
           });
           return;
@@ -2342,7 +2476,7 @@ export function LiveChat() {
                           }`}
                         >
                           {m.bold && <div className="font-book font-extrabold mb-1 text-slate-900">{m.bold}</div>}
-                          <span className="font-book">{m.text}</span>
+                          <span className="font-book"><LinkedText text={m.text} inverted={m.from === "me"} /></span>
 
                           {/* business / board button panel */}
                           {m.card === "choices" && m.list && (
@@ -2371,7 +2505,7 @@ export function LiveChat() {
                                     push({
                                       from: "bot",
                                       bold: it.title,
-                                      text: `${it.sub ?? ""}\n\n${(it.desc ?? "").length > 600 ? `${(it.desc ?? "").slice(0, 600).trim()}…` : it.desc ?? ""}`,
+                                      text: `${it.sub ?? ""}\n\n${it.desc ?? ""}`,
                                       chips: si ? ["නිවේදන හා පුවත්", "ගැලරිය"] : ["News", "Gallery"],
                                       link: { href: "/news", label: si ? "සම්පූර්ණ පුවත පිටුවෙන් කියවන්න" : "Read the full story on the News page" },
                                     });
@@ -2821,7 +2955,7 @@ export function LiveChat() {
                               : "bg-white text-slate-700 border border-slate-200 rounded-bl-md shadow-sm"
                           }`}
                         >
-                          {m.body}
+                          <LinkedText text={m.body} inverted={m.sender === "visitor"} />
                         </div>
                       </div>
                     </div>

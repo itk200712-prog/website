@@ -443,27 +443,27 @@ ok("ai: normal-chat routing (free questions + follow-ups → AI, society keyword
   baymaxAi.shouldAskAiFirst("Maliban eka koheda thiyenne") === false &&
   baymaxAi.shouldAskAiFirst("සභාපතිගේ දුරකථන අංකය කීයද?") === false &&
   baymaxAi.shouldAskAiFirst("mata aluth deyak igena ganna asai kiyala hithuna") === true);
-ok("ai: history is sanitized (roles mapped, capped)",
+ok("ai: history is sanitized (roles mapped, long answers kept whole up to cap)",
   JSON.stringify(baymaxAi.normalizeAiHistory([
     { role: "assistant", text: "  ආයුබෝවන්   ලෝකය " },
     { role: "weird", text: "කොහොමද" },
     { role: "user", text: "x" },
-    { role: "model", text: "y".repeat(400) },
+    { role: "model", text: "y".repeat(4500) },
   ])) === JSON.stringify([
     { role: "model", text: "ආයුබෝවන් ලෝකය" },
     { role: "user", text: "කොහොමද" },
-    { role: "model", text: "y".repeat(320) },
+    { role: "model", text: "y".repeat(4000) },
   ]));
 ok("ai: enabled only for explicit on values", baymaxAi.isAiEnabledValue("1") === true && baymaxAi.isAiEnabledValue("true") === true && baymaxAi.isAiEnabledValue("0") === false && baymaxAi.isAiEnabledValue("") === false);
 ok("ai: secret mask never reveals the full key", baymaxAi.maskSecret("prod-secret-123456abcd") === "prod…abcd" && baymaxAi.maskSecret("short") === "••••••••" && baymaxAi.maskSecret("") === "");
-ok("ai: question is trimmed/collapsed and capped", baymaxAi.normalizeAiQuestion("  hello\n\n world  ") === "hello world" && baymaxAi.normalizeAiQuestion("x".repeat(900)).length === 600);
+ok("ai: question is trimmed/collapsed and capped", baymaxAi.normalizeAiQuestion("  hello\n\n world  ") === "hello world" && baymaxAi.normalizeAiQuestion("x".repeat(2100)).length === 2000);
 const siInstruction = baymaxAi.baymaxAiSystemInstruction("si");
 ok("ai: Sinhala instruction (professional tone + current date) + no invented society facts",
   siInstruction.includes("Sinhala script") &&
   siInstruction.includes("respectful 'ඔබ' form") &&
   siInstruction.includes("Today in Sri Lanka is") &&
   siInstruction.includes("Never invent facts") &&
-  siInstruction.includes("Google Search") &&
+  siInstruction.includes("search the web first") &&
   siInstruction.includes("Do not add an unrelated society"));
 const groundedReq = baymaxAi.buildGeminiRequest("සමූපකාරයක් යනු කුමක්ද?", "si", true) as { tools?: unknown; contents: { parts: { text: string }[] }[] };
 ok("ai: Gemini request uses Google Search grounding", JSON.stringify(groundedReq.tools) === JSON.stringify([{ google_search: {} }]) && groundedReq.contents[0].parts[0].text.includes("සමූපකාරයක්"));
@@ -661,6 +661,85 @@ ok("backup: separate encryption password + saved download/import history (actor/
   schema.includes("backup_history_super") &&
   scheduledBackupSrc.includes('{ name: "backup_history", pk: "id" }') &&
   scheduledBackupSrc.includes('action: "scheduled"'));
+
+console.log("\n── 21) Baymax professional upgrade (greeting · identity · complete answers · links) ──");
+ok("greeting name: guest → no name (Hi only); signed-in user/admin → own profile name",
+  bot.greetingDisplayName(null) === "" &&
+  bot.greetingDisplayName(undefined) === "" &&
+  bot.greetingDisplayName({ full_name: "kasun bandara", role: "member" }) === "Kasun Bandara" &&
+  bot.greetingDisplayName({ full_name: "Saman Kumara", role: "admin" }) === "Saman Kumara" &&
+  bot.greetingDisplayName({ full_name: "Super Administrator", nic: "SUPERADMIN", role: "superadmin" }) === "Induwara Thathsara" &&
+  bot.greetingDisplayName({ nic: "200123456781", role: "member" }) === "" &&
+  bot.greetingDisplayName({ full_name: "", auth_email: "nimali.perera@example.com" }) === "Nimali Perera");
+ok("identity intent: model / creator / website creator / website admin contact",
+  bot.detectBotIdentityIntent("ඔයාගේ model එක මොකක්ද?") === "model" &&
+  bot.detectBotIdentityIntent("what AI are you?") === "model" &&
+  bot.detectBotIdentityIntent("ඔයාගේ AI එක මොකක්ද?") === "model" &&
+  bot.detectBotIdentityIntent("ඔයාව හැදුවේ කවුද?") === "creator" &&
+  bot.detectBotIdentityIntent("ඔයාව හදාගත්තේ කොහොමද?") === "creator" &&
+  bot.detectBotIdentityIntent("who trained you?") === "creator" &&
+  bot.detectBotIdentityIntent("මේ website එක හැදුවේ කවුද?") === "website_creator" &&
+  bot.detectBotIdentityIntent("who made this website?") === "website_creator" &&
+  bot.detectBotIdentityIntent("වෙබ් සයිට් එකේ ඇඩ්මින් ගේ නම්බර් එක මොකක්ද?") === "website_admin_contact" &&
+  bot.detectBotIdentityIntent("website admin ge number eka denawada") === "website_admin_contact");
+ok("identity intent: ordinary questions are NOT hijacked",
+  bot.detectBotIdentityIntent("ගැසට් පත්‍ර ගන්න වෙබ් අඩවිය මොකක්ද?") === null &&
+  bot.detectBotIdentityIntent("සභාපතිගේ දුරකථන අංකය කීයද?") === null &&
+  bot.detectBotIdentityIntent("What is Google Gemini?") === null &&
+  bot.detectBotIdentityIntent("කාර්යාලයේ ඇඩ්මින් ගේ අංකය මොකක්ද?") === null &&
+  bot.detectBotIdentityIntent("සීගිරිය කොහෙද තියෙන්නේ?") === null &&
+  bot.detectBotIdentityIntent("how do you make a cake?") === null &&
+  bot.detectBotIdentityIntent("ඔයා කේක් හදන්නේ කොහොමද?") === null &&
+  bot.detectBotIdentityIntent("can you search google for the gazette paper site and give me the link") === null &&
+  bot.detectBotIdentityIntent("can you find the train schedule for me") === null);
+ok("chat: greeting uses signed-in profile name only + identity handled before AI + links clickable",
+  liveChatSrc.includes("signedInNameRef.current") &&
+  liveChatSrc.includes("greetingDisplayName(") &&
+  !liveChatSrc.includes("visitorName.trim() || convoRef.current.name") &&
+  liveChatSrc.includes("detectBotIdentityIntent(q)") &&
+  liveChatSrc.indexOf("detectBotIdentityIntent(q)") < liveChatSrc.indexOf("shouldAskAiFirst(q") &&
+  liveChatSrc.includes("BAYMAX_CREATOR_PHONE") &&
+  liveChatSrc.includes("<LinkedText") &&
+  liveChatSrc.includes('target="_blank"') &&
+  !liveChatSrc.includes(".slice(0, 600)"));
+const completeReq = baymaxAi.buildGeminiRequest("විස්තර කියන්න", "si", true) as { generationConfig?: { maxOutputTokens?: number } };
+const longAnswer = `${"වචනය ".repeat(800)}අවසානය.`;
+ok("ai: complete answers (large token budget, no mid-answer cut, markdown links → plain URLs)",
+  (completeReq.generationConfig?.maxOutputTokens ?? 0) >= 2048 &&
+  baymaxAi.cleanAiAnswerText(longAnswer).endsWith("අවසානය.") &&
+  baymaxAi.cleanAiAnswerText(longAnswer).length > 1800 &&
+  baymaxAi.cleanAiAnswerText("මෙතැනින්: [Gazette](https://documents.gov.lk/gazette)").includes("Gazette — https://documents.gov.lk/gazette"));
+const groundedPayload = {
+  candidates: [{
+    finishReason: "MAX_TOKENS",
+    content: { parts: [{ text: "ගැසට් පත්‍ර ගැන විස්තරය." }] },
+    groundingMetadata: {
+      groundingChunks: [
+        { web: { uri: "https://documents.gov.lk/gazette", title: "Sri Lanka Gazette" } },
+        { web: { uri: "https://vertexaisearch.cloud.google.com/redirect", title: "redirect" } },
+        { web: { uri: "https://documents.gov.lk/gazette", title: "duplicate" } },
+      ],
+    },
+  }],
+};
+const groundedResult = baymaxAi.extractGeminiResult(groundedPayload);
+ok("ai: finish reason + direct source links extracted, appended once (no redirects/dupes)",
+  groundedResult.finishReason === "MAX_TOKENS" &&
+  groundedResult.sources.length === 1 &&
+  groundedResult.sources[0].uri === "https://documents.gov.lk/gazette" &&
+  baymaxAi.withSourceLinks("පිළිතුර.", groundedResult.sources, "si").includes("අදාළ සබැඳි") &&
+  baymaxAi.withSourceLinks("පිළිතුර.", groundedResult.sources, "si").includes("https://documents.gov.lk/gazette") &&
+  baymaxAi.withSourceLinks("බලන්න https://documents.gov.lk/gazette", groundedResult.sources, "si") === "බලන්න https://documents.gov.lk/gazette");
+ok("ai: server auto-continues MAX_TOKENS answers + identity/link/completeness instructions",
+  baymaxAiRouteSrc.includes("extractGeminiResult") &&
+  baymaxAiRouteSrc.includes('"MAX_TOKENS"') &&
+  baymaxAiRouteSrc.includes("Continue exactly where the previous answer stopped") &&
+  baymaxAiRouteSrc.includes("withSourceLinks") &&
+  siInstruction.includes("trained and prepared for this website by Induwara Thathsara") &&
+  siInstruction.includes("Never reveal") &&
+  siInstruction.includes("full direct URL") &&
+  siInstruction.includes("Never stop in the middle") &&
+  siInstruction.includes("silently proofread"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
