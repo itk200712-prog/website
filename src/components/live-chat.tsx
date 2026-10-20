@@ -40,6 +40,7 @@ import {
   greetingDisplayName,
   canUseLiveChat,
   getLiveChatHoursStatus,
+  liveChatHoursText,
   nextLiveChatOpenPhrase,
   hasClearableHistory,
   resetBaymaxMemory,
@@ -1417,8 +1418,8 @@ export function LiveChat() {
       from: "bot",
       bold: responseSi ? "🕘 Live Chat දැන් වසා ඇත" : "🕘 Live Chat is closed right now",
       text: responseSi
-        ? `මේ වෙලාවේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම අපහසුයි.\nකරුණාකර ${nextLiveChatOpenPhrase(true)} නැවත සම්බන්ධ වෙන්න.\n\nLive Chat වේලාවන්:\nසඳුදා – සිකුරාදා : පෙ.ව. 8.30 – ප.ව. 5.30\nසෙනසුරාදා : පෙ.ව. 8.30 – ප.ව. 1.30\nඉරිදා : වසා ඇත\n\nඊට අතරතුරු මට (Baymax) ඕනෑම දෙයක් අහන්න පුළුවන්. පණිවිඩයක් තියන්න ඕන නම් උඩ තියෙන “පණිවිඩය” tab එක පාවිච්චි කරන්න — නිලධාරීන් ඊළඟ කාර්යාල වේලාවේදී එය බලනවා.`
-        : `It's difficult to connect you with a live officer at this time.\nPlease reconnect ${nextLiveChatOpenPhrase(false)}.\n\nLive Chat hours:\nMonday – Friday : 8:30 AM – 5:30 PM\nSaturday : 8:30 AM – 1:30 PM\nSunday : Closed\n\nIn the meantime, you can ask me (Baymax) anything. If you'd like to leave a message, use the “Message” tab above — our officers will see it during the next office hours.`,
+        ? `මේ වෙලාවේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම අපහසුයි.\nකරුණාකර ${nextLiveChatOpenPhrase(true)} නැවත සම්බන්ධ වෙන්න.\n\nLive Chat වේලාවන්:\n${liveChatHoursText(true)}\n\nඊට අතරතුරු මට (Baymax) ඕනෑම දෙයක් අහන්න පුළුවන්. පණිවිඩයක් තියන්න ඕන නම් උඩ තියෙන “පණිවිඩය” tab එක පාවිච්චි කරන්න — නිලධාරීන් ඊළඟ කාර්යාල වේලාවේදී එය බලනවා.`
+        : `It's difficult to connect you with a live officer at this time.\nPlease reconnect ${nextLiveChatOpenPhrase(false)}.\n\nLive Chat hours:\n${liveChatHoursText(false)}\n\nIn the meantime, you can ask me (Baymax) anything. If you'd like to leave a message, use the “Message” tab above — our officers will see it during the next office hours.`,
       chips: si ? MENU_CHIPS_SI : MENU_CHIPS_EN,
     });
     void logEvent("live_outside_hours", "", 0, sessionRef.current);

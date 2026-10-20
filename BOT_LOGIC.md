@@ -138,8 +138,9 @@ brain/officer flow එකෙන්මයි. Keyword විතරක් ති�
 ## 🕘 Live Chat කාර්යාල වේලාවන්
 
 සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම (Live Chat / Request a Call) පුළුවන්
-වන්නේ **Asia/Colombo වේලාවෙන්** සඳුදා–සිකුරාදා පෙ.ව. 8.30–ප.ව. 5.30 සහ
-සෙනසුරාදා පෙ.ව. 8.30–ප.ව. 1.30 අතර විතරයි; ඉරිදා වසා ඇත. වේලාවෙන් පිටත
+වන්නේ **Asia/Colombo වේලාවෙන්** සඳුදා සිට සිකුරාදා දක්වා ඕනෑම දිනක
+පෙ.ව. 8.30–ප.ව. 5.30 සහ සෙනසුරාදා පෙ.ව. 8.30–ප.ව. 1.30 අතර විතරයි;
+ඉරිදා වසා ඇත. වේලාවෙන් පිටත
 ඉල්ලුවොත් ඉල්ලීම නොයවා «මේ වෙලාවේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීම
 අපහසුයි» කියා **ඊළඟට විවෘත වන වේලාව** (අද / හෙට / සඳුදා) පෙන්වයි.
 මේ සීමාව Live Chat එකට විතරයි — Baymax පිළිතුරු සහ Message පෙට්ටිය 24/7
@@ -217,7 +218,7 @@ reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒව�
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 287 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation + scheduled auto-backup (full ZIP · encrypted v2 · interval/time → Supabase/MEGA)
+npx -y tsx scripts/test.mts   # 288 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + responsive header brand + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation + scheduled auto-backup (full ZIP · encrypted v2 · interval/time → Supabase/MEGA)
 npm run build                 # production build
 ```
 

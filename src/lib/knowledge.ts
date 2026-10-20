@@ -622,9 +622,9 @@ function staticEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
       title_si: "නිලධාරියෙකු සම්බන්ධ කර ගන්නා ආකාරය",
       title_en: "How officer contact works",
       body_si:
-        "නිලධාරියෙකු සමඟ කතා කිරීමට මෙහි \"ඇමතුමක් ඉල්ලන්න\" තෝරා ඔබේ නම, NIC අංකය සහ දුරකථන අංකය දෙන්න. ඔබේ ඉල්ලීම නිලධාරීන්ට දැනුම් දෙන අතර කෙනෙකු සූදානම් වූ විට ඇමතුමක් ලැබේ. Live Chat පණිවිඩ ලිවිය හැක්කේ නිලධාරියෙක් ඔබේ ඉල්ලීම පිළිගෙන chat එකට සම්බන්ධ වූ පසුව පමණි — ඊට පෙර Live Chat එක අගුලු දමා ඇත. Live Chat නිලධාරි සේවය සඳුදා–සිකුරාදා පෙ.ව. 8.30–ප.ව. 5.30 දක්වාත්, සෙනසුරාදා පෙ.ව. 8.30–ප.ව. 1.30 දක්වාත් ලබාගත හැක; ඉරිදා වසා ඇත. සාමාන්‍ය විමසුමක් සඳහා Contact පිටුවේ පණිවිඩ පෝරමයද භාවිතා කළ හැක.",
+        "නිලධාරියෙකු සමඟ කතා කිරීමට මෙහි \"ඇමතුමක් ඉල්ලන්න\" තෝරා ඔබේ නම, NIC අංකය සහ දුරකථන අංකය දෙන්න. ඔබේ ඉල්ලීම නිලධාරීන්ට දැනුම් දෙන අතර කෙනෙකු සූදානම් වූ විට ඇමතුමක් ලැබේ. Live Chat පණිවිඩ ලිවිය හැක්කේ නිලධාරියෙක් ඔබේ ඉල්ලීම පිළිගෙන chat එකට සම්බන්ධ වූ පසුව පමණි — ඊට පෙර Live Chat එක අගුලු දමා ඇත. Live Chat නිලධාරි සේවය සඳුදා සිට සිකුරාදා දක්වා ඕනෑම දිනක පෙ.ව. 8.30–ප.ව. 5.30 දක්වාත්, සෙනසුරාදා පෙ.ව. 8.30–ප.ව. 1.30 දක්වාත් ලබාගත හැක; ඉරිදා වසා ඇත. සාමාන්‍ය විමසුමක් සඳහා Contact පිටුවේ පණිවිඩ පෝරමයද භාවිතා කළ හැක.",
       body_en:
-        "To speak with an officer, choose “Request a Call” here and leave your name, NIC and phone number. Officers are notified and will call when someone is available. You can type in Live Chat only after an officer accepts your request and joins — before that, Live Chat is locked. Live officer chat is available Monday–Friday, 8:30 AM–5:30 PM, and Saturday, 8:30 AM–1:30 PM; it is closed on Sunday. For a general written inquiry, you can also use the message form on the Contact page.",
+        "To speak with an officer, choose “Request a Call” here and leave your name, NIC and phone number. Officers are notified and will call when someone is available. You can type in Live Chat only after an officer accepts your request and joins — before that, Live Chat is locked. Live officer chat is available Monday to Friday (any weekday), 8:30 AM–5:30 PM, and Saturday, 8:30 AM–1:30 PM; it is closed on Sunday. For a general written inquiry, you can also use the message form on the Contact page.",
       keywords: [
         "officer contact process",
         "request callback process",

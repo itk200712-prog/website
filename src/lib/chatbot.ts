@@ -515,7 +515,7 @@ export function canUseLiveChat(status: string): boolean {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Live Chat කාර්යාල වේලාවන් (Asia/Colombo)
-//  සඳුදා–සිකුරාදා 08:30–17:30 · සෙනසුරාදා 08:30–13:30 · ඉරිදා වසා ඇත
+//  සඳුදා සිට සිකුරාදා දක්වා ඕනෑම දිනක 08:30–17:30 · සෙනසුරාදා 08:30–13:30 · ඉරිදා වසා ඇත
 //  මේ සීමාව අදාළ වන්නේ සජීවී නිලධාරියෙක් සම්බන්ධ කර ගැනීමට විතරයි —
 //  Baymax සහ Message පෙට්ටිය 24/7 වැඩ කරයි. දැනටමත් join වී ඇති
 //  සංවාදයක් වේලාව ඉක්මවා ගියාට මැදින් නවත්වන්නේ නැත.
@@ -559,6 +559,13 @@ export function getLiveChatHoursStatus(now: Date = new Date()): LiveChatHoursSta
 
 export function isLiveChatOpen(now: Date = new Date()): boolean {
   return getLiveChatHoursStatus(now).open;
+}
+
+/** Visitor ට පෙන්වන පැහැදිලි වේලාවන් — “Monday–Friday” කියා සඳුදා සහ සිකුරාදා විතරක් කියා නොසිතෙන්න */
+export function liveChatHoursText(si: boolean): string {
+  return si
+    ? "සඳුදා සිට සිකුරාදා දක්වා ඕනෑම දිනක : පෙ.ව. 8.30 – ප.ව. 5.30\nසෙනසුරාදා : පෙ.ව. 8.30 – ප.ව. 1.30\nඉරිදා : වසා ඇත"
+    : "Monday to Friday (any weekday) : 8:30 AM – 5:30 PM\nSaturday : 8:30 AM – 1:30 PM\nSunday : Closed";
 }
 
 /** "අද පෙ.ව. 8.30න් පසුව" / "after 8:30 AM on Monday" වැනි ඊළඟ විවෘත වන වේලාව */

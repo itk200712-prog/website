@@ -25,8 +25,8 @@ export const SITE = {
   address_en: "Kurunegala Rd, Hettipola, Sri Lanka",
   phones: ["037 229 1011", "076 424 7716"],
   email: "panduwasnuwara@mpcs.lk",
-  hours_si: ["සඳුදා – සිකුරාදා : පෙ.ව 8.30 – ප.ව 5.30", "සෙනසුරාදා : පෙ.ව 8.30 – ප.ව 1.30", "ඉරිදා සහ රජයේ නිවාඩු දින වසා ඇත"],
-  hours_en: ["Mon – Fri : 8.30 AM – 5.30 PM", "Saturday : 8.30 AM – 1.30 PM", "Closed on Sundays & Public Holidays"],
+  hours_si: ["සඳුදා සිට සිකුරාදා දක්වා ඕනෑම දිනක : පෙ.ව 8.30 – ප.ව 5.30", "සෙනසුරාදා : පෙ.ව 8.30 – ප.ව 1.30", "ඉරිදා සහ රජයේ නිවාඩු දින වසා ඇත"],
+  hours_en: ["Monday to Friday (any weekday) : 8.30 AM – 5.30 PM", "Saturday : 8.30 AM – 1.30 PM", "Closed on Sundays & Public Holidays"],
   credit: "Designed By Induwara Thathsara",
   designer: {
     whatsapp: "https://wa.me/94764247716",

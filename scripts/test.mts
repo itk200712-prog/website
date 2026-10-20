@@ -52,6 +52,13 @@ console.log("\n── 3) System settings (req #1 contact email, #2 WhatsApp) ─
 ok("WhatsApp number 94742352670", seed.SETTINGS.whatsapp_number === "94742352670");
 ok("Designer social links (footer popup)", seed.SITE.designer.whatsapp === "https://wa.me/94764247716" && seed.SITE.designer.facebook === "https://www.facebook.com/profile.php?id=61595473522949");
 const footerSrc = readFileSync(join(root, "src/components/site-footer.tsx"), "utf8");
+const headerSrc = readFileSync(join(root, "src/components/site-header.tsx"), "utf8");
+ok("Header brand always shows the full Panduwasnuwara New MPCS LTD name (mobile lockup, no truncation)",
+  headerSrc.includes("Panduwasnuwara New MPCS LTD") &&
+  headerSrc.includes('data-testid="site-brand"') &&
+  headerSrc.includes("MPCS LTD") &&
+  !headerSrc.includes("max-w-[150px]") &&
+  !headerSrc.includes("{isHome ? t.brand : t.brandFull}") );
 ok("Footer social icons use Admin links; designer popup stays separate",
   footerSrc.includes('const footerFbHref = socialLinks?.fb || "#";') &&
   footerSrc.includes("socialLinks?.wa ||") &&
@@ -230,7 +237,10 @@ ok("chat: live composer unlocks when joined", bot.canUseLiveChat("joined") === t
 // Live Chat office hours (Asia/Colombo). Oct 2026: 18=Sun, 19=Mon, 23=Fri, 24=Sat.
 const lkTime = (day: number, h: number, m: number) => new Date(Date.UTC(2026, 9, day, h, m) - 330 * 60_000);
 ok("hours: Mon 07:30 closed → opens today", bot.getLiveChatHoursStatus(lkTime(19, 7, 30)).open === false && bot.getLiveChatHoursStatus(lkTime(19, 7, 30)).nextOpenInDays === 0);
-ok("hours: Mon 08:30 open", bot.isLiveChatOpen(lkTime(19, 8, 30)) === true);
+ok("hours: every weekday Mon–Fri 08:30 open + explicit wording",
+  [19, 20, 21, 22, 23].every((d) => bot.isLiveChatOpen(lkTime(d, 8, 30)) === true) &&
+  bot.liveChatHoursText(true).includes("සඳුදා සිට සිකුරාදා දක්වා ඕනෑම දිනක") &&
+  bot.liveChatHoursText(false).includes("Monday to Friday (any weekday)"));
 ok("hours: Mon 17:29 still open", bot.isLiveChatOpen(lkTime(19, 17, 29)) === true);
 ok("hours: Mon 17:30 closed → tomorrow (Tue)", bot.getLiveChatHoursStatus(lkTime(19, 17, 30)).nextOpenWeekday === 2 && bot.nextLiveChatOpenPhrase(false, lkTime(19, 17, 30)).includes("Tuesday"));
 ok("hours: Fri evening → Saturday", bot.nextLiveChatOpenPhrase(false, lkTime(23, 17, 45)).includes("Saturday"));
@@ -280,7 +290,7 @@ ok("brain: unrelated question returns no invented answer", askSite("What will th
 ok("brain: officer-contact process (Sinhala how-to)", askSite("නිලධාරියෙක් සම්බන්ද කරගන්නෙ කොහොමද?")?.entry.id === "officer-contact-process");
 ok("brain: officer-contact process (screenshot wording)", askSite("ඔෆිස් එකේ කෙනෙක්ව සම්බන්ද කරගන්න ඕන")?.entry.id === "officer-contact-process");
 ok("brain: officer-contact process (Singlish)", askSite("niladariyek sambanda karaganne kohomada")?.entry.id === "officer-contact-process");
-ok("brain: officer-contact process mentions Live Chat hours", askSite("නිලධාරියෙක් සම්බන්ද කරගන්නෙ කොහොමද?")?.entry.body_si.includes("සඳුදා–සිකුරාදා") === true);
+ok("brain: officer-contact process mentions Live Chat hours", askSite("නිලධාරියෙක් සම්බන්ද කරගන්නෙ කොහොමද?")?.entry.body_si.includes("සඳුදා සිට සිකුරාදා දක්වා ඕනෑම දිනක") === true);
 
 // Direct identity facts must answer immediately, not ask for clarification.
 const chairman = seed.BOARD.find((p) => p.category === "chairman")!;

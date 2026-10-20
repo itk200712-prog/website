@@ -18,8 +18,6 @@ import { authedClient } from "@/lib/supabase/client";
 export function SiteHeader() {
   const { t, lang, setLang } = useLang();
   const pathname = usePathname() ?? "/";
-  // home පිටුව: "/", "/en", "/si" (හෝ slash එකක් අගට)
-  const isHome = /^\/(en|si)?\/?$/.test(pathname);
   const L = (p: string) => `/${lang}${p === "/" ? "" : p}`;
   const [open, setOpen] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
@@ -87,23 +85,34 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 bg-slate-900 border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-[72px] gap-4 lg:gap-6">
-          {/* logo */}
-          <Link href={L("/")} className="flex items-center gap-2.5 sm:gap-3 min-w-0 shrink-0">
-            <SiteLogoBadge size={44} />
-            <div className="leading-tight min-w-0">
-              {/* ✅ home නොවන පිටුවල සම්පූර්ණ නම (කැපෙන්නේ නෑ) · පහළ පේළිය ඉවත් */}
-              <div
-                className={`font-extrabold text-white leading-tight ${
-                  isHome
-                    ? "text-[10px] sm:text-[11.5px] max-w-[150px] lg:max-w-[190px] xl:max-w-[260px] truncate"
-                    : "text-[10.5px] sm:text-[12px] max-w-[190px] sm:max-w-[260px] lg:max-w-[320px] xl:max-w-[420px]"
-                }`}
-                title={isHome ? t.brand : t.brandFull}
-              >
-                {isHome ? t.brand : t.brandFull}
-              </div>
+      <div className="max-w-7xl mx-auto px-3 sm:px-6">
+        <div className="flex items-center justify-between h-[72px] gap-2 sm:gap-4 lg:gap-6">
+          {/* logo + full society name (never truncated) */}
+          <Link
+            href={L("/")}
+            className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 lg:flex-none"
+            aria-label={`${t.brandFull} — ${t.nav.home}`}
+          >
+            <SiteLogoBadge size={42} className="ring-1 ring-white/20" />
+            <div className="min-w-0 leading-none" title={t.brandFull} data-testid="site-brand">
+              {lang === "en" ? (
+                <div className="font-extrabold text-white">
+                  {/* Phone: a neat two-line lockup, so the complete name always fits. */}
+                  <span className="block text-[12px] leading-[1.08] tracking-[0.01em] sm:hidden">
+                    Panduwasnuwara New
+                    <span className="mt-1 block text-[9.5px] font-black uppercase leading-none tracking-[0.22em] text-amber-300">
+                      MPCS LTD
+                    </span>
+                  </span>
+                  <span className="hidden whitespace-nowrap text-[12px] leading-tight sm:block lg:text-[11.5px] xl:text-[13px]">
+                    Panduwasnuwara New MPCS LTD
+                  </span>
+                </div>
+              ) : (
+                <div className="max-w-[185px] whitespace-normal break-words text-[10px] font-extrabold leading-[1.22] text-white min-[390px]:max-w-[205px] sm:max-w-[290px] sm:text-[11.5px] lg:max-w-[250px] xl:max-w-[320px]">
+                  {t.brand}
+                </div>
+              )}
             </div>
           </Link>
 
@@ -251,7 +260,7 @@ export function SiteHeader() {
             </Link>
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {/* language switcher (professional) */}
             {me ? (
               <div className="relative">
