@@ -8,9 +8,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.supabase.in" },
     ],
   },
-  // Backup ZIP එකට canonical supabase/schema.sql එක string එකක් විදිහට import කරන්න
+  // Backup ZIP එකට canonical supabase/schema.sql එකත්, hidden /hub පිටුවට
+  // standalone HTML එකත් string එකක් විදිහට import කරන්න
   webpack: (config) => {
-    config.module.rules.push({ test: /\.sql$/, type: "asset/source" });
+    config.module.rules.push({ test: /\.(sql|html)$/, type: "asset/source" });
     return config;
   },
 };

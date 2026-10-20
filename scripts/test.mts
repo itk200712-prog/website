@@ -59,6 +59,19 @@ ok("Header brand always shows the full Panduwasnuwara New MPCS LTD name (mobile 
   headerSrc.includes("MPCS LTD") &&
   !headerSrc.includes("max-w-[150px]") &&
   !headerSrc.includes("{isHome ? t.brand : t.brandFull}") );
+const hubRouteSrc = readFileSync(join(root, "src/app/hub/route.ts"), "utf8");
+const hubHtml = readFileSync(join(root, "src/app/hub/hub.html"), "utf8");
+const middlewareSrc = readFileSync(join(root, "src/middleware.ts"), "utf8");
+const adminShellEarlySrc = readFileSync(join(root, "src/components/admin.tsx"), "utf8");
+ok("Hidden /hub standalone page is direct-URL-only (no public/admin link)",
+  hubRouteSrc.includes('from "./hub.html"') &&
+  hubRouteSrc.includes("text/html; charset=utf-8") &&
+  hubRouteSrc.includes("noindex, nofollow") &&
+  middlewareSrc.includes('"/hub"') &&
+  hubHtml.includes("<title>Panduwasnuwara MPCS LTD | Official Links</title>") &&
+  !headerSrc.includes('"/hub"') &&
+  !footerSrc.includes('"/hub"') &&
+  !adminShellEarlySrc.includes('"/hub"'));
 ok("Footer social icons use Admin links; designer popup stays separate",
   footerSrc.includes('const footerFbHref = socialLinks?.fb || "#";') &&
   footerSrc.includes("socialLinks?.wa ||") &&

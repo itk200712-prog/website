@@ -9,7 +9,7 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
 //  /admin         -> login වූ admin / superadmin භූමිකාව ඇති අයට පමණයි
 // ============================================================================
 
-const BARE_PREFIXES = ["/admin", "/signin", "/register", "/api", "/auth"];
+const BARE_PREFIXES = ["/admin", "/signin", "/register", "/api", "/auth", "/hub"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
