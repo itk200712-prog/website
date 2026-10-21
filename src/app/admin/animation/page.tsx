@@ -15,8 +15,8 @@ import { uploadSiteImage } from "@/lib/supabase/storage";
 import {
   BUSINESS_ANIMATION_KEY,
   MAX_ANIMATION_BRIGHTNESS,
-  MAX_ANIMATION_PRODUCTS,
   MIN_ANIMATION_BRIGHTNESS,
+  animationMarqueeDurationSeconds,
   animationWatermarkOpacity,
   clampAnimationBrightness,
   emptyBusinessAnimation,
@@ -133,10 +133,6 @@ export default function AdminAnimationPage() {
   function addProductUrl() {
     const url = productUrl.trim();
     if (!url) return;
-    if (draft.products.length >= MAX_ANIMATION_PRODUCTS) {
-      show(`⚠ උපරිම product images ${MAX_ANIMATION_PRODUCTS}යි`);
-      return;
-    }
     patch({ products: [...draft.products, url] });
     setProductUrl("");
   }
@@ -270,17 +266,17 @@ export default function AdminAnimationPage() {
                   <div className="biz-products-marquee mt-4">
                     <div
                       className="biz-products-track"
-                      style={{ animationDuration: `${Math.max(18, draft.products.length * 7)}s` }}
+                      style={{ animationDuration: `${animationMarqueeDurationSeconds(draft.products.length)}s` }}
                     >
                       {[...draft.products, ...draft.products].map((src, i) => (
                         <div
                           key={`${src}-${i}`}
                           aria-hidden={i >= draft.products.length}
-                          className="biz-product-float flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-1 shadow-xl ring-1 ring-white/40"
-                          style={{ animationDelay: `${(i % draft.products.length) * 0.45}s` }}
+                          className="biz-product-float group flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-1 shadow-xl ring-1 ring-white/40 transition-shadow duration-300 hover:shadow-2xl"
+                          style={{ animationDelay: `${-(i % draft.products.length) * 0.55}s` }}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={src} alt="" className="h-full w-full rounded-xl object-contain" />
+                          <img src={src} alt="" className="h-full w-full rounded-xl object-contain transition duration-300 group-hover:scale-[1.06]" />
                         </div>
                       ))}
                     </div>
@@ -387,7 +383,7 @@ export default function AdminAnimationPage() {
           {/* Product images */}
           <div className="mt-6">
             <label className="field-label">
-              Animated Product Images ({draft.products.length}/{MAX_ANIMATION_PRODUCTS})
+              Animated Product Images ({draft.products.length})
             </label>
             {draft.products.length > 0 && (
               <div className="mb-3 grid grid-cols-4 gap-2.5 sm:grid-cols-6">
@@ -439,7 +435,8 @@ export default function AdminAnimationPage() {
               </div>
             </div>
             <p className="mt-1.5 text-[10.5px] text-slate-400">
-              Product packshot images (PNG/JPG) හොඳයි. පිටුවේ උඩින් මේවා වමේ සිට දකුණට animate වෙලා යනවා; mouse එක ගෙනාවම නවතිනවා.
+              Product packshot images (PNG/JPG) හොඳයි — කැමති ගාණක් එකතු කළ හැක (සීමාවක් නෑ). පිටුවේ උඩින් මේවා
+              හිමීට scroll වෙලා යනවා; mouse එක ගෙනාවම නවතිනවා. Images වැඩි වුණත් scroll වෙන වේගය එකමයි.
             </p>
           </div>
 

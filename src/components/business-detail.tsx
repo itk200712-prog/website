@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/i18n";
 import { ContactCards, SectionHead, SendInquiryCard, ServiceCard } from "@/components/site-sections";
 import type { BusinessContact, BusinessUnit, FuelPrice } from "@/lib/types";
-import { animationWatermarkOpacity } from "@/lib/animation-settings";
+import { animationMarqueeDurationSeconds, animationWatermarkOpacity } from "@/lib/animation-settings";
 import { authedClient } from "@/lib/supabase/client";
 import { RURAL_BANK_BRANCHES } from "@/lib/seed";
 
@@ -68,20 +68,20 @@ export function BusinessHero({ b }: { b: BusinessUnit }) {
             <div className="biz-products-marquee" aria-label={lang === "si" ? "නිෂ්පාදන" : "Products"}>
               <div
                 className="biz-products-track"
-                style={{ animationDuration: `${Math.max(18, products.length * 7)}s` }}
+                style={{ animationDuration: `${animationMarqueeDurationSeconds(products.length)}s` }}
               >
                 {[...products, ...products].map((src, i) => (
                   <div
                     key={`${src}-${i}`}
                     aria-hidden={i >= products.length}
-                    className="biz-product-float flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-1.5 shadow-xl ring-1 ring-white/40 sm:h-28 sm:w-28"
-                    style={{ animationDelay: `${(i % products.length) * 0.45}s` }}
+                    className="biz-product-float group flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-[1.35rem] bg-gradient-to-b from-white to-slate-50 p-2 shadow-[0_18px_35px_-18px_rgba(2,6,23,0.65)] ring-1 ring-white/50 transition-shadow duration-300 hover:shadow-[0_26px_45px_-18px_rgba(2,6,23,0.8)] sm:h-28 sm:w-28"
+                    style={{ animationDelay: `${-(i % products.length) * 0.55}s` }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={src}
                       alt={i < products.length ? `${lang === "si" ? b.name_si || b.name_en : b.name_en} product ${i + 1}` : ""}
-                      className="h-full w-full rounded-xl object-contain"
+                      className="h-full w-full rounded-2xl object-contain drop-shadow-sm transition duration-300 group-hover:scale-[1.06]"
                       loading="lazy"
                     />
                   </div>

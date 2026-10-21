@@ -211,7 +211,7 @@ ok("Branch photo/Rural edit-delete settings + fast Admin business save",
   businessDetailSrc.includes("export function RuralBankNetwork({ b }") &&
   businessDetailSrc.includes("br.photo") &&
   businessPageSrc.includes("<RuralBankNetwork b={b} />"));
-ok("animation settings helpers: brightness clamp + products dedupe/cap + empty entries dropped",
+ok("animation settings helpers: brightness clamp + unlimited products dedupe + constant marquee speed",
   animSettings.BUSINESS_ANIMATION_KEY === "business_animation_settings" &&
   animSettings.clampAnimationBrightness(5) === 10 &&
   animSettings.clampAnimationBrightness(999) === 120 &&
@@ -221,7 +221,10 @@ ok("animation settings helpers: brightness clamp + products dedupe/cap + empty e
     hemas: { bgImage: "", brightness: 55, products: [] },
   }))["coop-city"].products.join(",") === "a.jpg,b.jpg" &&
   animSettings.parseBusinessAnimations(JSON.stringify({ hemas: { products: [] } })).hemas === undefined &&
-  animSettings.normalizeBusinessAnimation({ products: Array.from({ length: 12 }, (_, i) => `p${i}.jpg`) }).products.length === 8 &&
+  animSettings.normalizeBusinessAnimation({ products: Array.from({ length: 25 }, (_, i) => `p${i}.jpg`) }).products.length === 25 &&
+  animSettings.animationMarqueeDurationSeconds(1) === 18 &&
+  animSettings.animationMarqueeDurationSeconds(8) === 24 &&
+  animSettings.animationMarqueeDurationSeconds(20) === 60 &&
   animSettings.getBusinessAnimation({}, "coop-city") === undefined &&
   animSettings.animationWatermarkOpacity(55) === 0.165 &&
   animSettings.animationWatermarkOpacity(120) === 0.35 &&
@@ -252,7 +255,12 @@ ok("animation: Admin section (bg+brightness+products per business) → settings 
     )
     .includes("bgImage") &&
   businessPageSrc.includes("<BusinessPageWatermark b={b} />") &&
+  !adminAnimationSrc.includes("MAX_ANIMATION_PRODUCTS") &&
+  adminAnimationSrc.includes("Animated Product Images ({draft.products.length})") &&
+  adminAnimationSrc.includes("animationMarqueeDurationSeconds(draft.products.length)") &&
+  businessDetailSrc.includes("animationMarqueeDurationSeconds(products.length)") &&
   globalsCssSrc.includes("@keyframes bizProductsScroll") &&
+  globalsCssSrc.includes("@keyframes bizMarqueeIn") &&
   globalsCssSrc.includes("@keyframes bizBgZoom"));
 const adminGallerySrc = readFileSync(join(root, "src/app/admin/gallery/page.tsx"), "utf8");
 ok("gallery: upload 2–3 photos at once under one tagline (batch insert, same title)",

@@ -14,7 +14,7 @@ export const BUSINESS_ANIMATION_KEY = "business_animation_settings";
 export const DEFAULT_ANIMATION_BRIGHTNESS = 55;
 export const MIN_ANIMATION_BRIGHTNESS = 10;
 export const MAX_ANIMATION_BRIGHTNESS = 120;
-export const MAX_ANIMATION_PRODUCTS = 8;
+// Product images ගාණට සීමාවක් නෑ — Admin කැමති ගාණක් එකතු කළ හැක.
 
 const clean = (v: unknown): string => (typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim());
 const cleanSlug = (v: unknown): string => clean(v).toLowerCase();
@@ -34,6 +34,15 @@ export function animationWatermarkOpacity(brightness: unknown): number {
   return Math.round(Math.min(0.35, Math.max(0.03, (b / 100) * 0.3)) * 1000) / 1000;
 }
 
+/**
+ * Products marquee එකේ එක වටයක කාලය (තත්පර) — images කීයක් තිබුණත්
+ * scroll වෙන වේගය එකම ගානට තියාගන්න count එක අනුව හැදෙනවා.
+ */
+export function animationMarqueeDurationSeconds(count: number): number {
+  const n = Number.isFinite(count) ? Math.max(1, Math.floor(count)) : 1;
+  return Math.max(18, n * 3);
+}
+
 export function emptyBusinessAnimation(): BusinessAnimation {
   return { bgImage: "", brightness: DEFAULT_ANIMATION_BRIGHTNESS, products: [] };
 }
@@ -45,7 +54,6 @@ export function normalizeBusinessAnimation(v: unknown): BusinessAnimation {
   for (const p of rawProducts) {
     const url = clean(p);
     if (url && !products.includes(url)) products.push(url);
-    if (products.length >= MAX_ANIMATION_PRODUCTS) break;
   }
   return {
     bgImage: clean(r.bgImage ?? r.bg_image ?? r.background),
