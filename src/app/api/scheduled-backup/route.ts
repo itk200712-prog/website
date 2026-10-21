@@ -18,11 +18,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
 import { generateBackupZip, type BackupClient } from "@/lib/backup";
+import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils";
 import {
   autoBackupFileName,
   backupDueDecision,
   lkDateParts,
   parseScheduleSettings,
+  SCHEDULE_LAST_SUCCESS_KEY,
   SCHEDULE_SECRET_KEYS,
   SCHEDULE_SETTING_KEYS,
   type BackupScheduleSettings,
@@ -87,16 +89,38 @@ async function loadSecrets(): Promise<{ cronSecret: string; megaEmail: string; m
   };
 }
 
-/** අන්තිම සාර්ථක scheduled backup එකේ LK දිනය (backup_history එකෙන්) */
+/** අන්තිම සාර්ථක scheduled backup එකේ LK දිනය — history එක prune වුණත් hidden setting එකෙන් මතකයි. */
 async function lastScheduledSuccessDate(): Promise<string | null> {
-  const rows = (await restGet(
-    "backup_history?select=created_at&action=eq.scheduled&status=in.(success,partial)&order=created_at.desc&limit=1",
-    SERVICE_KEY
-  )) as { created_at: string }[] | null;
-  const iso = rows?.[0]?.created_at;
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : lkDateParts(d).dateStr;
+  const [historyRows, settingRows] = await Promise.all([
+    restGet(
+      "backup_history?select=created_at&action=eq.scheduled&status=in.(success,partial)&order=created_at.desc&limit=1",
+      SERVICE_KEY
+    ) as Promise<{ created_at: string }[] | null>,
+    restGet(
+      `system_settings?select=value&key=eq.${SCHEDULE_LAST_SUCCESS_KEY}&limit=1`,
+      SERVICE_KEY || ANON_KEY
+    ) as Promise<{ value: string }[] | null>,
+  ]);
+
+  const stored = settingRows?.[0]?.value?.trim() ?? "";
+  const storedDate = /^\d{4}-\d{2}-\d{2}$/.test(stored) ? stored : null;
+  const iso = historyRows?.[0]?.created_at;
+  const historyDate = iso && !Number.isNaN(new Date(iso).getTime()) ? lkDateParts(new Date(iso)).dateStr : null;
+  if (storedDate && historyDate) return storedDate > historyDate ? storedDate : historyDate;
+  return storedDate ?? historyDate;
+}
+
+async function storeLastScheduledSuccessDate(dateStr: string): Promise<void> {
+  try {
+    await fetch(`${SUPA_BASE}/rest/v1/system_settings`, {
+      method: "POST",
+      headers: svcHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify({ key: SCHEDULE_LAST_SUCCESS_KEY, value: dateStr }),
+      cache: "no-store",
+    });
+  } catch {
+    /* history එක තිබෙන නිසා backup එක නවත්වන්නේ නෑ */
+  }
 }
 
 // ── FULL backup ZIP — manual Download එක හදන builder එකමයි (service-role) ──
@@ -215,6 +239,24 @@ async function uploadToMega(
   }
 }
 
+async function pruneBackupHistory(): Promise<void> {
+  try {
+    const rows = (await restGet(
+      "backup_history?select=id,created_at&order=created_at.desc,id.desc&limit=1000",
+      SERVICE_KEY
+    )) as { id: string; created_at: string }[] | null;
+    const staleIds = backupHistoryIdsToPrune(rows ?? [], BACKUP_HISTORY_KEEP);
+    if (staleIds.length === 0) return;
+    await fetch(`${SUPA_BASE}/rest/v1/backup_history?id=in.(${staleIds.join(",")})`, {
+      method: "DELETE",
+      headers: svcHeaders({ Prefer: "return=minimal" }),
+      cache: "no-store",
+    });
+  } catch {
+    /* cleanup අසාර්ථක වුණත් backup එක හරි */
+  }
+}
+
 async function recordHistory(input: {
   fileName: string;
   fileSize: number;
@@ -225,7 +267,7 @@ async function recordHistory(input: {
   encrypted?: boolean;
 }): Promise<void> {
   try {
-    await fetch(`${SUPA_BASE}/rest/v1/backup_history`, {
+    const res = await fetch(`${SUPA_BASE}/rest/v1/backup_history`, {
       method: "POST",
       headers: svcHeaders({ "Content-Type": "application/json", Prefer: "return=minimal" }),
       body: JSON.stringify({
@@ -242,6 +284,7 @@ async function recordHistory(input: {
       }),
       cache: "no-store",
     });
+    if (res.ok) await pruneBackupHistory();
   } catch {
     /* history නැතත් backup එක හරි */
   }
@@ -351,6 +394,7 @@ export async function POST(req: NextRequest) {
     detail,
     encrypted,
   });
+  if (done.length) await storeLastScheduledSuccessDate(lkDateParts().dateStr);
 
   if (!done.length) return json({ ok: false, reason: "upload_failed", detail }, 500);
   return json({

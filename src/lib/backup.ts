@@ -8,6 +8,8 @@
 import { authedClient } from "@/lib/supabase/client";
 import {
   BACKUP_FORMAT_VERSION,
+  BACKUP_HISTORY_KEEP,
+  backupHistoryIdsToPrune,
   buildManifest,
   buildRecoveryChecklist,
   encryptBackupText,
@@ -648,14 +650,60 @@ export type BackupHistoryEntry = {
   created_at: string;
 };
 
-export async function getBackupHistory(limit = 30): Promise<{ entries: BackupHistoryEntry[]; error: string | null }> {
+/** Backup History එකේ අලුත්ම `keep` ගාණ විතරක් තියාගෙන පරණ සටහන් auto-delete කරයි. */
+export async function pruneBackupHistory(
+  keep: number = BACKUP_HISTORY_KEEP
+): Promise<{ deleted: number; error: string | null }> {
   try {
+    const sb = await authedClient();
+    const { data, error } = await sb
+      .from("backup_history")
+      .select("id, created_at")
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1000);
+    if (error) return { deleted: 0, error: error.message };
+    const staleIds = backupHistoryIdsToPrune((data ?? []) as { id: string; created_at: string }[], keep);
+    if (staleIds.length === 0) return { deleted: 0, error: null };
+    const { data: deletedRows, error: deleteError } = await sb
+      .from("backup_history")
+      .delete()
+      .in("id", staleIds)
+      .select("id");
+    if (deleteError) return { deleted: 0, error: deleteError.message };
+    return { deleted: deletedRows?.length ?? staleIds.length, error: null };
+  } catch (e) {
+    return { deleted: 0, error: (e as Error).message };
+  }
+}
+
+/** එක Backup History සටහනක් විතරක් manually මකයි (අදාළ ZIP file එක මකන්නේ නෑ). */
+export async function deleteBackupHistoryEntry(id: string): Promise<string | null> {
+  if (!id) return "History record ID එක නෑ";
+  try {
+    const sb = await authedClient();
+    const { data, error } = await sb.from("backup_history").delete().eq("id", id).select("id");
+    if (error) return error.message;
+    if (!data || data.length === 0) return "History record එක හමු නොවුණා / permission නෑ";
+    return null;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
+export async function getBackupHistory(
+  limit: number = BACKUP_HISTORY_KEEP
+): Promise<{ entries: BackupHistoryEntry[]; error: string | null }> {
+  try {
+    // Page එක open කරද්දීත් පරණ history auto-clean වේ — පේන්නේ අලුත්ම 5 විතරයි.
+    await pruneBackupHistory(BACKUP_HISTORY_KEEP);
     const sb = await authedClient();
     const { data, error } = await sb
       .from("backup_history")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .order("id", { ascending: false })
+      .limit(Math.min(Math.max(1, limit), BACKUP_HISTORY_KEEP));
     if (error) return { entries: [], error: error.message };
     return { entries: ((data ?? []) as BackupHistoryEntry[]), error: null };
   } catch (e) {
@@ -709,7 +757,9 @@ export async function recordBackupHistory(input: {
       .select("*")
       .single();
     if (error || !data) return null;
-    return data as BackupHistoryEntry;
+    const entry = data as BackupHistoryEntry;
+    await pruneBackupHistory(BACKUP_HISTORY_KEEP);
+    return entry;
   } catch {
     // History table එක නැති වුණත් (SQL run කරලා නැත්නම්) backup/restore එක නවත්වන්නේ නෑ
     return null;

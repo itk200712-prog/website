@@ -739,8 +739,11 @@ ok("admin messages: delete option in Messages page + Live Chat contact requests"
 const adminShellSrc = readFileSync(join(root, "src/components/admin.tsx"), "utf8");
 ok("admin sidebar: search cannot be credential-autofilled and clears on section change",
   adminShellSrc.includes('type="search"') &&
-  adminShellSrc.includes('name="mpcs-admin-panel-search"') &&
+  adminShellSrc.includes('name="mpcs-panel-filter-7f3a"') &&
   adminShellSrc.includes('data-lpignore="true"') &&
+  adminShellSrc.includes("navSearchArmed") &&
+  adminShellSrc.includes("readOnly={!navSearchArmed}") &&
+  adminShellSrc.includes('value.trim().toLowerCase() === "superadmin"') &&
   adminShellSrc.includes("setNavQ(\"\")") &&
   adminShellSrc.includes("[path]"));
 const applicationsSrc = readFileSync(join(root, "src/app/admin/applications/page.tsx"), "utf8");
@@ -775,6 +778,28 @@ ok("backup: separate encryption password + saved download/import history (actor/
   schema.includes("backup_history_super") &&
   backupSrc.includes('{ name: "backup_history", pk: "id" }') &&
   scheduledBackupSrc.includes('action: "scheduled"'));
+ok("backup history: prune selector keeps only latest 5",
+  bu.BACKUP_HISTORY_KEEP === 5 &&
+  bu.backupHistoryIdsToPrune([
+    { id: "1", created_at: "2026-10-01T00:00:00Z" },
+    { id: "7", created_at: "2026-10-07T00:00:00Z" },
+    { id: "3", created_at: "2026-10-03T00:00:00Z" },
+    { id: "6", created_at: "2026-10-06T00:00:00Z" },
+    { id: "2", created_at: "2026-10-02T00:00:00Z" },
+    { id: "5", created_at: "2026-10-05T00:00:00Z" },
+    { id: "4", created_at: "2026-10-04T00:00:00Z" },
+  ]).join(",") === "2,1");
+ok("backup history: auto-prune to 5 + manual delete controls + scheduled last-success memory",
+  backupSrc.includes("export async function pruneBackupHistory") &&
+  backupSrc.includes("export async function deleteBackupHistoryEntry") &&
+  backupSrc.includes("await pruneBackupHistory(BACKUP_HISTORY_KEEP)") &&
+  adminBackupSrc.includes("deleteHistoryEntry") &&
+  adminBackupSrc.includes("pruneHistoryNow") &&
+  adminBackupSrc.includes("Delete old (keep") &&
+  adminBackupSrc.includes("BACKUP_HISTORY_KEEP") &&
+  scheduledBackupSrc.includes("async function pruneBackupHistory") &&
+  scheduledBackupSrc.includes("storeLastScheduledSuccessDate") &&
+  scheduledBackupSrc.includes("SCHEDULE_LAST_SUCCESS_KEY"));
 
 console.log("\n── 21) Baymax professional upgrade (greeting · identity · complete answers · links) ──");
 ok("greeting name: guest → no name (Hi only); signed-in user/admin → own profile name",

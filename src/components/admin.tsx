@@ -56,10 +56,14 @@ export function AdminSidebar() {
   const [allowed, setAllowed] = useState<string[] | null>(null); // null = loading
   const [isSuper, setIsSuper] = useState(false);
   const [navQ, setNavQ] = useState("");
+  const [navSearchArmed, setNavSearchArmed] = useState(false);
 
-  // Section එකක් මාරු කළාම panel search එක ඉබේම හිස් වෙනවා — කලින් search එක අලුත් පිටුවට රැඳෙන්නේ නෑ
+  // Section එකක් මාරු කළාම panel search එක ඉබේම හිස් වෙනවා — කලින් search එක අලුත් පිටුවට රැඳෙන්නේ නෑ.
+  // Search එක user අතින් focus කරන තෙක් readOnly නිසා browser/password-manager එකට
+  // login නම (උදා: SUPERADMIN) auto-fill කරලා navigation එක හංගන්න බෑ.
   useEffect(() => {
     setNavQ("");
+    setNavSearchArmed(false);
   }, [path]);
 
   // section permissions load (superadmin/empty = සේරම ඉඩ)
@@ -97,21 +101,41 @@ export function AdminSidebar() {
         </div>
       </Link>
       <div className="px-4 pt-3.5 pb-1.5 text-[8.5px] font-bold tracking-[0.18em] text-slate-500">NAVIGATION</div>
-      {/* ✅ quick search — type=search නිසා browser/password-manager එක login නම (උදා: SUPERADMIN)
-          මේකට auto-fill කරලා navigation එක හංගන්නේ නෑ */}
+      {/* ✅ quick search — focus කරන තෙක් readOnly + අලුත් field නම නිසා browser/password-manager එක
+          login නම (උදා: SUPERADMIN) මේකට auto-fill කරලා navigation එක හංගන්නේ නෑ */}
       <div className="px-2.5 pb-2">
         <div className="relative">
           <input
             type="search"
-            name="mpcs-admin-panel-search"
+            id="mpcs-panel-filter-7f3a"
+            name="mpcs-panel-filter-7f3a"
+            aria-label="Search admin panels"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="none"
             spellCheck={false}
+            readOnly={!navSearchArmed}
             data-lpignore="true"
             data-1p-ignore="true"
+            data-bwignore="true"
+            data-form-type="other"
             value={navQ}
-            onChange={(e) => setNavQ(e.target.value)}
+            onFocus={(e) => {
+              e.currentTarget.readOnly = false;
+              setNavSearchArmed(true);
+            }}
+            onPointerDown={(e) => {
+              e.currentTarget.readOnly = false;
+              setNavSearchArmed(true);
+            }}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (!navSearchArmed || value.trim().toLowerCase() === "superadmin") {
+                setNavQ("");
+                return;
+              }
+              setNavQ(value);
+            }}
             placeholder="Search panels…"
             className="w-full rounded-lg bg-white/8 border border-white/10 text-white placeholder:text-slate-500 text-[10.5px] pl-7 pr-2 py-1.5 outline-none focus:border-indigo-400/60 focus:bg-white/12"
           />

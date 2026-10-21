@@ -10,16 +10,16 @@
 
 import { useEffect, useState } from "react";
 import {
-  CalendarClock, Copy, DatabaseBackup, Download, Eye, EyeOff, History, KeyRound, Play, RefreshCw, ShieldCheck, UploadCloud, Save,
+  CalendarClock, Copy, DatabaseBackup, Download, Eye, EyeOff, History, KeyRound, Play, RefreshCw, ShieldCheck, Trash2, UploadCloud, Save,
 } from "lucide-react";
 import { AdminTopbar, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
 import {
-  BACKUP_TABLES, generateBackupZip, getBackupHistory, getBackupSecrets, parseBackupSql, recordBackupHistory,
+  BACKUP_TABLES, deleteBackupHistoryEntry, generateBackupZip, getBackupHistory, getBackupSecrets, parseBackupSql, pruneBackupHistory, recordBackupHistory,
   restoreBackup, setBackupSecret, type BackupHistoryEntry,
 } from "@/lib/backup";
 import {
-  BACKUP_FORMAT_VERSION, decryptBackupText, isEncryptedBackupText, sha256Hex, summarizeInserts,
+  BACKUP_FORMAT_VERSION, BACKUP_HISTORY_KEEP, decryptBackupText, isEncryptedBackupText, sha256Hex, summarizeInserts,
   type BackupManifest, type ParsedInsert,
 } from "@/lib/backup-utils";
 import {
@@ -73,6 +73,8 @@ export default function AdminBackupPage() {
   const [history, setHistory] = useState<BackupHistoryEntry[]>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
+  const [pruningHistory, setPruningHistory] = useState(false);
   const [intervalDays, setIntervalDays] = useState(7);
   // 📅 Scheduled auto-backup (දවස් ගාණ + වෙලාව + Supabase/MEGA)
   const [sch, setSch] = useState<BackupScheduleSettings>(DEFAULT_SCHEDULE);
@@ -99,11 +101,36 @@ export default function AdminBackupPage() {
 
   async function loadBackupHistory(): Promise<BackupHistoryEntry[]> {
     setHistoryLoading(true);
-    const result = await getBackupHistory(30);
+    const result = await getBackupHistory(BACKUP_HISTORY_KEEP);
     setHistory(result.entries);
     setHistoryError(result.error);
     setHistoryLoading(false);
     return result.entries;
+  }
+
+  async function deleteHistoryEntry(h: BackupHistoryEntry) {
+    if (deletingHistoryId) return;
+    const ok = confirm(
+      `මේ Backup History සටහන මකන්නද?\n\n${h.file_name || "Backup"}\n\nමෙයින් මැකෙන්නේ history සටහන විතරයි — MEGA/Supabase එකේ තියෙන ZIP file එක මැකෙන්නේ නෑ.`
+    );
+    if (!ok) return;
+    setDeletingHistoryId(h.id);
+    const err = await deleteBackupHistoryEntry(h.id);
+    setDeletingHistoryId(null);
+    if (err) return show(`⚠ ${err}`);
+    setHistory((xs) => xs.filter((x) => x.id !== h.id));
+    void logActivity("BACKUP_HISTORY_DELETE", `${h.file_name || "backup"} (${h.action})`);
+    show("✅ History record එක මැකුවා — ZIP file එක තවමත් තියෙනවා");
+  }
+
+  async function pruneHistoryNow() {
+    if (pruningHistory) return;
+    setPruningHistory(true);
+    const { deleted, error } = await pruneBackupHistory(BACKUP_HISTORY_KEEP);
+    await loadBackupHistory();
+    setPruningHistory(false);
+    if (error) return show(`⚠ ${error}`);
+    show(deleted > 0 ? `✅ පරණ history සටහන් ${deleted}ක් මැකුවා — අලුත්ම ${BACKUP_HISTORY_KEEP} විතරයි` : `✅ History එකේ අලුත්ම ${BACKUP_HISTORY_KEEP} විතරයි තියෙන්නේ`);
   }
 
   // 📅 Scheduled settings save — anchor එක අදට වැටෙන නිසා පළමු auto backup එක
@@ -262,7 +289,7 @@ export default function AdminBackupPage() {
         encrypted: encryptDl,
         detail: encryptDl ? "Encrypted full ZIP backup" : "Full ZIP backup",
       });
-      if (historyEntry) setHistory((xs) => [historyEntry, ...xs].slice(0, 30));
+      if (historyEntry) setHistory((xs) => [historyEntry, ...xs].slice(0, BACKUP_HISTORY_KEEP));
       void logActivity("BACKUP_DOWNLOAD", `Full ZIP backup (schema.sql + database.sql + logins + images + registers + manifest${encryptDl ? " + ENCRYPTED" : ""}) — ${a.download}`);
       setAnim({ pct: 100, msg: "Backup downloaded ✅", done: true });
       setTimeout(() => setAnim(null), 1800);
@@ -376,7 +403,7 @@ export default function AdminBackupPage() {
             encrypted: false,
             detail: `Safety backup before importing ${preview.fileName}`,
           });
-          if (safetyEntry) setHistory((xs) => [safetyEntry, ...xs].slice(0, 30));
+          if (safetyEntry) setHistory((xs) => [safetyEntry, ...xs].slice(0, BACKUP_HISTORY_KEEP));
           void logActivity("BACKUP_DOWNLOAD", `Auto SAFETY backup before import — ${a.download}`);
         } catch (e) {
           if (!confirm(`⚠ Safety backup එක ගන්න බැරි වුණා (${(e as Error).message}). Safety backup එකක් නැතිව restore කරන්නද?`)) {
@@ -405,7 +432,7 @@ export default function AdminBackupPage() {
         status: errors.length ? "partial" : "success",
         detail: `${partial ? "Partial restore" : "Full restore"}${errors.length ? ` · ${errors.length} issue(s)` : ""}`,
       });
-      if (importEntry) setHistory((xs) => [importEntry, ...xs].slice(0, 30));
+      if (importEntry) setHistory((xs) => [importEntry, ...xs].slice(0, BACKUP_HISTORY_KEEP));
       setPreview(null);
       setAnim({ pct: 100, msg: `Restored ${total} rows ✅`, done: true });
       setTimeout(() => setAnim(null), 2200);
@@ -693,16 +720,26 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
               <History size={19} className="text-indigo-700" /> Backup History
             </h3>
             <p className="text-slate-500 text-[12px] mt-1">
-              Backup download / safety download / import කළ admin, දිනය සහ වෙලාව site එකේම save වේ (superadmin පමණි).
+              අලුත්ම history සටහන් {BACKUP_HISTORY_KEEP}ක් විතරක් තබා ගනී — පරණ සටහන් auto-delete වේ. Delete එකෙන් මැකෙන්නේ
+              history සටහන විතරයි; MEGA/Supabase ZIP file එක මැකෙන්නේ නෑ (superadmin පමණි).
             </p>
           </div>
-          <button
-            className="btn btn-outline !py-1.5 !px-3 !text-[11.5px]"
-            onClick={() => void loadBackupHistory()}
-            disabled={historyLoading}
-          >
-            <RefreshCw size={13} className={historyLoading ? "animate-spin" : ""} /> Refresh
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="btn btn-outline !py-1.5 !px-3 !text-[11.5px] !text-rose-600"
+              onClick={() => void pruneHistoryNow()}
+              disabled={historyLoading || pruningHistory}
+            >
+              <Trash2 size={13} /> {pruningHistory ? "Deleting..." : `Delete old (keep ${BACKUP_HISTORY_KEEP})`}
+            </button>
+            <button
+              className="btn btn-outline !py-1.5 !px-3 !text-[11.5px]"
+              onClick={() => void loadBackupHistory()}
+              disabled={historyLoading}
+            >
+              <RefreshCw size={13} className={historyLoading ? "animate-spin" : ""} /> Refresh
+            </button>
+          </div>
         </div>
 
         {historyError ? (
@@ -747,6 +784,15 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
                       {h.status && h.status !== "success" ? ` · ${h.status}` : ""}
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    title="Delete this history record (ZIP file is not deleted)"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-black text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={deletingHistoryId === h.id}
+                    onClick={() => void deleteHistoryEntry(h)}
+                  >
+                    <Trash2 size={13} /> {deletingHistoryId === h.id ? "..." : "Delete"}
+                  </button>
                 </div>
               );
             })}

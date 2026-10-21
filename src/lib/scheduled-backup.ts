@@ -36,6 +36,9 @@ export const SCHEDULE_SETTING_KEYS = {
   encrypt: "backup_schedule_encrypt",
 } as const;
 
+/** History එක latest 5 ට prune වුණත් අද backup එක දැනටමත් ගිහින්ද කියා මතක තබන hidden setting එක */
+export const SCHEDULE_LAST_SUCCESS_KEY = "backup_schedule_last_success_date";
+
 export const SCHEDULE_SECRET_KEYS = {
   megaEmail: "mega_email",
   megaPassword: "mega_password",

@@ -7,12 +7,30 @@
 // ============================================================================
 
 export const BACKUP_FORMAT_VERSION = 2;
+/** Backup History එකේ තබා ගන්නේ අලුත්ම සටහන් 5 විතරයි — පරණ ඒවා auto-delete වේ. */
+export const BACKUP_HISTORY_KEEP = 5;
 export const ENCRYPTED_PREFIX = "MPCS-ENCRYPTED-BACKUP v1";
 /** v2 = gzip කරලා encrypt කරනවා — file එක ~4 ගුණයකින් කුඩායි (auto-backup timeout නැති වෙන්න) */
 export const ENCRYPTED_PREFIX_V2 = "MPCS-ENCRYPTED-BACKUP v2";
 
 /* --------------------------------------------------------------- PARSE --- */
 export type ParsedInsert = { table: string; cols: string[]; values: unknown[] };
+
+/** Latest `keep` ගාණෙන් පිටත තියෙන Backup History row IDs (auto-delete කරන්න). */
+export function backupHistoryIdsToPrune<T extends { id: string; created_at: string }>(
+  entries: readonly T[],
+  keep: number = BACKUP_HISTORY_KEEP
+): string[] {
+  const safeKeep = Math.max(0, Math.floor(Number.isFinite(keep) ? keep : BACKUP_HISTORY_KEEP));
+  return [...entries]
+    .filter((e) => typeof e?.id === "string" && e.id)
+    .sort((a, b) => {
+      const byTime = Date.parse(b.created_at) - Date.parse(a.created_at);
+      return Number.isFinite(byTime) && byTime !== 0 ? byTime : String(b.id).localeCompare(String(a.id));
+    })
+    .slice(safeKeep)
+    .map((e) => e.id);
+}
 
 function parseValueTuple(s: string): unknown[] {
   const out: unknown[] = [];
