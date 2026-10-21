@@ -174,6 +174,8 @@ ok("Consumer page: long Regional rows above separate Sales/Store manager rows + 
   businessDetailSrc.includes("Regional Name") &&
   businessDetailSrc.includes("Manager Name") &&
   businessDetailSrc.includes('b.special === "consumer"') &&
+  businessDetailSrc.includes("mx-auto mt-8 grid max-w-6xl items-start gap-6") &&
+  businessDetailSrc.includes("contact-pro-amber self-start") &&
   businessPageSrc.indexOf("<RegionalBranches") > -1 &&
   businessPageSrc.indexOf("<RegionalBranches") < businessPageSrc.indexOf("<BusinessContacts") &&
   adminBusinessesSrc.includes("To delete Mandapola or any other branch") &&

@@ -488,7 +488,7 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
 
 function BusinessHoursCard() {
   return (
-    <div className="card contact-pro-card contact-pro-amber rounded-3xl p-5 text-[12.5px] text-slate-500 space-y-2">
+    <div className="card contact-pro-card contact-pro-amber self-start rounded-3xl p-5 text-[12.5px] text-slate-500 space-y-2">
       <div className="flex items-center gap-2 text-slate-700 font-bold text-[13px]">
         <Clock size={15} /> Business Hours
       </div>
@@ -581,7 +581,7 @@ export function BusinessContacts({ b }: { b: BusinessUnit }) {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
         <SectionHead badge="Contact & Information" title={t.sections.contacts || "දෙපාර්තමේන්තු සම්බන්ධතා සහ විමසීම්"} sub={t.sections.contactsSub} />
         <ConsumerManagerContacts contacts={b.contacts} />
-        <div className="mx-auto mt-8 grid max-w-6xl gap-6 lg:grid-cols-[1.35fr_1fr]">
+        <div className="mx-auto mt-8 grid max-w-6xl items-start gap-6 lg:grid-cols-[1.35fr_1fr]">
           <SendInquiryCard department={b.name_en} />
           <BusinessHoursCard />
         </div>
