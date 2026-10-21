@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { Eye, Heart, ImageIcon, Pencil, Plus, Reply, Search, ThumbsUp, Trash2, Upload } from "lucide-react";
 import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
-import { buildGalleryCommentTree, normalizeGalleryCount } from "@/lib/gallery-social";
+import { buildGalleryCommentTree, groupGalleryItems, normalizeGalleryCount } from "@/lib/gallery-social";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbInsertMany, dbUpdate, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
@@ -189,7 +189,7 @@ export default function AdminGalleryPage() {
       editFor
         ? "✅ Gallery item updated"
         : addedCount > 1
-          ? `✅ Gallery items ${addedCount}ක් එකම tagline එකෙන් add වුණා (public එකේ පේනවා)`
+          ? `✅ Photos ${addedCount}ක් එක Album එකක් විදිහට add වුණා (public එකේ View More එකෙන් පේනවා)`
           : "✅ Gallery item added (public එකේ පේනවා)"
     );
   }
@@ -251,7 +251,25 @@ export default function AdminGalleryPage() {
       </div>
 
       <div className="space-y-5 mt-5">
-        {items.map((g) => (
+        {groupGalleryItems(items).map((album) => (
+          <div
+            key={album.key}
+            className={album.photos.length > 1 ? "rounded-[24px] border border-indigo-100 bg-indigo-50/40 p-3 sm:p-4" : ""}
+          >
+            {album.photos.length > 1 && (
+              <div className="mb-4 flex flex-wrap items-center gap-3 px-1">
+                <span className="inline-flex items-center gap-2 rounded-full bg-indigo-700 px-3.5 py-1.5 text-[11px] font-extrabold text-white">
+                  <ImageIcon size={13} /> Album · Photos {album.photos.length}ක්
+                </span>
+                <span className="text-[13px] font-extrabold text-slate-800">{album.cover.title}</span>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  මුළු Likes {album.totalLikes.toLocaleString()} · Views {album.totalViews.toLocaleString()} · Comments {album.totalComments.toLocaleString()}
+                </span>
+                <span className="text-[10.5px] text-slate-400">Public පැත්තේ එක card එකක් + View More විදිහට පේනවා</span>
+              </div>
+            )}
+            <div className={album.photos.length > 1 ? "space-y-4" : ""}>
+        {album.photos.map((g, photoIdx) => (
           <div key={g.id} className="card p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-start gap-4">
@@ -267,6 +285,11 @@ export default function AdminGalleryPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-extrabold text-slate-900 text-[15px]">{g.title}</span>
                     <span className="badge-amber rounded-full px-2 py-0.5 text-[9.5px] font-bold">{g.aspect}</span>
+                    {album.photos.length > 1 && (
+                      <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[9.5px] font-extrabold text-indigo-700">
+                        Photo {photoIdx + 1}/{album.photos.length}
+                      </span>
+                    )}
                   </div>
                   <div className="text-slate-500 text-[11.5px] mt-0.5">{g.description}</div>
                   <div className="flex items-center gap-3.5 mt-1.5 text-[11px] text-slate-500">
@@ -305,6 +328,9 @@ export default function AdminGalleryPage() {
             </div>
           </div>
         ))}
+            </div>
+          </div>
+        ))}
         {loaded && items.length === 0 && (
           <p className="text-center text-slate-400 text-[13px]">Gallery එක හිස් — "Add Gallery Item" ඔබලා ඡායාරූප එකතු කරන්න.</p>
         )}
@@ -313,7 +339,7 @@ export default function AdminGalleryPage() {
       {modal && (
         <AdminModal
           title={editFor ? "Edit Gallery Item" : "Add New Gallery Item"}
-          sub={editFor ? `${editFor.title} — update කර Save ඔබන්න` : "Photo එකක් — හෝ කැමති ගණනක් photos එකම tagline එකෙන් — upload කරලා save කරන්න"}
+          sub={editFor ? `${editFor.title} — update කර Save ඔබන්න` : "Photo එකක් — හෝ කැමති ගණනක් photos එකම Album එකක් විදිහට — upload කරලා save කරන්න"}
           onClose={closeModal}
         >
           <form key={editFor ? `edit-${editFor.id}` : "add"} onSubmit={submitItem} className="space-y-4">
@@ -363,7 +389,7 @@ export default function AdminGalleryPage() {
                     <div className="text-[12px] font-extrabold text-slate-800">
                       එකවර Photos ඕනෑම ගණනක් — එකම Tagline එකෙන්
                       <span className="block text-[10.5px] font-medium text-slate-500">
-                        උඩ Title එකම මේ photos ඔක්කෝටම වැටෙනවා. ගණනට සීමාවක් නෑ — අවශ්‍ය නම් වරින් වර තෝරලා එකතු කරන්නත් පුළුවන්.
+                        උඩ Title එකම මේ photos ඔක්කෝටම වැටෙනවා. Public පැත්තේ වෙන් වෙන්ව නෙවෙයි — ප්‍රධාන photo එකයි “View More” එකයි එක්ක එක Album card එකක් විදිහට පේනවා. ගණනට සීමාවක් නෑ.
                       </span>
                     </div>
                     <label className={`btn btn-outline !py-2 !text-[12px] ${uploading || saving ? "pointer-events-none opacity-60" : "cursor-pointer"}`}>
@@ -398,7 +424,7 @@ export default function AdminGalleryPage() {
                         ))}
                       </div>
                       <div className="mt-2 text-[11px] font-bold text-indigo-700">
-                        Photos {batchPhotos.length}ක් — Save කළාම එකම Title එකෙන් add වෙනවා
+                        Photos {batchPhotos.length}ක් — Save කළාම එකම Title එකෙන් එක Album එකක් විදිහට add වෙනවා
                       </div>
                     </div>
                   )}

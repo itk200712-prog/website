@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Eye, Heart, ImageIcon, LogIn, Plus, Reply, Send, Shuffle, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Heart, ImageIcon, Images, LogIn, Plus, Reply, Send, Shuffle, X } from "lucide-react";
 import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import type { GalleryComment, GalleryItem } from "@/lib/types";
@@ -16,6 +16,7 @@ import {
   buildGalleryCommentTree,
   clampBoostAmount,
   countGalleryComments,
+  groupGalleryItems,
   normalizeGalleryCount,
   randomGalleryViews,
   updateGalleryCommentLikes,
@@ -732,14 +733,51 @@ export function updateItem(items: GalleryItem[], id: string, patch: Partial<Gall
 export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
   const [items, setItems] = useState<GalleryItem[]>(initial);
   const [open, setOpen] = useState<GalleryItem | null>(null);
+  const touchStartX = useRef<number | null>(null);
   const me = useMe();
+  const { lang } = useLang();
+  const si = lang === "si";
 
   useEffect(() => {
     setItems(initial);
   }, [initial]);
 
-  const idx = open ? items.findIndex((x) => x.id === open.id) : -1;
-  const current = open ? items.find((x) => x.id === open.id) ?? open : null;
+  // එකම මාතෘකාවෙන් දාපු photos ඔක්කොම එක album card එකක් යටතේ
+  const albums = groupGalleryItems(items);
+  const openAlbum = open ? albums.find((a) => a.photos.some((p) => p.id === open.id)) ?? null : null;
+  const albumPhotos = openAlbum?.photos ?? [];
+  const idx = open ? albumPhotos.findIndex((x) => x.id === open.id) : -1;
+  const current = open ? albumPhotos.find((x) => x.id === open.id) ?? open : null;
+
+  function goTo(delta: number) {
+    if (!albumPhotos.length || idx < 0) return;
+    setOpen(albumPhotos[(idx + delta + albumPhotos.length) % albumPhotos.length]);
+  }
+
+  // ⌨ keyboard: Esc වසන්න · ←/→ album එක ඇතුළෙ යන්න
+  useEffect(() => {
+    if (!current) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(null);
+      if (e.key === "ArrowLeft") goTo(-1);
+      if (e.key === "ArrowRight") goTo(1);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, idx, albumPhotos.length]);
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.changedTouches[0]?.clientX ?? null;
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    const start = touchStartX.current;
+    touchStartX.current = null;
+    if (start == null) return;
+    const dx = (e.changedTouches[0]?.clientX ?? start) - start;
+    if (Math.abs(dx) < 40) return;
+    goTo(dx < 0 ? 1 : -1); // වමට swipe → ඊළඟ photo එක
+  }
 
   return (
     <>
@@ -751,12 +789,16 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
         </div>
       ) : (
       <div className="columns-1 sm:columns-2 lg:columns-3 gap-6">
-        {items.map((g) => (
-          <figure key={g.id} className="card card-hover overflow-hidden mb-6 break-inside-avoid inline-block w-full">
+        {albums.map((album) => {
+          const g = album.cover;
+          const multi = album.photos.length > 1;
+          return (
+          <figure key={album.key} className="card card-hover overflow-hidden mb-6 break-inside-avoid inline-block w-full">
             <button
               className="w-full block relative bg-slate-800"
               style={{ aspectRatio: ASPECT[g.aspect] ?? "4 / 3" }}
               onClick={() => setOpen(g)}
+              aria-label={multi ? "View More" : g.title}
             >
               {g.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -766,35 +808,50 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                   <ImageIcon size={44} />
                 </div>
               )}
+              {multi && (
+                <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-[10.5px] font-extrabold text-white backdrop-blur-sm">
+                  <Images size={12} /> {album.photos.length} {si ? "Photos" : "Photos"}
+                </span>
+              )}
               <span className="absolute top-3 right-3 badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold">
                 {g.aspect}
               </span>
+              {multi && (
+                <span className="absolute inset-x-3 bottom-3 flex gap-1.5">
+                  {album.photos.slice(1, 4).map((p) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={p.id} src={p.image} alt="" className="h-11 min-w-0 flex-1 rounded-lg border-2 border-white/70 object-cover" />
+                  ))}
+                  {album.photos.length > 4 && (
+                    <span className="flex h-11 min-w-11 items-center justify-center rounded-lg bg-slate-900/80 px-2 text-[11px] font-extrabold text-white">
+                      +{album.photos.length - 4}
+                    </span>
+                  )}
+                </span>
+              )}
             </button>
             <figcaption className="p-5">
               <h3 className="font-extrabold text-slate-900 leading-snug">{g.title}</h3>
               <p className="text-slate-500 text-[12.5px] mt-1.5 leading-relaxed">{g.description}</p>
-              <div className="mt-3.5 border-t border-slate-100 pt-3">
-                <GallerySocial
-                  item={g}
-                  me={me}
-                  onLike={(n) => setItems((xs) => updateItem(xs, g.id, { likes: n }))}
-                  onViews={(n) => setItems((xs) => updateItem(xs, g.id, { views: n }))}
-                  onComment={(c) =>
-                    setItems((xs) => updateItem(xs, g.id, { comments: [...(xs.find((x) => x.id === g.id)?.comments ?? []), c] }))
-                  }
-                  onCommentLike={(commentId, n) =>
-                    setItems((xs) =>
-                      updateItem(xs, g.id, {
-                        comments: updateGalleryCommentLikes(xs.find((x) => x.id === g.id)?.comments ?? [], commentId, n),
-                      })
-                    )
-                  }
-                  compact
-                />
+              <div className="mt-3.5 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-3 text-[12px] font-semibold text-slate-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <Heart size={14} className="text-rose-500" /> {album.totalLikes.toLocaleString()} Likes
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Eye size={14} className="text-indigo-500" /> {album.totalViews.toLocaleString()} Views
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <MessageSquare size={14} className="text-emerald-500" /> {album.totalComments.toLocaleString()} Comments
+                </span>
               </div>
+              <button type="button" className="btn btn-primary mt-4 w-full" onClick={() => setOpen(g)}>
+                {multi ? (si ? "තව බලන්න" : "View More") : si ? "විශාලව බලන්න" : "View Photo"}
+                <ChevronRight size={16} />
+              </button>
             </figcaption>
           </figure>
-        ))}
+          );
+        })}
       </div>
       )}
 
@@ -804,52 +861,83 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
           className="fixed inset-0 z-[90] bg-slate-900/80 flex items-center justify-center p-4 no-print"
           onClick={() => setOpen(null)}
         >
-          <div className="card max-w-3xl w-full p-0 overflow-hidden max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="relative bg-slate-800" style={{ aspectRatio: ASPECT[current.aspect] ?? "4 / 3" }}>
+          <div className="card max-w-4xl w-full p-0 overflow-hidden max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="relative bg-slate-950" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
               {current.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={current.image} alt={current.title} className="absolute inset-0 w-full h-full object-cover" />
+                <img key={current.id} src={current.image} alt={current.title} className="mx-auto max-h-[68vh] w-full object-contain" />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-white/25">
+                <div className="flex aspect-[4/3] items-center justify-center text-white/25">
                   <ImageIcon size={64} />
                 </div>
               )}
               <button
                 className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center transition"
                 onClick={() => setOpen(null)}
+                aria-label="Close"
               >
                 <X size={18} />
               </button>
-              {items.length > 1 && (
+              {albumPhotos.length > 1 && (
                 <>
+                  <span className="absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-[11px] font-extrabold text-white">
+                    {idx + 1} / {albumPhotos.length}
+                  </span>
                   <button
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
+                    className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/25 text-white transition hover:bg-white/45"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setOpen(items[(idx - 1 + items.length) % items.length]);
+                      goTo(-1);
                     }}
-                    aria-label="Previous"
+                    aria-label="Previous Photo"
                   >
-                    ‹
+                    <ChevronLeft size={24} />
                   </button>
                   <button
-                    className="absolute right-16 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
+                    className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/25 text-white transition hover:bg-white/45"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setOpen(items[(idx + 1) % items.length]);
+                      goTo(1);
                     }}
-                    aria-label="Next"
+                    aria-label="Next Photo"
                   >
-                    ›
+                    <ChevronRight size={24} />
                   </button>
                 </>
               )}
             </div>
             <div className="p-6">
-              <h3 className="text-xl font-extrabold text-slate-900">{current.title}</h3>
+              {albumPhotos.length > 1 && (
+                <div className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Album photos">
+                  {albumPhotos.map((p, i) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setOpen(p)}
+                      className={`relative h-16 w-20 shrink-0 overflow-hidden rounded-xl ring-2 transition ${
+                        p.id === current.id ? "ring-indigo-600" : "opacity-65 ring-transparent hover:opacity-100"
+                      }`}
+                      aria-label={`Photo ${i + 1}`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.image} alt="" className="h-full w-full object-cover" />
+                      <span className="absolute bottom-1 right-1 rounded-full bg-black/60 px-1.5 py-px text-[9px] font-bold text-white">{i + 1}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h3 className="text-xl font-extrabold text-slate-900">{current.title}</h3>
+                {albumPhotos.length > 1 && (
+                  <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-extrabold text-indigo-700">
+                    {si ? `Photo ${idx + 1} / ${albumPhotos.length}` : `Photo ${idx + 1} of ${albumPhotos.length}`}
+                  </span>
+                )}
+              </div>
               <p className="text-slate-500 text-[13.5px] mt-2 leading-relaxed">{current.description}</p>
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <GallerySocial
+                  key={current.id}
                   item={current}
                   me={me}
                   onLike={(n) => setItems((xs) => updateItem(xs, current.id, { likes: n }))}

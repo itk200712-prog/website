@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 import { PhoneImageIcon as Phone, LocationImageIcon as MapPin } from "@/components/site-icons";
 import { GallerySocial, useMe, updateItem, type Me } from "@/components/gallery-grid";
-import { updateGalleryCommentLikes } from "@/lib/gallery-social";
+import { groupGalleryItems, updateGalleryCommentLikes } from "@/lib/gallery-social";
 import type { GalleryComment } from "@/lib/types";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HeroSlideshow } from "@/components/hero-slideshow";
 import { SiteLogoBadge } from "@/components/site-logo";
 import { createClient } from "@/lib/supabase/client";
@@ -157,10 +157,17 @@ export function HomeSections({
   const [person, setPerson] = useState<BoardMember | null>(null);
   const [gal, setGal] = useState<GalleryItem | null>(null);
   const [galItems, setGalItems] = useState<GalleryItem[]>(gallery);
+  const galTouchX = useRef<number | null>(null);
   const me = useMe();
-  const galList = galItems;
+  const galAlbums = groupGalleryItems(galItems);
+  const galAlbum = gal ? galAlbums.find((a) => a.photos.some((p) => p.id === gal.id)) ?? null : null;
+  const galList = galAlbum?.photos ?? [];
   const galIdx = gal ? galList.findIndex((x) => x.id === gal.id) : -1;
   const galCurrent = gal ? galList.find((x) => x.id === gal.id) ?? gal : null;
+  function galGo(delta: number) {
+    if (!galList.length || galIdx < 0) return;
+    setGal(galList[(galIdx + delta + galList.length) % galList.length]);
+  }
   const live = useLiveStats({
     members: settings.members_total,
     voters: settings.voters_total,
@@ -301,9 +308,21 @@ export function HomeSections({
             className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl bg-white/90 backdrop-blur-xl border border-white/50 max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative bg-slate-900">
+            <div
+              className="relative bg-slate-900"
+              onTouchStart={(e) => {
+                galTouchX.current = e.changedTouches[0]?.clientX ?? null;
+              }}
+              onTouchEnd={(e) => {
+                const start = galTouchX.current;
+                galTouchX.current = null;
+                if (start == null) return;
+                const dx = (e.changedTouches[0]?.clientX ?? start) - start;
+                if (Math.abs(dx) >= 40) galGo(dx < 0 ? 1 : -1);
+              }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={galCurrent?.image} alt={gal.title} className="w-full max-h-[62vh] object-contain" />
+              <img key={galCurrent?.id} src={galCurrent?.image} alt={gal.title} className="w-full max-h-[62vh] object-contain" />
               <button
                 onClick={() => setGal(null)}
                 className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center transition"
@@ -333,9 +352,29 @@ export function HomeSections({
               </div>
               <h3 className="mt-1.5 text-xl font-extrabold text-slate-900">{gal.title}</h3>
               {gal.description && <p className="mt-2 text-slate-600 text-[13.5px] leading-relaxed">{gal.description}</p>}
+              {galList.length > 1 && (
+                <div className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Album photos">
+                  {galList.map((p, i) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setGal(p)}
+                      className={`relative h-16 w-20 shrink-0 overflow-hidden rounded-xl ring-2 transition ${
+                        p.id === galCurrent?.id ? "ring-indigo-600" : "opacity-65 ring-transparent hover:opacity-100"
+                      }`}
+                      aria-label={`Photo ${i + 1}`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.image} alt="" className="h-full w-full object-cover" />
+                      <span className="absolute bottom-1 right-1 rounded-full bg-black/60 px-1.5 py-px text-[9px] font-bold text-white">{i + 1}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {galCurrent && (
                 <div className="mt-4 border-t border-slate-100 pt-4">
                   <GallerySocial
+                    key={galCurrent.id}
                     item={galCurrent}
                     me={me as Me}
                     onLike={(n) => setGalItems((xs) => updateItem(xs, galCurrent.id, { likes: n }))}
@@ -452,9 +491,12 @@ export function HomeSections({
             }
           />
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-            {gallery.slice(0, 4).map((g) => (
+            {galAlbums.slice(0, 4).map((album) => {
+              const g = album.cover;
+              const multi = album.photos.length > 1;
+              return (
               <button
-                key={g.id}
+                key={album.key}
                 type="button"
                 onClick={() => setGal(g)}
                 className="group relative rounded-2xl overflow-hidden card card-hover text-left w-full"
@@ -468,6 +510,11 @@ export function HomeSections({
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   )}
+                  {multi && (
+                    <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-slate-900/75 px-3 py-1 text-[10.5px] font-extrabold text-white">
+                      <Images size={12} /> {album.photos.length} Photos
+                    </span>
+                  )}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/80 to-transparent p-3">
                     <div className="flex items-center gap-1.5 text-white text-[11.5px] font-bold">
                       <Images size={12} /> {g.title || "Photo"}
@@ -475,12 +522,13 @@ export function HomeSections({
                   </div>
                   <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors flex items-center justify-center">
                     <span className="opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-white/90 text-slate-900 px-4 py-2 text-[11.5px] font-bold">
-                      {lang === "si" ? "🔍 විශාලව බලන්න" : "🔍 View Enlarged"}
+                      {multi ? (lang === "si" ? "🔍 තව බලන්න" : "🔍 View More") : lang === "si" ? "🔍 විශාලව බලන්න" : "🔍 View Enlarged"}
                     </span>
                   </div>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>

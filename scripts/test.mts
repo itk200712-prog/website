@@ -1191,6 +1191,20 @@ ok("gallery social: one-level reply tree + counts + boost clamps + random views 
   gallerySocial.randomGalleryViews(() => 0) === 25 &&
   gallerySocial.randomGalleryViews(() => 0.999999) === 250 &&
   gallerySocial.updateGalleryCommentLikes([{ id: "x", author: "", text: "", created_at: "", likes: 1 }], "x", 9)[0].likes === 9);
+const gsAlbums = gallerySocial.groupGalleryItems([
+  { id: "gal-100-2", title: "PIRITH", description: "Night", aspect: "4:3", image: "2.jpg", likes: 2, views: 20, comments: [{ id: "a", author: "", text: "", created_at: "" }] },
+  { id: "gal-100-1", title: "PIRITH", description: "Night", aspect: "4:3", image: "1.jpg", likes: 1, views: 10, comments: [] },
+  { id: "x1", title: "AGM", description: "Meeting", aspect: "16:9", image: "3.jpg", likes: 3, views: 30, comments: [] },
+  { id: "x2", title: "agm", description: "Meeting", aspect: "16:9", image: "4.jpg", likes: 4, views: 40, comments: [] },
+] as never);
+ok("gallery albums: batch + same title/description photos become ONE album (ordered photos + totals)",
+  gsAlbums.length === 2 &&
+  gsAlbums[0].photos.map((p) => p.id).join(",") === "gal-100-1,gal-100-2" &&
+  gsAlbums[0].cover.id === "gal-100-1" &&
+  gsAlbums[0].totalLikes === 3 &&
+  gsAlbums[0].totalViews === 30 &&
+  gsAlbums[0].totalComments === 1 &&
+  gsAlbums[1].photos.length === 2);
 const galleryGridSrc = readFileSync(join(root, "src/components/gallery-grid.tsx"), "utf8");
 ok("gallery social: everyone like/view + signed-in replies + superadmin-only boost (UI + RPC + schema + admin + backup snapshot)",
   galleryGridSrc.includes("buildGalleryCommentTree") &&
@@ -1215,7 +1229,21 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-21-gallery-unlimited-v5"));
+  genSiteSourceSrc.includes("2026-10-21-gallery-albums-v6"));
+const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
+ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
+  galleryGridSrc.includes("groupGalleryItems(items)") &&
+  galleryGridSrc.includes("albums.map") &&
+  galleryGridSrc.includes("View More") &&
+  galleryGridSrc.includes("onTouchEnd") &&
+  galleryGridSrc.includes("albumPhotos") &&
+  galleryGridSrc.includes("key={current.id}") &&
+  homeSectionsSrc.includes("groupGalleryItems(galItems)") &&
+  homeSectionsSrc.includes("galAlbums.slice(0, 4)") &&
+  homeSectionsSrc.includes("View More") &&
+  homeSectionsSrc.includes("galGo") &&
+  adminGallerySrc.includes("groupGalleryItems(items)") &&
+  adminGallerySrc.includes("Album · Photos"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

@@ -3,10 +3,84 @@
 // counts සහ superadmin boost amounts සඳහා pure logic (test කළ හැකි ලෙස)
 // ============================================================================
 
-import type { GalleryComment } from "@/lib/types";
+import type { GalleryComment, GalleryItem } from "@/lib/types";
 
 export interface GalleryCommentNode extends GalleryComment {
   replies: GalleryComment[];
+}
+
+export interface GalleryAlbum {
+  key: string;
+  cover: GalleryItem;
+  photos: GalleryItem[];
+  totalLikes: number;
+  totalViews: number;
+  totalComments: number;
+}
+
+function normalizeAlbumText(value: unknown): string {
+  return String(value ?? "").trim().toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+/** Admin batch upload එකේ ids: gal-<stamp>-1, gal-<stamp>-2 ... — stamp එක album key එකයි */
+function batchAlbumParts(id: string): { key: string; order: number } | null {
+  const m = /^gal-(\d+)-(\d+)$/.exec(String(id ?? ""));
+  if (!m) return null;
+  return { key: `batch:gal-${m[1]}`, order: Number(m[2]) };
+}
+
+/**
+ * Photo එක අයිති album එකේ key එක.
+ * 1) එකවර upload කරපු batch එකක් නම් batch stamp එකෙන්ම group වෙනවා.
+ * 2) නැත්නම් එකම Title + Description + Aspect තියෙන photos එකම album එකක් විදිහට
+ *    සලකනවා (එකින් එක upload කළත් එකම මාතෘකාව/විස්තරය නම් එක කොටසක්).
+ * Title එක හිස් photos වැරදියට ඔක්කොම එකට එකතු නොවෙන්න ඒවා වෙන්ව තබනවා.
+ */
+export function galleryAlbumKey(item: GalleryItem): string {
+  const batch = batchAlbumParts(item.id);
+  if (batch) return batch.key;
+  const title = normalizeAlbumText(item.title);
+  if (!title) return `single:${item.id}`;
+  return `meta:${title}\u001f${normalizeAlbumText(item.description)}\u001f${item.aspect ?? "4:3"}`;
+}
+
+/**
+ * Gallery items ටික albums විදිහට group කරයි — album එකකට එක card එකයි.
+ * මුල් පිළිවෙල රැකෙනවා; batch photos ඒවායේ අංක පිළිවෙලට (1,2,3...) එනවා.
+ */
+export function groupGalleryItems(items: GalleryItem[]): GalleryAlbum[] {
+  const byKey = new Map<string, { item: GalleryItem; index: number }[]>();
+  (items ?? []).forEach((item, index) => {
+    const key = galleryAlbumKey(item);
+    const arr = byKey.get(key) ?? [];
+    arr.push({ item, index });
+    byKey.set(key, arr);
+  });
+
+  return Array.from(byKey.entries()).map(([key, entries]) => {
+    const photos = entries
+      .slice()
+      .sort((a, b) => {
+        const ao = batchAlbumParts(a.item.id)?.order;
+        const bo = batchAlbumParts(b.item.id)?.order;
+        if (ao != null && bo != null && ao !== bo) return ao - bo;
+        return a.index - b.index;
+      })
+      .map((x) => x.item);
+    return {
+      key,
+      cover: photos[0],
+      photos,
+      totalLikes: photos.reduce((sum, p) => sum + normalizeGalleryCount(p.likes), 0),
+      totalViews: photos.reduce((sum, p) => sum + normalizeGalleryCount(p.views), 0),
+      totalComments: photos.reduce((sum, p) => sum + (p.comments?.length ?? 0), 0),
+    } satisfies GalleryAlbum;
+  });
+}
+
+/** දීපු photo එක තියෙන album එක (lightbox එක album එක ඇතුළෙ විතරක් යන්න) */
+export function findGalleryAlbum(items: GalleryItem[], itemId: string): GalleryAlbum | null {
+  return groupGalleryItems(items).find((a) => a.photos.some((p) => p.id === itemId)) ?? null;
 }
 
 /** DB එකෙන් එන ඕනෑම අගයක් ආරක්ෂිත non-negative integer count එකක් කරයි */
