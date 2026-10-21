@@ -17,6 +17,7 @@ function ok(name, cond, extra = "") {
 // ---- import TS modules via tsx ----
 const seed = await import("../src/lib/seed.ts");
 const auth = await import("../src/lib/auth.ts");
+const branchSettings = await import("../src/lib/branch-settings.ts");
 
 console.log("\n── 1) Seed data (screenshots) ──");
 ok("14 business divisions", seed.BUSINESSES.length === 14, `got ${seed.BUSINESSES.length}`);
@@ -143,6 +144,7 @@ const adminBusinessesSrc = readFileSync(join(root, "src/app/admin/businesses/pag
 const siteSectionsSrc = readFileSync(join(root, "src/components/site-sections.tsx"), "utf8");
 const contactInfoSrc = readFileSync(join(root, "src/components/contact-info.tsx"), "utf8");
 const globalsCssSrc = readFileSync(join(root, "src/app/globals.css"), "utf8");
+const supabaseClientSrc = readFileSync(join(root, "src/lib/supabase/client.ts"), "utf8");
 ok("Coop City branches: five Admin-managed cards above Department Contact & Inquiries",
   businessDetailSrc.includes("export function CoopCityBranches") &&
   businessDetailSrc.includes("Our Coop City & Mini Coop City Branch") &&
@@ -156,7 +158,8 @@ ok("Coop City branches: five Admin-managed cards above Department Contact & Inqu
   adminBusinessesSrc.includes("Our Coop City & Mini Coop City Branch Settings") &&
   adminBusinessesSrc.includes("const [branchRows, setBranchRows]") &&
   adminBusinessesSrc.includes('dbDelete("business_branches"') &&
-  adminBusinessesSrc.includes('dbInsert("business_branches"') &&
+  adminBusinessesSrc.includes("dbInsertMany(") &&
+  adminBusinessesSrc.includes('"business_branches"') &&
   !adminBusinessesSrc.includes('role_en: "Regional Branch"'));
 ok("Branch first-save regression: empty replace-delete cannot block inserts + detail page is live",
   adminShellEarlySrc.includes("opts: { allowEmpty?: boolean }") &&
@@ -186,6 +189,27 @@ ok("Site-wide professional animated contact cards",
   businessDetailSrc.includes("contact-pro-hotline") &&
   businessDetailSrc.includes("contact-pro-call") &&
   contactInfoSrc.includes("card contact-pro-card contact-pro-indigo"));
+ok("Branch settings helpers: Rural rows renumber/delete-all + branch photos map by slug/name",
+  branchSettings.parseRuralBankBranches("[]", seed.RURAL_BANK_BRANCHES).length === 0 &&
+  branchSettings.normalizeRuralBankBranches([{ name: "A Branch", name_si: "අ ශාඛාව", manager: "M", phone: "037" }])[0].no === "01" &&
+  branchSettings.withBranchPhotos(
+    [{ name: "Hettipola Coop City", manager: "S", location: "Near Office", phone: "076" }],
+    "coop-city",
+    branchSettings.nextBranchPhotoMap({}, "coop-city", [{ name: "Hettipola Coop City", manager: "S", location: "Near Office", phone: "076", photo: "https://example.com/a.jpg" }])
+  )[0].photo === "https://example.com/a.jpg");
+ok("Branch photo/Rural edit-delete settings + fast Admin business save",
+  adminShellEarlySrc.includes("export async function dbInsertMany") &&
+  adminBusinessesSrc.includes("Rural Bank Branch Network Settings") &&
+  adminBusinessesSrc.includes("Branch Name (Sinhala)") &&
+  adminBusinessesSrc.includes("Branch Photo") &&
+  adminBusinessesSrc.includes("uploadBranchPhoto") &&
+  adminBusinessesSrc.includes("Promise.all([replaceContacts(), replaceBranches()])") &&
+  adminBusinessesSrc.includes('editSaving ? "Saving..." : "Save Changes"') &&
+  supabaseClientSrc.includes("let cachedClient") &&
+  supabaseClientSrc.includes("let authReady") &&
+  businessDetailSrc.includes("export function RuralBankNetwork({ b }") &&
+  businessDetailSrc.includes("br.photo") &&
+  businessPageSrc.includes("<RuralBankNetwork b={b} />"));
 
 console.log("\n── 8) Board categories (director board page) ──");
 ok("chairman=1, vice-chairman=1", seed.BOARD.filter((m) => m.category === "chairman").length === 1 && seed.BOARD.filter((m) => m.category === "vice-chairman").length === 1);

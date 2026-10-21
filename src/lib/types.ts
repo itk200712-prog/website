@@ -16,9 +16,13 @@ export interface BusinessContact {
 
 export interface BusinessBranch {
   name: string;
+  /** Rural Bank branch Sinhala name (stored via branch settings) */
+  name_si?: string;
   manager: string;
   location: string;
   phone: string;
+  /** Branch card photo URL/path (Admin branch settings) */
+  photo?: string;
 }
 
 export interface BusinessService {

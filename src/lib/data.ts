@@ -16,8 +16,17 @@ import {
   SETTINGS,
   VOTER_FILES,
 } from "@/lib/seed";
+import {
+  BUSINESS_BRANCH_PHOTOS_KEY,
+  RURAL_BANK_BRANCHES_KEY,
+  parseBranchPhotos,
+  parseRuralBankBranches,
+  ruralBranchesToBusinessBranches,
+  withBranchPhotos,
+} from "@/lib/branch-settings";
 import type {
   BoardMember,
+  BusinessBranch,
   BusinessUnit,
   DataFile,
   FuelPrice,
@@ -44,15 +53,38 @@ export async function getBusinesses(): Promise<BusinessUnit[]> {
     const sb = createAnonClient();
     const { data, error } = await sb.from("business_units").select("*").order("order");
     if (error || !data) return BUSINESSES;
-    const svcs = await sb.from("business_services").select("*").order("order");
-    const contacts = await sb.from("business_contacts").select("*");
-    const branches = await sb.from("business_branches").select("*");
-    return data.map((b: Record<string, unknown>) => ({
-      ...(b as unknown as BusinessUnit),
-      services: (svcs.data ?? []).filter((s: { business_slug: string }) => s.business_slug === b.slug),
-      contacts: (contacts.data ?? []).filter((c: { business_slug: string }) => c.business_slug === b.slug),
-      branches: (branches.data ?? []).filter((x: { business_slug: string }) => x.business_slug === b.slug),
-    })) as BusinessUnit[];
+    const [svcs, contacts, branches, branchSettings] = await Promise.all([
+      sb.from("business_services").select("*").order("order"),
+      sb.from("business_contacts").select("*"),
+      sb.from("business_branches").select("*"),
+      sb.from("system_settings").select("key,value").in("key", [BUSINESS_BRANCH_PHOTOS_KEY, RURAL_BANK_BRANCHES_KEY]),
+    ]);
+    const settingsMap = new Map(
+      ((branchSettings.data ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value])
+    );
+    const branchPhotos = parseBranchPhotos(settingsMap.get(BUSINESS_BRANCH_PHOTOS_KEY));
+    const hasRuralSettings = settingsMap.has(RURAL_BANK_BRANCHES_KEY);
+    const ruralBranches = hasRuralSettings
+      ? ruralBranchesToBusinessBranches(parseRuralBankBranches(settingsMap.get(RURAL_BANK_BRANCHES_KEY), RURAL_BANK_BRANCHES))
+      : ruralBranchesToBusinessBranches(RURAL_BANK_BRANCHES);
+
+    return data.map((b: Record<string, unknown>) => {
+      const slug = String(b.slug ?? "");
+      const dbBranches = ((branches.data ?? []) as (BusinessBranch & { business_slug: string })[])
+        .filter((x) => x.business_slug === slug)
+        .map(({ business_slug: _slug, ...br }) => br as BusinessBranch);
+      return {
+        ...(b as unknown as BusinessUnit),
+        services: (svcs.data ?? []).filter((s: { business_slug: string }) => s.business_slug === slug),
+        contacts: (contacts.data ?? []).filter((c: { business_slug: string }) => c.business_slug === slug),
+        branches:
+          slug === "rural-bank"
+            ? hasRuralSettings || dbBranches.length === 0
+              ? ruralBranches
+              : withBranchPhotos(dbBranches, slug, branchPhotos)
+            : withBranchPhotos(dbBranches, slug, branchPhotos),
+      };
+    }) as BusinessUnit[];
   }, BUSINESSES);
 }
 

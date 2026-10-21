@@ -11,15 +11,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight, Building2, CheckCircle2, ExternalLink, Image as ImageIcon, Pencil, Plus, RefreshCw, Search, Trash2,
 } from "lucide-react";
-import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
+import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbInsertMany, dbUpdate, dbUpsert, useNotice } from "@/components/admin";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { authedClient } from "@/lib/supabase/client";
-import { BUSINESSES } from "@/lib/seed";
+import {
+  BUSINESS_BRANCH_PHOTOS_KEY,
+  RURAL_BANK_BRANCHES_KEY,
+  businessBranchesToRuralBranches,
+  nextBranchPhotoMap,
+  parseBranchPhotos,
+  parseRuralBankBranches,
+  ruralBranchesToBusinessBranches,
+  serializeBranchPhotos,
+  serializeRuralBankBranches,
+  withBranchPhotos,
+} from "@/lib/branch-settings";
+import { BUSINESSES, RURAL_BANK_BRANCHES } from "@/lib/seed";
 import type { BusinessBranch, BusinessUnit, BusinessService } from "@/lib/types";
 
 const DEFAULT_FEATURES = "Trusted quality, Member privileges, Certified standard";
 const COOP_CITY_BRANCH_LIMIT = 5;
-const emptyBranch = (): BusinessBranch => ({ name: "", manager: "", location: "", phone: "" });
+const emptyBranch = (): BusinessBranch => ({ name: "", name_si: "", manager: "", location: "", phone: "", photo: "" });
 
 export default function AdminBusinessesPage() {
   const { show, node } = useNotice();
@@ -32,28 +44,57 @@ export default function AdminBusinessesPage() {
   const [units, setUnits] = useState<BusinessUnit[]>([...BUSINESSES]);
   const [mgrRows, setMgrRows] = useState<Array<{ role_en: string; role_si: string; name: string; location: string; phone: string }>>([]);
   const [branchRows, setBranchRows] = useState<BusinessBranch[]>([]);
+  const [branchPhotos, setBranchPhotos] = useState<Record<string, string>>({});
+  const [ruralSettingsLoaded, setRuralSettingsLoaded] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [branchUploading, setBranchUploading] = useState<number | null>(null);
   const [coverPreview, setCoverPreview] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
   const [addLogo, setAddLogo] = useState("");
   const logoRef = useRef<HTMLInputElement>(null);
   const coverRef = useRef<HTMLInputElement>(null);
 
-  // ✅ DB එකෙන් load — add/edit/delete refresh වලදී නැති වෙන්නෑ
+  //✅ DB එකෙන් load — add/edit/delete refresh වලදී නැති වෙන්නෑ
   useEffect(() => {
     (async () => {
       try {
         const sb = await authedClient();
         const { data } = await sb.from("business_units").select("*").order("order");
         if (data && data.length) {
-          const svcs = await sb.from("business_services").select("*").order("order");
-          const contacts = await sb.from("business_contacts").select("*");
-          const branches = await sb.from("business_branches").select("*");
-          setUnits(data.map((b: Record<string, unknown>) => ({
-            ...(b as unknown as BusinessUnit),
-            services: (svcs.data ?? []).filter((x: { business_slug: string }) => x.business_slug === (b as { slug: string }).slug),
-            contacts: (contacts.data ?? []).filter((x: { business_slug: string }) => x.business_slug === (b as { slug: string }).slug),
-            branches: (branches.data ?? []).filter((x: { business_slug: string }) => x.business_slug === (b as { slug: string }).slug),
-          })) as BusinessUnit[]);
+          const [svcs, contacts, branches, branchSettings] = await Promise.all([
+            sb.from("business_services").select("*").order("order"),
+            sb.from("business_contacts").select("*"),
+            sb.from("business_branches").select("*"),
+            sb.from("system_settings").select("key,value").in("key", [BUSINESS_BRANCH_PHOTOS_KEY, RURAL_BANK_BRANCHES_KEY]),
+          ]);
+          const settingsMap = new Map(
+            ((branchSettings.data ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value])
+          );
+          const photos = parseBranchPhotos(settingsMap.get(BUSINESS_BRANCH_PHOTOS_KEY));
+          const hasRuralSettings = settingsMap.has(RURAL_BANK_BRANCHES_KEY);
+          setBranchPhotos(photos);
+          setRuralSettingsLoaded(hasRuralSettings);
+          const ruralRows = hasRuralSettings
+            ? parseRuralBankBranches(settingsMap.get(RURAL_BANK_BRANCHES_KEY), RURAL_BANK_BRANCHES)
+            : RURAL_BANK_BRANCHES;
+
+          setUnits(data.map((b: Record<string, unknown>) => {
+            const slug = (b as { slug: string }).slug;
+            const dbBranches = ((branches.data ?? []) as (BusinessBranch & { business_slug: string })[])
+              .filter((x) => x.business_slug === slug)
+              .map(({ business_slug: _slug, ...br }) => ({ name_si: "", photo: "", ...br } as BusinessBranch));
+            return {
+              ...(b as unknown as BusinessUnit),
+              services: (svcs.data ?? []).filter((x: { business_slug: string }) => x.business_slug === slug),
+              contacts: (contacts.data ?? []).filter((x: { business_slug: string }) => x.business_slug === slug),
+              branches:
+                slug === "rural-bank"
+                  ? hasRuralSettings || dbBranches.length === 0
+                    ? ruralBranchesToBusinessBranches(ruralRows)
+                    : withBranchPhotos(dbBranches, slug, photos)
+                  : withBranchPhotos(dbBranches, slug, photos),
+            };
+          }) as BusinessUnit[]);
         }
       } catch { /* seed fallback */ }
     })();
@@ -62,7 +103,12 @@ export default function AdminBusinessesPage() {
   const openEdit = (b: BusinessUnit) => {
     setEditFor(b);
     setMgrRows(b.contacts.map((c) => ({ role_en: c.role_en, role_si: c.role_si, name: c.name, location: c.location, phone: c.phone })));
-    const nextBranches = b.branches.map((br) => ({ ...br }));
+    let nextBranches: BusinessBranch[] = b.branches.map((br) => ({ name_si: "", photo: "", ...br }));
+    // Rural Bank එකේ දැනට site එකේ පේන ශාඛා 22ම Admin එකෙන් edit/delete කරන්න පුළුවන් වෙන්න
+    // settings එකක් තවම නැත්නම් seed ලැයිස්තුවෙන් editor එක පුරවයි.
+    if (b.slug === "rural-bank" && nextBranches.length === 0 && !ruralSettingsLoaded) {
+      nextBranches = ruralBranchesToBusinessBranches(RURAL_BANK_BRANCHES);
+    }
     // Coop City එකට ශාඛා 5ක් එකතු කිරීමට ලේසි වෙන්න හිස් slot 5ක් මුලින්ම දෙයි.
     // හිස් rows Save කිරීමේදී ඉවත් වන නිසා වැරදි හිස් ශාඛා site එකේ පෙන්වන්නේ නෑ.
     if (b.slug === "coop-city") {
@@ -101,6 +147,19 @@ export default function AdminBusinessesPage() {
       show("✅ Image එක upload වුණා — Save කරන්න");
     } else {
       show(`⚠ ${res && res.error ? res.error : "Upload failed — path එකක් අතින් දාන්න"}`);
+    }
+  };
+
+  const uploadBranchPhoto = async (index: number, f: File) => {
+    setBranchUploading(index);
+    show("⏳ Branch photo එක upload වෙමින්...");
+    const res = await uploadSiteImage(f, "branches", { maxSize: 900, quality: 0.88 });
+    setBranchUploading(null);
+    if (res?.url) {
+      setBranchRows((rs) => rs.map((r, j) => (j === index ? { ...r, photo: res.url } : r)));
+      show("✅ Branch photo එක upload වුණා — Save Changes කරන්න");
+    } else {
+      show(`⚠ ${res?.error ?? "Branch photo upload failed"}`);
     }
   };
 
@@ -334,64 +393,120 @@ export default function AdminBusinessesPage() {
             className="space-y-4"
             onSubmit={async (e) => {
               e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              const patch = {
-                name_en: fd.get("name_en"), name_si: fd.get("name_si"),
-                category_en: fd.get("category_en"), category_si: fd.get("category_si"),
-                tagline_en: fd.get("tagline_en"), tagline_si: fd.get("tagline_si"),
-                desc_en: fd.get("desc_en"), desc_si: fd.get("desc_si"),
-                active: fd.get("active") === "on", is_new: fd.get("is_new") === "on",
-                order: Number(fd.get("order")),
-                logo: String(fd.get("logo") ?? ""),
-                cover: String(fd.get("cover") ?? "") || null,
-              };
-              const validContacts = mgrRows
-                .map((c) => ({
-                  role_en: c.role_en.trim(),
-                  role_si: c.role_si.trim(),
-                  name: c.name.trim(),
-                  location: c.location.trim(),
-                  phone: c.phone.trim(),
-                }))
-                .filter((c) => c.role_en || c.role_si || c.name || c.location || c.phone);
-              const branchNameSeen = new Map<string, number>();
-              const validBranches = branchRows
-                .map((br, i) => {
-                  const row = {
-                    name: br.name.trim(),
-                    manager: br.manager.trim(),
-                    location: br.location.trim(),
-                    phone: br.phone.trim(),
-                  };
-                  if (!row.name && !row.manager && !row.location && !row.phone) return null;
-                  const baseName = row.name || (editFor.slug === "coop-city" ? `Coop City Branch ${i + 1}` : `Branch ${i + 1}`);
-                  let name = baseName;
-                  let suffix = (branchNameSeen.get(baseName.toLowerCase()) ?? 0) + 1;
-                  while (branchNameSeen.has(name.toLowerCase())) {
-                    name = `${baseName} – ${row.location || suffix}`;
-                    if (branchNameSeen.has(name.toLowerCase())) name = `${name} (${suffix})`;
-                    suffix++;
+              if (editSaving) return;
+              setEditSaving(true);
+              show("⏳ Saving...");
+              try {
+                const fd = new FormData(e.currentTarget);
+                const patch = {
+                  name_en: fd.get("name_en"), name_si: fd.get("name_si"),
+                  category_en: fd.get("category_en"), category_si: fd.get("category_si"),
+                  tagline_en: fd.get("tagline_en"), tagline_si: fd.get("tagline_si"),
+                  desc_en: fd.get("desc_en"), desc_si: fd.get("desc_si"),
+                  active: fd.get("active") === "on", is_new: fd.get("is_new") === "on",
+                  order: Number(fd.get("order")),
+                  logo: String(fd.get("logo") ?? ""),
+                  cover: String(fd.get("cover") ?? "") || null,
+                };
+                const validContacts = mgrRows
+                  .map((c) => ({
+                    role_en: c.role_en.trim(),
+                    role_si: c.role_si.trim(),
+                    name: c.name.trim(),
+                    location: c.location.trim(),
+                    phone: c.phone.trim(),
+                  }))
+                  .filter((c) => c.role_en || c.role_si || c.name || c.location || c.phone);
+                const branchNameSeen = new Map<string, number>();
+                const validBranches = branchRows
+                  .map((br, i) => {
+                    const row: BusinessBranch = {
+                      name: br.name.trim(),
+                      name_si: (br.name_si ?? "").trim(),
+                      manager: br.manager.trim(),
+                      location: editFor.slug === "rural-bank" ? "" : br.location.trim(),
+                      phone: br.phone.trim(),
+                      photo: (br.photo ?? "").trim(),
+                    };
+                    if (!row.name && !row.name_si && !row.manager && !row.location && !row.phone) return null;
+                    const baseName = row.name || row.name_si || (editFor.slug === "coop-city" ? `Coop City Branch ${i + 1}` : `Branch ${i + 1}`);
+                    let name = baseName;
+                    let suffix = (branchNameSeen.get(baseName.toLowerCase()) ?? 0) + 1;
+                    while (branchNameSeen.has(name.toLowerCase())) {
+                      name = `${baseName} – ${row.location || row.name_si || suffix}`;
+                      if (branchNameSeen.has(name.toLowerCase())) name = `${name} (${suffix})`;
+                      suffix++;
+                    }
+                    branchNameSeen.set(baseName.toLowerCase(), (branchNameSeen.get(baseName.toLowerCase()) ?? 0) + 1);
+                    branchNameSeen.set(name.toLowerCase(), 1);
+                    return { ...row, name };
+                  })
+                  .filter((br): br is BusinessBranch => Boolean(br))
+                  .slice(0, editFor.slug === "coop-city" ? COOP_CITY_BRANCH_LIMIT : undefined);
+
+                const replaceContacts = async (): Promise<string | null> => {
+                  const delErr = await dbDelete("business_contacts", { business_slug: editFor.slug }, { allowEmpty: true });
+                  if (delErr) return delErr;
+                  return dbInsertMany(
+                    "business_contacts",
+                    validContacts.map((c) => ({ business_slug: editFor.slug, ...c }))
+                  );
+                };
+
+                const replaceBranches = async (): Promise<string | null> => {
+                  if (editFor.slug === "rural-bank") {
+                    const upErr = await dbUpsert("system_settings", {
+                      key: RURAL_BANK_BRANCHES_KEY,
+                      value: serializeRuralBankBranches(businessBranchesToRuralBranches(validBranches)),
+                    });
+                    if (!upErr) setRuralSettingsLoaded(true);
+                    return upErr;
                   }
-                  branchNameSeen.set(baseName.toLowerCase(), (branchNameSeen.get(baseName.toLowerCase()) ?? 0) + 1);
-                  branchNameSeen.set(name.toLowerCase(), 1);
-                  return { ...row, name };
-                })
-                .filter((br): br is BusinessBranch => Boolean(br))
-                .slice(0, editFor.slug === "coop-city" ? COOP_CITY_BRANCH_LIMIT : undefined);
-              setUnits((xs) => xs.map((b) => (b.slug === editFor.slug ? { ...b, ...patch, contacts: validContacts, branches: validBranches } as BusinessUnit : b)));
-              let err = await dbUpdate("business_units", { slug: editFor.slug }, patch);
-              // Replace-all save: පළමුවන වතාවට මකන්න rows නැති එක error එකක් නොවෙයි.
-              // (නැත්නම් Coop City branches වගේ අලුත්ම rows insert නොවී නතර වෙනවා.)
-              err ||= await dbDelete("business_contacts", { business_slug: editFor.slug }, { allowEmpty: true });
-              for (const c of validContacts) {
-                err ||= await dbInsert("business_contacts", { business_slug: editFor.slug, ...c });
+
+                  // Replace-all save: පළමුවන වතාවට මකන්න rows නැති එක error එකක් නොවෙයි.
+                  const delErr = await dbDelete("business_branches", { business_slug: editFor.slug }, { allowEmpty: true });
+                  if (delErr) return delErr;
+                  const insErr = await dbInsertMany(
+                    "business_branches",
+                    validBranches.map((br) => ({
+                      business_slug: editFor.slug,
+                      name: br.name,
+                      manager: br.manager,
+                      location: br.location,
+                      phone: br.phone,
+                    }))
+                  );
+                  if (insErr) return insErr;
+
+                  const hadPhotos =
+                    validBranches.some((br) => br.photo) ||
+                    Object.keys(branchPhotos).some((k) => k.startsWith(`${editFor.slug}:`));
+                  if (hadPhotos) {
+                    const nextPhotos = nextBranchPhotoMap(branchPhotos, editFor.slug, validBranches);
+                    const photoErr = await dbUpsert("system_settings", {
+                      key: BUSINESS_BRANCH_PHOTOS_KEY,
+                      value: serializeBranchPhotos(nextPhotos),
+                    });
+                    if (photoErr) return photoErr;
+                    setBranchPhotos(nextPhotos);
+                  }
+                  return null;
+                };
+
+                let err = await dbUpdate("business_units", { slug: editFor.slug }, patch);
+                if (!err) {
+                  // Contacts සහ branches වෙන වෙනම batch + parallel save කරන නිසා Save message එක ඉක්මනින් එයි.
+                  const errs = await Promise.all([replaceContacts(), replaceBranches()]);
+                  err = errs.find(Boolean) ?? null;
+                }
+                if (!err) {
+                  setUnits((xs) => xs.map((b) => (b.slug === editFor.slug ? { ...b, ...patch, contacts: validContacts, branches: validBranches } as BusinessUnit : b)));
+                  setEditFor(null);
+                }
+                show(err ? `⚠ ${err}` : "✅ Business division updated");
+              } finally {
+                setEditSaving(false);
               }
-              err ||= await dbDelete("business_branches", { business_slug: editFor.slug }, { allowEmpty: true });
-              for (const br of validBranches) {
-                err ||= await dbInsert("business_branches", { business_slug: editFor.slug, ...br });
-              }
-              setEditFor(null);
-              show(err ? `⚠ ${err}` : "✅ Business division updated");
             }}
           >
             <div className="grid gap-4 sm:grid-cols-2">
@@ -471,14 +586,20 @@ export default function AdminBusinessesPage() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="font-extrabold text-slate-900 text-[14px]">
-                    {editFor.slug === "coop-city" ? "Our Coop City & Mini Coop City Branch Settings" : "Regional Branch Settings"}
+                    {editFor.slug === "coop-city"
+                      ? "Our Coop City & Mini Coop City Branch Settings"
+                      : editFor.slug === "rural-bank"
+                        ? "Rural Bank Branch Network Settings"
+                        : "Regional Branch Settings"}
                   </div>
                   <div className="text-slate-500 text-[11px] leading-relaxed">
                     {editFor.slug === "coop-city"
-                      ? "Add up to 5 branches. They appear as ordered cards above Department Contact & Inquiries on the Coop City page."
-                      : editFor.special === "consumer"
-                        ? "Regional branches appear above the Sales Development Manager and Store Manager rows. To delete Mandapola or any other branch, click Delete on its row and then Save Changes."
-                        : "Branches are saved separately and shown in the Regional Branches section where this business template uses it."}
+                      ? "Add up to 5 branches with an optional branch photo. They appear as ordered cards above Department Contact & Inquiries on the Coop City page."
+                      : editFor.slug === "rural-bank"
+                        ? "Edit, add or delete the branches shown in the Rural Bank branch table. Click Delete on a branch row, then Save Changes."
+                        : editFor.special === "consumer"
+                          ? "Regional branches appear above the Sales Development Manager and Store Manager rows. To delete Mandapola or any other branch, click Delete on its row and then Save Changes."
+                          : "Branches are saved separately and shown in the Regional Branches section where this business template uses it."}
                   </div>
                 </div>
                 <button
@@ -487,7 +608,7 @@ export default function AdminBusinessesPage() {
                   className="btn btn-green !py-1.5 !px-3.5 !text-[11.5px] disabled:cursor-not-allowed disabled:opacity-50"
                   onClick={() => setBranchRows((rs) => [...rs, emptyBranch()])}
                 >
-                  <Plus size={13} /> {editFor.slug === "coop-city" ? `Add Branch (${branchRows.length}/${COOP_CITY_BRANCH_LIMIT})` : "Add Regional Branch"}
+                  <Plus size={13} /> {editFor.slug === "coop-city" ? `Add Branch (${branchRows.length}/${COOP_CITY_BRANCH_LIMIT})` : editFor.slug === "rural-bank" ? "Add Branch" : "Add Regional Branch"}
                 </button>
               </div>
 
@@ -499,7 +620,7 @@ export default function AdminBusinessesPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[11px] font-black text-emerald-700">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-                      {editFor.slug === "coop-city" ? "COOP CITY BRANCH" : "REGIONAL BRANCH"} #{i + 1}
+                      {editFor.slug === "coop-city" ? "COOP CITY BRANCH" : editFor.slug === "rural-bank" ? "RURAL BANK BRANCH" : "REGIONAL BRANCH"} #{i + 1}
                     </div>
                     <button
                       type="button"
@@ -512,10 +633,18 @@ export default function AdminBusinessesPage() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
                     <div>
-                      <label className="field-label !mb-1">{editFor.slug === "coop-city" ? "Coop City Type" : editFor.special === "consumer" ? "Regional Name" : "Branch Name"}</label>
+                      <label className="field-label !mb-1">
+                        {editFor.slug === "coop-city"
+                          ? "Coop City Type"
+                          : editFor.slug === "rural-bank"
+                            ? "Branch Name (English)"
+                            : editFor.special === "consumer"
+                              ? "Regional Name"
+                              : "Branch Name"}
+                      </label>
                       <input
                         className="field !py-2 !text-[11.5px]"
-                        placeholder={editFor.slug === "coop-city" ? "e.g. Mini Coop City – Hettipola" : "e.g. Mandapola"}
+                        placeholder={editFor.slug === "coop-city" ? "e.g. Mini Coop City – Hettipola" : editFor.slug === "rural-bank" ? "e.g. Hettipola Main Branch" : "e.g. Mandapola"}
                         value={br.name}
                         onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))}
                       />
@@ -529,17 +658,29 @@ export default function AdminBusinessesPage() {
                         onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, manager: e.target.value } : r)))}
                       />
                     </div>
+                    {editFor.slug === "rural-bank" ? (
+                      <div>
+                        <label className="field-label !mb-1">Branch Name (Sinhala)</label>
+                        <input
+                          className="field !py-2 !text-[11.5px]"
+                          placeholder="e.g. හෙට්ටිපොල ප්‍රධාන ශාඛාව"
+                          value={br.name_si ?? ""}
+                          onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, name_si: e.target.value } : r)))}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="field-label !mb-1">Location</label>
+                        <input
+                          className="field !py-2 !text-[11.5px]"
+                          placeholder="ස්ථානය / ලිපිනය"
+                          value={br.location}
+                          onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, location: e.target.value } : r)))}
+                        />
+                      </div>
+                    )}
                     <div>
-                      <label className="field-label !mb-1">Location</label>
-                      <input
-                        className="field !py-2 !text-[11.5px]"
-                        placeholder="ස්ථානය / ලිපිනය"
-                        value={br.location}
-                        onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, location: e.target.value } : r)))}
-                      />
-                    </div>
-                    <div>
-                      <label className="field-label !mb-1">Hot Line</label>
+                      <label className="field-label !mb-1">{editFor.slug === "rural-bank" ? "Contact" : "Hot Line"}</label>
                       <input
                         className="field !py-2 !text-[11.5px]"
                         placeholder="037 229 1017"
@@ -548,11 +689,57 @@ export default function AdminBusinessesPage() {
                       />
                     </div>
                   </div>
+
+                  {editFor.slug !== "rural-bank" && (
+                    <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                      {br.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={br.photo} alt="Branch preview" className="h-14 w-14 shrink-0 rounded-2xl border border-emerald-100 object-cover" />
+                      ) : (
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white">
+                          <ImageIcon size={20} />
+                        </div>
+                      )}
+                      <div className="min-w-52 flex-1">
+                        <label className="field-label !mb-1">Branch Photo</label>
+                        <input
+                          className="field !py-2 !text-[11.5px]"
+                          placeholder="Photo URL / path — card එකේ කොළ පාට icon තැන පේනවා"
+                          value={br.photo ?? ""}
+                          onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, photo: e.target.value } : r)))}
+                        />
+                      </div>
+                      <label className={`btn btn-outline !px-3.5 !py-2 !text-[11.5px] ${branchUploading === i ? "cursor-wait opacity-60" : "cursor-pointer"}`}>
+                        <ImageIcon size={14} /> {branchUploading === i ? "Uploading..." : "Upload Photo"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={branchUploading === i}
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            e.currentTarget.value = "";
+                            if (f) await uploadBranchPhoto(i, f);
+                          }}
+                        />
+                      </label>
+                      {br.photo && (
+                        <button
+                          type="button"
+                          className="btn btn-outline !px-3.5 !py-2 !text-[11.5px] !text-rose-600"
+                          onClick={() => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, photo: "" } : r)))}
+                        >
+                          Remove Photo
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
               <p className="text-[10.5px] text-slate-400 mt-3">
                 හිස් branch rows Save කිරීමේදී ඉවත් වේ. ශාඛාවක් මකන්න එහි <strong className="text-rose-500">Delete</strong> ඔබලා Save Changes කරන්න.
-                {editFor.slug === "coop-city" ? " Type එක ශාඛාව අනුව වෙනස්ව ලියන්න (උදා: Coop City – Hettipola)." : ""}
+                {editFor.slug === "coop-city" ? " Branch Photo එකක් දැම්මොත් card එකේ කොළ පාට icon තැන ඒ photo එක පේනවා." : ""}
+                {editFor.slug === "rural-bank" ? " මෙහි වෙනස් කරන ශාඛා Rural Bank පිටුවේ ශාඛා වගුවේම පේනවා." : ""}
               </p>
             </div>
 
@@ -632,8 +819,10 @@ export default function AdminBusinessesPage() {
             </div>
 
             <div className="flex justify-end gap-2.5 pt-1">
-              <button type="button" className="btn btn-outline" onClick={() => setEditFor(null)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save Changes</button>
+              <button type="button" disabled={editSaving} className="btn btn-outline disabled:cursor-not-allowed disabled:opacity-60" onClick={() => setEditFor(null)}>Cancel</button>
+              <button type="submit" disabled={editSaving} className="btn btn-primary disabled:cursor-wait disabled:opacity-70">
+                {editSaving ? "Saving..." : "Save Changes"}
+              </button>
             </div>
           </form>
         </AdminModal>

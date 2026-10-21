@@ -918,7 +918,7 @@ function businessEntries(data: KnowledgeSourceData): KnowledgeEntry[] {
       });
     }
 
-    if (biz.branches?.length) {
+    if (biz.branches?.length && biz.slug !== "rural-bank") {
       entries.push({
         id: `biz-branches:${biz.slug}`,
         kind: "branch",

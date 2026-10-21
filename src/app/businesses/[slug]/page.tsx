@@ -42,7 +42,7 @@ export default async function BusinessDetailPage({ params }: { params: Promise<{
       <BusinessServices b={b} />
 
       {/* Rural Bank — 22 branch network */}
-      {b.special === "rural-bank" && <RuralBankNetwork />}
+      {b.special === "rural-bank" && <RuralBankNetwork b={b} />}
 
       {/* Consumer — regional branches */}
       {b.special === "consumer" && <RegionalBranches b={b} />}

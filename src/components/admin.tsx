@@ -282,6 +282,21 @@ export async function dbInsert(table: string, row: Record<string, unknown>): Pro
   }
 }
 
+/** Batch insert — Save Changes වේගවත් කරන්න rows ඔක්කොම එක request එකකින් යවයි. */
+export async function dbInsertMany(table: string, rows: Record<string, unknown>[]): Promise<string | null> {
+  if (rows.length === 0) return null;
+  if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
+  try {
+    const { data, error } = await (await authedClient()).from(table).insert(rows).select("*");
+    if (error) return error.message;
+    if (!data || data.length !== rows.length) return "rows save වුණේ නෑ — login/permission පරීක්ෂා කරන්න";
+    void logActivity("INSERT", `${table} — ${rows.length} rows (batch)`);
+    return null;
+  } catch (e) {
+    return String(e);
+  }
+}
+
 export async function dbUpdate(
   table: string,
   match: Record<string, unknown>,

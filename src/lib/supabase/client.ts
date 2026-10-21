@@ -3,8 +3,13 @@
 import { createBrowserClient } from "@supabase/ssr";
 export { isSupabaseConfigured } from "@/lib/env";
 
-/** Browser (client components) සඳහා Supabase client */
-export function createClient() {
+type BrowserClient = ReturnType<typeof createBrowserClient>;
+let cachedClient: BrowserClient | null = null;
+let authReady: Promise<BrowserClient> | null = null;
+
+/** Browser (client components) සඳහා Supabase client — එකම client එක reuse කරයි. */
+export function createClient(): BrowserClient {
+  if (cachedClient) return cachedClient;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
@@ -12,21 +17,27 @@ export function createClient() {
       "Supabase වින්‍යාස වී නොමැත. .env.local එකට NEXT_PUBLIC_SUPABASE_URL සහ NEXT_PUBLIC_SUPABASE_ANON_KEY එක් කරන්න."
     );
   }
-  return createBrowserClient(url, anon);
+  cachedClient = createBrowserClient(url, anon);
+  return cachedClient;
 }
 
 /** Session එක cookie ප්‍රශ්න තිබුණත් වැඩ වෙන්න — localStorage එකෙන් restore කරයි (bulletproof auth) */
-export async function authedClient() {
+export async function authedClient(): Promise<BrowserClient> {
   const sb = createClient();
-  try {
-    const { data } = await sb.auth.getSession();
-    if (!data.session && typeof window !== "undefined") {
-      const at = localStorage.getItem("mpcs_at");
-      const rt = localStorage.getItem("mpcs_rt");
-      if (at && rt) await sb.auth.setSession({ access_token: at, refresh_token: rt });
-    }
-  } catch { /* ignore */ }
-  return sb;
+  if (!authReady) {
+    authReady = (async () => {
+      try {
+        const { data } = await sb.auth.getSession();
+        if (!data.session && typeof window !== "undefined") {
+          const at = localStorage.getItem("mpcs_at");
+          const rt = localStorage.getItem("mpcs_rt");
+          if (at && rt) await sb.auth.setSession({ access_token: at, refresh_token: rt });
+        }
+      } catch { /* ignore */ }
+      return sb;
+    })();
+  }
+  return authReady;
 }
 
 /** login එකේදී token මතක තබා ගන්න */

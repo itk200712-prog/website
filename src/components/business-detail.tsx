@@ -137,28 +137,41 @@ export function FuelPriceSection({ prices }: { prices: FuelPrice[] }) {
 }
 
 /* ----------------------------------------------------- rural bank network -- */
-export function RuralBankNetwork() {
+export function RuralBankNetwork({ b }: { b: BusinessUnit }) {
   const { lang } = useLang();
   const [q, setQ] = useState("");
+  const branches = useMemo(
+    () =>
+      b.branches.length > 0
+        ? b.branches.map((br, i) => ({
+            no: String(i + 1).padStart(2, "0"),
+            name: br.name,
+            name_si: br.name_si || br.location || "",
+            manager: br.manager,
+            phone: br.phone,
+          }))
+        : RURAL_BANK_BRANCHES,
+    [b.branches]
+  );
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return RURAL_BANK_BRANCHES;
-    return RURAL_BANK_BRANCHES.filter(
-      (b) =>
-        b.name.toLowerCase().includes(s) ||
-        b.name_si.includes(q.trim()) ||
-        b.manager.includes(q.trim()) ||
-        b.phone.includes(s) ||
-        b.no.includes(s)
+    if (!s) return branches;
+    return branches.filter(
+      (br) =>
+        br.name.toLowerCase().includes(s) ||
+        br.name_si.includes(q.trim()) ||
+        br.manager.includes(q.trim()) ||
+        br.phone.includes(s) ||
+        br.no.includes(s)
     );
-  }, [q]);
+  }, [branches, q]);
 
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
       <SectionHead
         badge="Branch Network"
         title="ශාඛා ජාලය සහ සම්බන්ධතා"
-        sub="අපේ ග්‍රාමීය බැංකු ශාඛා 22 ක ජාලය — ඔබේ ගමටම බැංකු සේවා."
+        sub={`අපේ ග්‍රාමීය බැංකු ශාඛා ${branches.length} ක ජාලය — ඔබේ ගමටම බැංකු සේවා.`}
         right={
           <div className="relative w-full sm:w-80">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -175,7 +188,7 @@ export function RuralBankNetwork() {
       {/* hero badges row */}
       <div className="grid gap-4 sm:grid-cols-3 mb-8">
         {[
-          { icon: <Home size={20} />, value: "22", label: "Active Branches" },
+          { icon: <Home size={20} />, value: String(branches.length), label: "Active Branches" },
           { icon: <TrendingUp size={20} />, value: "48+", label: "Years of Trust" },
           { icon: <ShieldCheck size={20} />, value: "100%", label: "Member Owned" },
         ].map((x) => (
@@ -216,6 +229,13 @@ export function RuralBankNetwork() {
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-slate-500">
+                    {lang === "si" ? "ගැලපෙන ශාඛාවක් හමු නොවුණි." : "No matching branch found."}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -272,8 +292,13 @@ export function RegionalBranches({ b }: { b: BusinessUnit }) {
               >
                 {fields.map((field, fieldIndex) => (
                   <div key={field.label} className="contact-pro-field flex min-w-0 items-start gap-3 rounded-2xl px-3 py-2.5">
-                    <span className="contact-pro-icon mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white">
-                      {field.icon}
+                    <span className="contact-pro-icon mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white">
+                      {fieldIndex === 0 && br.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={br.photo} alt={br.name} className="h-full w-full object-cover" loading="lazy" />
+                      ) : (
+                        field.icon
+                      )}
                     </span>
                     <span className="min-w-0">
                       <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
@@ -350,8 +375,13 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
               >
                 <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center">
                   <div className="flex items-center gap-4 lg:w-56 lg:shrink-0">
-                    <div className="contact-pro-icon flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
-                      <Store size={24} />
+                    <div className="contact-pro-icon flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
+                      {br.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={br.photo} alt={br.name} className="h-full w-full object-cover" loading="lazy" />
+                      ) : (
+                        <Store size={24} />
+                      )}
                     </div>
                     <div>
                       <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">

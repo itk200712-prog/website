@@ -54,6 +54,14 @@ import {
   type IndexedKnowledgeEntry,
   type KnowledgeSourceData,
 } from "@/lib/knowledge";
+import {
+  BUSINESS_BRANCH_PHOTOS_KEY,
+  RURAL_BANK_BRANCHES_KEY,
+  parseBranchPhotos,
+  parseRuralBankBranches,
+  ruralBranchesToBusinessBranches,
+  withBranchPhotos,
+} from "@/lib/branch-settings";
 import { isAiEnabledValue, shouldAskAiFirst, type AiHistoryTurn } from "@/lib/baymax-ai";
 import type {
   BoardMember,
@@ -1502,6 +1510,8 @@ export function LiveChat() {
             "members_files_count",
             "voters_files_count",
             "years_of_service",
+            BUSINESS_BRANCH_PHOTOS_KEY,
+            RURAL_BANK_BRANCHES_KEY,
           ]),
         ]);
 
@@ -1546,9 +1556,11 @@ export function LiveChat() {
             const list = branchesBySlug.get(row.business_slug) ?? [];
             list.push({
               name: row.name ?? "",
+              name_si: row.name_si ?? "",
               manager: row.manager ?? "",
               location: row.location ?? "",
               phone: row.phone ?? "",
+              photo: row.photo ?? "",
             });
             branchesBySlug.set(row.business_slug, list);
           }
@@ -1588,8 +1600,23 @@ export function LiveChat() {
             const value = Number(settingsMap.get(key));
             return Number.isFinite(value) && value > 0 ? value : fallback;
           };
+          const branchPhotos = parseBranchPhotos(settingsMap.get(BUSINESS_BRANCH_PHOTOS_KEY));
+          const hasRuralSettings = settingsMap.has(RURAL_BANK_BRANCHES_KEY);
+          const ruralRows = hasRuralSettings
+            ? parseRuralBankBranches(settingsMap.get(RURAL_BANK_BRANCHES_KEY), RURAL_BANK_BRANCHES)
+            : RURAL_BANK_BRANCHES;
           data = {
             ...data,
+            ruralBranches: ruralRows,
+            businesses: data.businesses.map((unit) => ({
+              ...unit,
+              branches:
+                unit.slug === "rural-bank"
+                  ? hasRuralSettings || unit.branches.length === 0
+                    ? ruralBranchesToBusinessBranches(ruralRows)
+                    : withBranchPhotos(unit.branches, unit.slug, branchPhotos)
+                  : withBranchPhotos(unit.branches, unit.slug, branchPhotos),
+            })),
             settings: {
               ...SETTINGS,
               members_total: settingNumber("members_total", SETTINGS.members_total),
