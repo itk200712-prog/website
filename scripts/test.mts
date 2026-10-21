@@ -303,13 +303,19 @@ ok("animation: Admin section (bg+brightness+products per business) → settings 
   adminAnimationSrc.includes("pb-36") &&
   globalsCssSrc.includes("contain: inline-size"));
 const adminGallerySrc = readFileSync(join(root, "src/app/admin/gallery/page.tsx"), "utf8");
-ok("gallery: upload 2–3 photos at once under one tagline (batch insert, same title)",
+ok("gallery: upload ANY number of photos under one tagline (no 3-photo cap, progress, append + chunked batch insert, same title)",
   adminGallerySrc.includes("onBatchPhotos") &&
   adminGallerySrc.includes("batchPhotos") &&
   adminGallerySrc.includes("multiple") &&
-  adminGallerySrc.includes("slice(0, 3)") &&
+  adminGallerySrc.includes("const files = picked;") &&
+  !adminGallerySrc.includes("picked.slice(0, 3)") &&
+  adminGallerySrc.includes("setBatchPhotos((prev) => [...prev, ...urls])") &&
+  adminGallerySrc.includes("batchProgress") &&
+  adminGallerySrc.includes("i += CONCURRENCY") &&
+  adminGallerySrc.includes("i += 50") &&
   adminGallerySrc.includes('dbInsertMany("gallery_items"') &&
-  adminGallerySrc.includes("එකවර Photos 2–3ක්"));
+  adminGallerySrc.includes("එකවර Photos ඕනෑම ගණනක්") &&
+  adminGallerySrc.includes("Upload Photos (Any Number)"));
 
 console.log("\n── 8) Board categories (director board page) ──");
 ok("chairman=1, vice-chairman=1", seed.BOARD.filter((m) => m.category === "chairman").length === 1 && seed.BOARD.filter((m) => m.category === "vice-chairman").length === 1);
@@ -1208,7 +1214,8 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/components/gallery-grid.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-21-gallery-social-v4"));
+  genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
+  genSiteSourceSrc.includes("2026-10-21-gallery-unlimited-v5"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

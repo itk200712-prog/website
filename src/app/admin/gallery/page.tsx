@@ -19,9 +19,11 @@ export default function AdminGalleryPage() {
   const [modal, setModal] = useState(false);
   const [editFor, setEditFor] = useState<GalleryItem | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
-  // එකම tagline එක යටතේ එකවර upload කරන photos 2–3 (Add mode එකේදී විතරයි)
+  // එකම tagline එක යටතේ upload කරන photos — ගණනට සීමාවක් නෑ (Add mode එකේදී විතරයි)
   const [batchPhotos, setBatchPhotos] = useState<string[]>([]);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [items, setItems] = useState<GalleryItem[]>([...GALLERY]);
   const [loaded, setLoaded] = useState(false);
 
@@ -59,13 +61,23 @@ export default function AdminGalleryPage() {
     setEditFor(null);
     setPhoto(null);
     setBatchPhotos([]);
+    setBatchProgress(null);
     setModal(true);
   }
   function openEdit(g: GalleryItem) {
     setEditFor(g);
     setPhoto(g.image || null);
     setBatchPhotos([]);
+    setBatchProgress(null);
     setModal(true);
+  }
+
+  function closeModal() {
+    if (uploading || saving) return;
+    setModal(false);
+    setPhoto(null);
+    setBatchPhotos([]);
+    setBatchProgress(null);
   }
 
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -78,31 +90,50 @@ export default function AdminGalleryPage() {
     else show(`⚠ ${r && r.error ? r.error : "upload failed"}`);
   }
 
-  // එකවර photos 2–3ක් තෝරලා එකම tagline (Title) එක යටතේ upload කරයි
+  // කැමති ඕනෑම ගණනක් photos තෝරලා එකම tagline (Title) එක යටතේ upload කරයි.
+  // සීමාවක් නෑ — එකවර ගොඩක් තෝරන්නත්, වරින් වර තෝරලා එකතු කරන්නත් පුළුවන්.
+  // වේගය සඳහා එකවර 3 බැගින් parallel upload වේ; progress එකත් පේනවා.
   async function onBatchPhotos(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!picked.length) return;
-    const files = picked.slice(0, 3);
-    if (picked.length > 3) show("⚠ එකවර ගත හැක්කේ photos 3ක් විතරයි — මුල් 3 විතරක් ගත්තා");
+    if (!picked.length || uploading) return;
+    const files = picked;
     setUploading(true);
+    setBatchProgress({ done: 0, total: files.length });
     const urls: string[] = [];
-    for (const f of files) {
-      const r = await uploadSiteImage(f, "gallery");
-      if (r?.url) urls.push(r.url);
+    let failed = 0;
+    let firstError = "";
+    const CONCURRENCY = 3;
+    for (let i = 0; i < files.length; i += CONCURRENCY) {
+      const chunk = files.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(chunk.map((f) => uploadSiteImage(f, "gallery")));
+      for (const r of results) {
+        if (r?.url) urls.push(r.url);
+        else {
+          failed++;
+          if (!firstError && r?.error) firstError = r.error;
+        }
+      }
+      setBatchProgress({ done: Math.min(files.length, i + chunk.length), total: files.length });
     }
     setUploading(false);
+    setBatchProgress(null);
     if (urls.length) {
-      setBatchPhotos(urls);
+      setBatchPhotos((prev) => [...prev, ...urls]);
       setPhoto(null);
-      show(`✅ Photos ${urls.length}ක් upload වුණා — එකම Title එකෙන් Save කරන්න`);
+      show(
+        failed
+          ? `✅ Photos ${urls.length}ක් upload වුණා · ⚠ ${failed}ක් බැරි වුණා${firstError ? ` (${firstError})` : ""} — එකම Title එකෙන් Save කරන්න`
+          : `✅ Photos ${urls.length}ක් upload වුණා — එකම Title එකෙන් Save කරන්න`
+      );
     } else {
-      show("⚠ Photos upload වුණේ නෑ");
+      show(`⚠ Photos upload වුණේ නෑ${firstError ? `: ${firstError}` : ""}`);
     }
   }
 
   async function submitItem(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (uploading || saving) return;
     const fd = new FormData(e.currentTarget);
     // table columns ට පමණයි — comments column එක නැති නිසා insert fail නොවෙන්න
     const row = {
@@ -114,30 +145,52 @@ export default function AdminGalleryPage() {
       likes: normalizeGalleryCount(editFor?.likes),
       views: normalizeGalleryCount(editFor?.views),
     };
-    let err: string | null;
+    setSaving(true);
+    let err: string | null = null;
     let addedCount = 1;
     if (editFor) {
       err = await dbUpdate("gallery_items", { id: editFor.id }, row);
     } else if (batchPhotos.length > 0) {
-      // එකම tagline (Title) එක යටතේ photos ඔක්කොම එකවර save කරයි
-      const rows = batchPhotos.map((url, i) => ({ ...row, id: `gal-${Date.now()}-${i + 1}`, image: url }));
-      addedCount = rows.length;
-      err = await dbInsertMany("gallery_items", rows as unknown as Record<string, unknown>[]);
+      // එකම tagline (Title) එක යටතේ photos ඔක්කොම save කරයි — ගණන කීය වුණත්
+      // request එක බර වැඩි නොවෙන්න rows 50 බැගින් chunks වලින් යවයි.
+      // මැද chunk එකක් fail වුණොත් ඉතිරි photos ටික modal එකේම තියලා ආයේ Save කරන්න පුළුවන්.
+      const stamp = Date.now();
+      const rows = batchPhotos.map((url, i) => ({ ...row, id: `gal-${stamp}-${i + 1}`, image: url }));
+      addedCount = 0;
+      for (let i = 0; i < rows.length; i += 50) {
+        const chunk = rows.slice(i, i + 50);
+        const chunkErr = await dbInsertMany("gallery_items", chunk as unknown as Record<string, unknown>[]);
+        if (chunkErr) {
+          err = chunkErr;
+          setBatchPhotos(rows.slice(i).map((r) => r.image));
+          break;
+        }
+        addedCount += chunk.length;
+      }
     } else {
       err = await dbInsert("gallery_items", row as unknown as Record<string, unknown>);
+    }
+    setSaving(false);
+    await load();
+    if (err) {
+      // වැරදුණොත් modal එක වහන්නේ නෑ — ලියපු දේවල්/upload photos නැති නොවෙන්න
+      show(
+        addedCount > 0
+          ? `⚠ Photos ${addedCount}ක් save වුණා, ඉතිරිය බැරි වුණා: ${err} — ඉතිරි ටික ආයේ Save ඔබන්න`
+          : `⚠ ${err}`
+      );
+      return;
     }
     setModal(false);
     setPhoto(null);
     setBatchPhotos([]);
-    await load();
+    setBatchProgress(null);
     show(
-      err
-        ? `⚠ ${err}`
-        : editFor
-          ? "✅ Gallery item updated"
-          : addedCount > 1
-            ? `✅ Gallery items ${addedCount}ක් එකම tagline එකෙන් add වුණා (public එකේ පේනවා)`
-            : "✅ Gallery item added (public එකේ පේනවා)"
+      editFor
+        ? "✅ Gallery item updated"
+        : addedCount > 1
+          ? `✅ Gallery items ${addedCount}ක් එකම tagline එකෙන් add වුණා (public එකේ පේනවා)`
+          : "✅ Gallery item added (public එකේ පේනවා)"
     );
   }
 
@@ -260,8 +313,8 @@ export default function AdminGalleryPage() {
       {modal && (
         <AdminModal
           title={editFor ? "Edit Gallery Item" : "Add New Gallery Item"}
-          sub={editFor ? `${editFor.title} — update කර Save ඔබන්න` : "Photo එකක් — හෝ photos 2–3ක් එකම tagline එකෙන් — upload කරලා save කරන්න"}
-          onClose={() => { setModal(false); setPhoto(null); setBatchPhotos([]); }}
+          sub={editFor ? `${editFor.title} — update කර Save ඔබන්න` : "Photo එකක් — හෝ කැමති ගණනක් photos එකම tagline එකෙන් — upload කරලා save කරන්න"}
+          onClose={closeModal}
         >
           <form key={editFor ? `edit-${editFor.id}` : "add"} onSubmit={submitItem} className="space-y-4">
             <div>
@@ -298,9 +351,9 @@ export default function AdminGalleryPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={photo} alt="preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
                 )}
-                <label className="btn btn-outline cursor-pointer">
+                <label className={`btn btn-outline ${uploading || saving ? "pointer-events-none opacity-60" : "cursor-pointer"}`}>
                   <Upload size={14} /> {uploading ? "Uploading…" : photo ? "Change Photo" : "Upload from Device"}
-                  <input type="file" accept="image/*" className="hidden" onChange={onPhoto} />
+                  <input type="file" accept="image/*" className="hidden" disabled={uploading || saving} onChange={onPhoto} />
                 </label>
               </div>
               <input name="image" className="field mt-2.5" defaultValue={editFor?.image ?? ""} placeholder="or enter image path / URL" />
@@ -308,44 +361,54 @@ export default function AdminGalleryPage() {
                 <div className="mt-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/60 p-3.5">
                   <div className="flex flex-wrap items-center justify-between gap-2.5">
                     <div className="text-[12px] font-extrabold text-slate-800">
-                      එකවර Photos 2–3ක් — එකම Tagline එකෙන්
+                      එකවර Photos ඕනෑම ගණනක් — එකම Tagline එකෙන්
                       <span className="block text-[10.5px] font-medium text-slate-500">
-                        උඩ Title එකම මේ photos ඔක්කෝටම වැටෙනවා. (එකවර උපරිම 3යි)
+                        උඩ Title එකම මේ photos ඔක්කෝටම වැටෙනවා. ගණනට සීමාවක් නෑ — අවශ්‍ය නම් වරින් වර තෝරලා එකතු කරන්නත් පුළුවන්.
                       </span>
                     </div>
-                    <label className="btn btn-outline cursor-pointer !py-2 !text-[12px]">
-                      <Upload size={14} /> {uploading ? "Uploading…" : "Upload 2–3 Photos"}
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={onBatchPhotos} />
+                    <label className={`btn btn-outline !py-2 !text-[12px] ${uploading || saving ? "pointer-events-none opacity-60" : "cursor-pointer"}`}>
+                      <Upload size={14} />{" "}
+                      {batchProgress
+                        ? `Uploading ${batchProgress.done}/${batchProgress.total}…`
+                        : uploading
+                          ? "Uploading…"
+                          : batchPhotos.length
+                            ? "Add More Photos"
+                            : "Upload Photos (Any Number)"}
+                      <input type="file" accept="image/*" multiple className="hidden" disabled={uploading || saving} onChange={onBatchPhotos} />
                     </label>
                   </div>
                   {batchPhotos.length > 0 && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                      {batchPhotos.map((src, i) => (
-                        <span key={`${src}-${i}`} className="relative inline-block">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={src} alt={`batch ${i + 1}`} className="h-16 w-16 rounded-xl border border-slate-200 object-cover" />
-                          <button
-                            type="button"
-                            title="Remove"
-                            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-white"
-                            onClick={() => setBatchPhotos((xs) => xs.filter((_, j) => j !== i))}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                      <span className="text-[11px] font-bold text-indigo-700">
+                    <div className="mt-3">
+                      <div className="flex max-h-56 flex-wrap gap-2.5 overflow-y-auto pr-1">
+                        {batchPhotos.map((src, i) => (
+                          <span key={`${src}-${i}`} className="relative inline-block shrink-0">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={src} alt={`batch ${i + 1}`} className="h-16 w-16 rounded-xl border border-slate-200 object-cover" />
+                            <button
+                              type="button"
+                              title="Remove"
+                              disabled={uploading || saving}
+                              className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-white disabled:opacity-50"
+                              onClick={() => setBatchPhotos((xs) => xs.filter((_, j) => j !== i))}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-2 text-[11px] font-bold text-indigo-700">
                         Photos {batchPhotos.length}ක් — Save කළාම එකම Title එකෙන් add වෙනවා
-                      </span>
+                      </div>
                     </div>
                   )}
                 </div>
               )}
             </div>
             <div className="flex justify-end gap-2.5 pt-2">
-              <button type="button" className="btn btn-outline" onClick={() => { setModal(false); setPhoto(null); setBatchPhotos([]); }}>Cancel</button>
-              <button type="submit" className="btn btn-primary">
-                {editFor ? <><Pencil size={15} /> Save Changes</> : batchPhotos.length > 1 ? `✓ Add ${batchPhotos.length} Gallery Items` : "✓ Add Gallery Item"}
+              <button type="button" className="btn btn-outline" disabled={uploading || saving} onClick={closeModal}>Cancel</button>
+              <button type="submit" className="btn btn-primary disabled:opacity-60" disabled={uploading || saving}>
+                {saving ? "Saving…" : editFor ? <><Pencil size={15} /> Save Changes</> : batchPhotos.length > 1 ? `✓ Add ${batchPhotos.length} Gallery Items` : "✓ Add Gallery Item"}
               </button>
             </div>
           </form>

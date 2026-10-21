@@ -32,7 +32,12 @@ export async function uploadSiteImage(
     const cleaned = await resizeImage(file, opts ?? { maxSize: 1600, quality: 0.9 });
     const sb = await authedClient();
     const safe = cleaned.name.replace(/[^a-zA-Z0-9._-]/g, "_") || "image.jpg";
-    const path = `${folder}/${Date.now()}-${safe}`;
+    // එකවර ගොඩක් photos upload කරද්දී එකම නම/එකම millisecond එකේ path ගැටෙන්නේ නැති වෙන්න unique කොටසක්
+    const unique =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID().slice(0, 8)
+        : Math.random().toString(36).slice(2, 10);
+    const path = `${folder}/${Date.now()}-${unique}-${safe}`;
     const { error } = await sb.storage.from(SITE_BUCKET).upload(path, cleaned, {
       contentType: cleaned.type || "image/jpeg",
       upsert: false,

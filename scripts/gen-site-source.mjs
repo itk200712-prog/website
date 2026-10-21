@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-21-gallery-social-v4";
+const SITE_PACKAGE_VERSION = "2026-10-21-gallery-unlimited-v5";
 
 const FILES = [
   "src/app/globals.css",
@@ -42,6 +42,7 @@ const FILES = [
   "src/lib/gallery-social.ts",
   "src/lib/animation-settings.ts",
   "src/lib/branch-settings.ts",
+  "src/lib/supabase/storage.ts",
   "next.config.ts",
 ];
 
