@@ -126,7 +126,10 @@ async function storeLastScheduledSuccessDate(dateStr: string): Promise<void> {
 // ── FULL backup ZIP — manual Download එක හදන builder එකමයි (service-role) ──
 // encryptPassword දීලා ඇත්නම් database.sql එක manual encrypted backup එක වගේම
 // AES-GCM වලින් encrypt වෙනවා → Import එකේදී ඒ password එකම දීලා restore කළ හැක.
-async function buildFullBackupZip(encryptPassword = ""): Promise<{ zip: Buffer; totalRows: number; tables: number; images: number }> {
+async function buildFullBackupZip(
+  encryptPassword = "",
+  assetBaseUrl?: string // Format v3: public assets fetch කරන්න මේ request එකේම origin එක
+): Promise<{ zip: Buffer; totalRows: number; tables: number; images: number }> {
   const sb = createClient(SUPA_BASE, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     // Node runtime එකේ realtime init එකට ws ඕනේ (අපි realtime පාවිච්චි කරන්නේ නෑ)
@@ -136,6 +139,7 @@ async function buildFullBackupZip(encryptPassword = ""): Promise<{ zip: Buffer; 
   const blob = await generateBackupZip(() => {}, {
     client: sb as unknown as BackupClient,
     encryptPassword: encryptPassword || undefined,
+    assetBaseUrl,
     onMeta: (m) => {
       meta = m;
     },
@@ -344,7 +348,7 @@ export async function POST(req: NextRequest) {
   await pruneBackupHistory();
   let built: Awaited<ReturnType<typeof buildFullBackupZip>>;
   try {
-    built = await buildFullBackupZip(encPw);
+    built = await buildFullBackupZip(encPw, req.nextUrl.origin);
   } catch (e) {
     const detail = `FULL ZIP build failed: ${(e as Error).message}`;
     await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed", detail, encrypted });

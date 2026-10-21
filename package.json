@@ -4,7 +4,10 @@
   "private": true,
   "description": "Sri Samrudhi Cooperative Society - Full-stack website (Next.js + Tailwind + Supabase)",
   "scripts": {
+    "gen:site-source": "node scripts/gen-site-source.mjs",
+    "predev": "node scripts/gen-site-source.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/gen-site-source.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

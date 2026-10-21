@@ -6,7 +6,9 @@
 //  · Manifest + RECOVERY checklist builders
 // ============================================================================
 
-export const BACKUP_FORMAT_VERSION = 2;
+/** v3 = දත්ත වලට අමතරව site design/update package එකත් (public icons/images
+ *  `site-assets/` + CSS/cursor source files `site-source/`) ZIP එකට ඇතුළත් වේ. */
+export const BACKUP_FORMAT_VERSION = 3;
 /** Backup History එකේ තබා ගන්නේ අලුත්ම සටහන් 5 විතරයි — පරණ ඒවා auto-delete වේ. */
 export const BACKUP_HISTORY_KEEP = 5;
 export const ENCRYPTED_PREFIX = "MPCS-ENCRYPTED-BACKUP v1";
@@ -213,6 +215,12 @@ export interface BackupManifest {
   imageCount: number;
   schemaSha256: string;
   databasePlainSha256: string;
+  /** Format v3: ZIP එකේ `site-assets/public/` යටතේ යන public files ගාණ (icons ඇතුළුව) */
+  siteAssetCount?: number;
+  /** Format v3: ZIP එකේ `site-source/` යටතේ යන design/update source files ගාණ (CSS/cursor ඇතුළුව) */
+  siteSourceFileCount?: number;
+  /** Format v3: site design package එකේ version ලකුණ */
+  sitePackageVersion?: string;
   files: Record<string, { sha256: string; size: number }>;
 }
 
@@ -224,6 +232,9 @@ export function buildManifest(input: {
   supabaseHost: string;
   schemaSha256: string;
   databasePlainSha256: string;
+  siteAssetCount?: number;
+  siteSourceFileCount?: number;
+  sitePackageVersion?: string;
   files: Record<string, { sha256: string; size: number }>;
 }): BackupManifest {
   return {
@@ -237,6 +248,9 @@ export function buildManifest(input: {
     imageCount: input.imageCount,
     schemaSha256: input.schemaSha256,
     databasePlainSha256: input.databasePlainSha256,
+    siteAssetCount: input.siteAssetCount ?? 0,
+    siteSourceFileCount: input.siteSourceFileCount ?? 0,
+    sitePackageVersion: input.sitePackageVersion ?? "",
     files: input.files,
   };
 }
@@ -269,7 +283,11 @@ export function buildRecoveryChecklist(opts: { generatedAt: string; supabaseUrl:
     "    save කරන key එක backup_secrets එකේ restore වේ; එය නැත්නම් විතරක් මේ env එකෙන් දෙන්න.",
     "",
     "■ මුල සිටම site එක ගොඩගන්නා ආකාරය (Disaster recovery):",
-    "  1) GitHub එකෙන් code එක ගන්න (හෝ Vercel එකේ දැනටමත් deploy වී ඇත්නම් එපා)",
+    "  1) GitHub එකෙන් code එක ගන්න (හෝ Vercel එකේ දැනටමත් deploy වී ඇත්නම් එපා).",
+    "     මේ ZIP එකේ site-assets/public/ එකේ public icons/images ටිකත්,",
+    "     site-source/ එකේ CSS/mouse-cursor ඇතුළු අලුත්ම design source files",
+    "     ටිකත් ඇත — code එක නැවත හදන විට එම folders දෙකේ files ටික",
+    "     project එකේ අදාළ තැන්වලට (public/ සහ src/) copy කරන්න.",
     "  2) අලුත් Supabase project එකක් හදන්න (supabase.com — free පුළුවන්)",
     "  3) Supabase SQL Editor එකේ මේ ZIP එකේ schema.sql එක run කරන්න",
     "  4) ඊට පස්සේ database.sql එක run කරන්න (login accounts password සහිතව)",

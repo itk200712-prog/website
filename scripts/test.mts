@@ -599,8 +599,8 @@ const parsedSample = bu.parseBackupSql(sampleSql);
 ok("utils: parseBackupSql 3 inserts + escaped quote + NULL", parsedSample.length === 3 && parsedSample[0].values[1] === "a'b" && parsedSample[1].values[1] === null);
 const sampleSummary = bu.summarizeInserts(parsedSample);
 ok("utils: summarizeInserts per-table counts", sampleSummary.totalRows === 3 && sampleSummary.tables.find((t) => t.name === "news")?.rows === 2);
-const sampleManifest = bu.buildManifest({ generatedAt: "2026-10-18T00:00:00Z", tableCounts: { a: 2, b: 3 }, imageCount: 4, encrypted: false, supabaseHost: "x.supabase.co", schemaSha256: "s", databasePlainSha256: "d", files: { "database.sql": { sha256: "h", size: 5 } } });
-ok("utils: manifest = format v2 + totalRows summed", sampleManifest.formatVersion === 2 && sampleManifest.totalRows === 5 && bu.BACKUP_FORMAT_VERSION === 2);
+const sampleManifest = bu.buildManifest({ generatedAt: "2026-10-18T00:00:00Z", tableCounts: { a: 2, b: 3 }, imageCount: 4, encrypted: false, supabaseHost: "x.supabase.co", schemaSha256: "s", databasePlainSha256: "d", siteAssetCount: 37, siteSourceFileCount: 21, sitePackageVersion: "pkg-test", files: { "database.sql": { sha256: "h", size: 5 } } });
+ok("utils: manifest = format v3 + totalRows summed + site package counts", sampleManifest.formatVersion === 3 && sampleManifest.totalRows === 5 && bu.BACKUP_FORMAT_VERSION === 3 && sampleManifest.siteAssetCount === 37 && sampleManifest.siteSourceFileCount === 21 && sampleManifest.sitePackageVersion === "pkg-test");
 const recText = bu.buildRecoveryChecklist({ generatedAt: "2026-10-18T00:00:00Z", supabaseUrl: "https://x.supabase.co" });
 ok("utils: recovery checklist (repo + env keys + service-role + Gemini + test-restore drill)",
   recText.includes("github.com/itk200712-prog/website") &&
@@ -1126,6 +1126,44 @@ ok("perf: businesses ၅ම එකවර + cache() dedupe + targeted detail + se
   slugLoadingSrc.includes("animate-pulse") &&
   adminLoadingSrc.includes("animate-spin") &&
   nextConfigSrc.includes("optimizePackageImports"));
+
+// 🌐 Backup Format v3: site design/update package (CSS + cursor + icons) in Download AND Import
+const siteSourceSrc = readFileSync(join(root, "src/lib/site-source-assets.ts"), "utf8");
+const genSiteSourceSrc = readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8");
+const packageJsonSrc = readFileSync(join(root, "package.json"), "utf8");
+ok("backup v3: public icons/images + CSS/cursor source in ZIP, manifest-hashed, import-verified, restored to storage, scheduled = manual",
+  bu.BACKUP_FORMAT_VERSION === 3 &&
+  backupSrc.includes("PUBLIC_ASSET_PATHS") &&
+  backupSrc.includes('"icons/phone-call.png"') &&
+  backupSrc.includes('"icons/location.png"') &&
+  backupSrc.includes("fetchPublicAssets(assetBaseUrl)") &&
+  backupSrc.includes("site-public/") &&
+  backupSrc.includes("site-assets/public/") &&
+  backupSrc.includes("site-source/") &&
+  backupSrc.includes("siteAssetCount: siteAssets.length") &&
+  backupSrc.includes("siteSourceFileCount: siteSourceFiles.length") &&
+  backupSrc.includes("siteAssets: siteAssetCount") &&
+  backupSrc.includes('byTable.get("site_images_backup")!.push(row)') &&
+  siteSourceSrc.includes("SITE_PACKAGE_VERSION") &&
+  siteSourceSrc.includes("site-source.generated") &&
+  genSiteSourceSrc.includes('"src/app/globals.css"') &&
+  genSiteSourceSrc.includes('"src/components/cursor-follower.tsx"') &&
+  genSiteSourceSrc.includes('"src/components/site-icons.tsx"') &&
+  genSiteSourceSrc.includes('"src/components/site-header.tsx"') &&
+  genSiteSourceSrc.includes('"src/components/business-detail.tsx"') &&
+  genSiteSourceSrc.includes('"src/app/layout.tsx"') &&
+  genSiteSourceSrc.includes('"src/app/admin/businesses/page.tsx"') &&
+  packageJsonSrc.includes('"prebuild": "node scripts/gen-site-source.mjs"') &&
+  packageJsonSrc.includes('"predev": "node scripts/gen-site-source.mjs"') &&
+  scheduledBackupSrc.includes("buildFullBackupZip(encPw, req.nextUrl.origin)") &&
+  scheduledBackupSrc.includes("assetBaseUrl,") &&
+  adminBackupSrc.includes("site-assets/public/") &&
+  adminBackupSrc.includes("siteSourceCount") &&
+  adminBackupSrc.includes("sitePublicSqlCount") &&
+  adminBackupSrc.includes('sha256Hex(bytes)') &&
+  adminBackupSrc.includes("siteAssets: preview.siteAssets") &&
+  adminBackupSrc.includes("Site update package") &&
+  recText.includes("site-assets/public/"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

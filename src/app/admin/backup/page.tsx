@@ -97,6 +97,14 @@ export default function AdminBackupPage() {
     manifest: BackupManifest | null;
     manifestMsg: string;
     encrypted: boolean;
+    /** Format v3: ZIP එකේ site-assets/public/ files (restore එකට යවයි) */
+    siteAssets: { path: string; bytes: Uint8Array }[];
+    /** Format v3: ZIP එකේ site-source/ design files ගාණ (CSS/cursor ඇතුළුව — hash verify වේ) */
+    siteSourceCount: number;
+    /** database.sql එක ඇතුළේ site-public/ image rows ගාණ (.sql import එකකදීත් පෙනේ) */
+    sitePublicSqlCount: number;
+    /** site files වල manifest hash තත්ත්වය */
+    siteHashState: "verified" | "mismatch" | "unchecked" | "none";
   } | null>(null);
 
   async function loadBackupHistory(): Promise<BackupHistoryEntry[]> {
@@ -287,10 +295,10 @@ export default function AdminBackupPage() {
         fileName: a.download,
         fileSize: blob.size,
         encrypted: encryptDl,
-        detail: encryptDl ? "Encrypted full ZIP backup" : "Full ZIP backup",
+        detail: encryptDl ? "Encrypted full ZIP backup (v3 · site design package සහිතයි)" : "Full ZIP backup (v3 · site design package සහිතයි)",
       });
       if (historyEntry) setHistory((xs) => [historyEntry, ...xs].slice(0, BACKUP_HISTORY_KEEP));
-      void logActivity("BACKUP_DOWNLOAD", `Full ZIP backup (schema.sql + database.sql + logins + images + registers + manifest${encryptDl ? " + ENCRYPTED" : ""}) — ${a.download}`);
+      void logActivity("BACKUP_DOWNLOAD", `Full ZIP backup v3 (schema.sql + database.sql + logins + images + site CSS/cursor/icons package + registers + manifest${encryptDl ? " + ENCRYPTED" : ""}) — ${a.download}`);
       setAnim({ pct: 100, msg: "Backup downloaded ✅", done: true });
       setTimeout(() => setAnim(null), 1800);
     } catch (e) {
@@ -310,6 +318,10 @@ export default function AdminBackupPage() {
     try {
       let rawSql: string;
       let manifest: BackupManifest | null = null;
+      // Format v3 site update package (site-assets + site-source) — පරණ backup වල නෑ
+      let siteAssets: { path: string; bytes: Uint8Array }[] = [];
+      let siteSourceCount = 0;
+      let siteHashState: "verified" | "mismatch" | "unchecked" | "none" = "none";
       if (/\.zip$/i.test(file.name)) {
         setAnim({ pct: 2, msg: "Opening ZIP…", done: false });
         const JSZip = (await import("jszip")).default;
@@ -321,6 +333,25 @@ export default function AdminBackupPage() {
         if (manEntry) {
           try { manifest = JSON.parse(await manEntry.async("string")) as BackupManifest; } catch { manifest = null; }
         }
+        // 🌐 Format v3: site design/update files ටිකත් ගෙන manifest hash වලින් verify කරයි.
+        // public assets (icons/images) restore එකට තියා ගනී; source files (CSS/cursor)
+        // hash එකෙන් තහවුරු කර ගාණ විතරක් තියා ගනී (code එක apply වෙන්නේ deploy එකෙන්).
+        const siteEntries = Object.values(zip.files).filter(
+          (f) => !f.dir && (f.name.startsWith("site-assets/public/") || f.name.startsWith("site-source/"))
+        );
+        let hashChecked = 0;
+        let hashMismatch = false;
+        for (const f of siteEntries) {
+          const bytes = await f.async("uint8array");
+          if (f.name.startsWith("site-assets/public/")) siteAssets.push({ path: f.name, bytes });
+          else siteSourceCount++;
+          const expectedHash = manifest?.files?.[f.name]?.sha256 ?? "";
+          if (expectedHash) {
+            hashChecked++;
+            if ((await sha256Hex(bytes)) !== expectedHash) hashMismatch = true;
+          }
+        }
+        siteHashState = siteEntries.length === 0 ? "none" : hashMismatch ? "mismatch" : hashChecked > 0 ? "verified" : "unchecked";
       } else {
         rawSql = await file.text();
       }
@@ -335,6 +366,8 @@ export default function AdminBackupPage() {
           : "⚠ Manifest hash එක ගැළපෙන්නේ නෑ — file එක වෙනස් වී/corrupt වී තියෙන්න පුළුවන්! පරිස්සමින්.";
         if ((manifest.formatVersion ?? 1) > BACKUP_FORMAT_VERSION)
           manifestMsg += ` (⚠ මේක අලුත් format v${manifest.formatVersion} එකක් — site එක update කරලා නම් වඩා හොඳයි)`;
+        if (siteHashState === "mismatch")
+          manifestMsg += " · ⚠ site design files වල hash ගැළපෙන්නේ නෑ — ඒ files වෙනස් වී තියෙන්න පුළුවන්!";
       } else {
         manifestMsg = "ℹ️ manifest.json නෑ — පරණ (format v1) backup එකක් විය හැක. Import කළ හැක, නමුත් hash verify කරන්න බෑ.";
       }
@@ -354,6 +387,13 @@ export default function AdminBackupPage() {
 
       const inserts = parseBackupSql(sql);
       if (!inserts.length) throw new Error("backup file එකේ INSERT rows නෑ");
+      // Format v3: SQL එක ඇතුළේම තියෙන site public-assets (icons) rows ගාණ
+      let sitePublicSqlCount = 0;
+      for (const ins of inserts) {
+        if (ins.table !== "site_images_backup") continue;
+        const pi = ins.cols.indexOf("path");
+        if (pi >= 0 && String(ins.values[pi] ?? "").startsWith("site-public/")) sitePublicSqlCount++;
+      }
       const { tables: rawTables, totalRows } = summarizeInserts(inserts);
       const knownOrder = BACKUP_TABLES.map((t) => t.name);
       const tables = rawTables
@@ -366,9 +406,12 @@ export default function AdminBackupPage() {
       for (const t of tables) sel[t.name] = t.known;
       setSelected(sel);
       setConfirmText("");
-      setPreview({ fileName: file.name, fileSize: file.size, inserts, tables, totalRows, manifest, manifestMsg, encrypted });
+      setPreview({ fileName: file.name, fileSize: file.size, inserts, tables, totalRows, manifest, manifestMsg, encrypted, siteAssets, siteSourceCount, sitePublicSqlCount, siteHashState });
       setAnim(null);
-      show(`📋 Preview ලෑස්තියි — ${file.name}: tables ${tables.length}, rows ${totalRows}. පරීක්ෂා කර RESTORE කරන්න.`);
+      const siteNote = siteAssets.length || siteSourceCount || sitePublicSqlCount
+        ? ` · 🌐 site update files ${siteAssets.length + siteSourceCount}ක් (CSS/cursor/icons${siteHashState === "verified" ? " · hash හරි ✅" : ""})`
+        : "";
+      show(`📋 Preview ලෑස්තියි — ${file.name}: tables ${tables.length}, rows ${totalRows}${siteNote}. පරීක්ෂා කර RESTORE කරන්න.`);
     } catch (e) {
       setAnim(null);
       show(`⚠ ${(e as Error).message}`);
@@ -415,13 +458,14 @@ export default function AdminBackupPage() {
       }
       setAnim({ pct: 50, msg: "Restoring…", done: false });
       const partial = chosen.length < preview.tables.filter((t) => t.known).length;
-      const { restored, errors } = await restoreBackup(
+      const { restored, errors, siteAssets: restoredSiteAssets } = await restoreBackup(
         preview.inserts,
         (msg, pct) => setAnim({ pct: 50 + Math.round(pct * 0.5), msg, done: false }),
-        { onlyTables: chosen }
+        // 🌐 Format v3: ZIP එකේ site-assets (icons/images) ටිකත් restore එකට යවයි
+        { onlyTables: chosen, siteAssets: preview.siteAssets }
       );
       const total = Object.values(restored).reduce((a, b) => a + b, 0);
-      void logActivity("BACKUP_IMPORT", `${preview.fileName} — restored ${Object.keys(restored).length} tables / ${total} rows${partial ? " (partial)" : ""}`);
+      void logActivity("BACKUP_IMPORT", `${preview.fileName} — restored ${Object.keys(restored).length} tables / ${total} rows${restoredSiteAssets ? ` / site files ${restoredSiteAssets}` : ""}${partial ? " (partial)" : ""}`);
       const importEntry = await recordBackupHistory({
         action: "import",
         fileName: preview.fileName,
@@ -430,13 +474,13 @@ export default function AdminBackupPage() {
         tablesCount: Object.keys(restored).length,
         rowsCount: total,
         status: errors.length ? "partial" : "success",
-        detail: `${partial ? "Partial restore" : "Full restore"}${errors.length ? ` · ${errors.length} issue(s)` : ""}`,
+        detail: `${partial ? "Partial restore" : "Full restore"}${restoredSiteAssets ? ` · site files ${restoredSiteAssets}` : ""}${errors.length ? ` · ${errors.length} issue(s)` : ""}`,
       });
       if (importEntry) setHistory((xs) => [importEntry, ...xs].slice(0, BACKUP_HISTORY_KEEP));
       setPreview(null);
       setAnim({ pct: 100, msg: `Restored ${total} rows ✅`, done: true });
       setTimeout(() => setAnim(null), 2200);
-      show(errors.length ? `⚠ Restored with ${errors.length} issue(s): ${errors[0]}` : `✅ සියල්ල restore කළා — ${Object.keys(restored).length} tables, ${total} rows`);
+      show(errors.length ? `⚠ Restored with ${errors.length} issue(s): ${errors[0]}` : `✅ සියල්ල restore කළා — ${Object.keys(restored).length} tables, ${total} rows${restoredSiteAssets ? `, 🌐 site icons/images ${restoredSiteAssets}ක්` : ""}`);
     } catch (e) {
       setAnim(null);
       show(`⚠ ${(e as Error).message}`);
@@ -579,6 +623,21 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             {preview.encrypted ? " · 🔒 Encrypted backup" : ""}
             {preview.manifest ? ` · Backup දිනය: ${preview.manifest.generatedAt?.slice(0, 10)}` : ""}
           </div>
+          {(preview.siteAssets.length || preview.siteSourceCount || preview.sitePublicSqlCount) ? (
+            <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2 text-[12px] text-indigo-900">
+              🌐 <b>Site update package තියෙනවා</b> — public files {Math.max(preview.siteAssets.length, preview.sitePublicSqlCount)}ක්
+              (අලුත් icons/images) · design/source files {preview.siteSourceCount}ක්
+              (සියලු CSS · mouse-cursor · mega-menu · hotline cards)
+              {preview.siteHashState === "verified" ? " · ✅ hash verify හරි" : preview.siteHashState === "mismatch" ? " · ⚠ hash ගැළපෙන්නේ නෑ!" : preview.siteHashState === "unchecked" ? " · ℹ️ hash නෑ" : ""}
+              <div className="mt-0.5 text-[11px] text-indigo-700/80">
+                Restore කළාම icons/images ටික storage එකටත් යනවා. CSS/cursor වැනි design code එක දැනට deploy වී ඇති site එකේම තියෙනවා — source files ටික ZIP එකේ ආරක්ෂිතව තියෙනවා (අලුතින් site එක හදන විට පාවිච්චි කරන්න).
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+              ℹ️ මේ backup එකේ <b>site update package</b> එකක් (CSS/mouse-cursor/icons) නෑ — පරණ backup එකක් විය හැක. දත්ත + settings + storage images විතරක් restore වේ; අලුත් design එක ඕන නම් අලුත්ම backup එකක් ගන්න.
+            </div>
+          )}
 
           <div className="mt-4 flex gap-2">
             <button className="btn btn-outline !px-3 !py-1 !text-[11px]" onClick={() => setSelected(Object.fromEntries(preview.tables.map((t) => [t.name, t.known])))}>

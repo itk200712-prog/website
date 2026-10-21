@@ -240,19 +240,129 @@ async function collectImagePaths(tables: { name: string; rows: Record<string, un
   return [...paths];
 }
 
+function bytesToB64(buf: Uint8Array): string {
+  let bin = "";
+  const CH = 0x8000;
+  for (let i = 0; i < buf.length; i += CH) bin += String.fromCharCode(...buf.subarray(i, i + CH));
+  return btoa(bin);
+}
+
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf;
+}
+
 async function fetchBase64(url: string): Promise<{ b64: string; type: string } | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const type = res.headers.get("content-type") || "image/jpeg";
     const buf = new Uint8Array(await res.arrayBuffer());
-    let bin = "";
-    const CH = 0x8000;
-    for (let i = 0; i < buf.length; i += CH) bin += String.fromCharCode(...buf.subarray(i, i + CH));
-    return { b64: btoa(bin), type };
+    return { b64: bytesToB64(buf), type };
   } catch {
     return null;
   }
+}
+
+/* ------------------------------------------- SITE PUBLIC ASSETS (v3) --- */
+/**
+ * Repo එකේ `public/` folder එකේ තියෙන files (අලුත් uploaded icons ඇතුළුව).
+ * මේවා Supabase storage එකේ නැති නිසා පරණ backup වලට ඇතුළත් වුණේ නෑ —
+ * Format v3 එකේදී මේවා live site එකෙන්ම fetch කරලා:
+ *   1) database.sql එකේ site_images_backup rows විදිහට (`site-public/…` path එකෙන්)
+ *   2) ZIP එකේ `site-assets/public/…` files විදිහට
+ * දෙවිදිහටම යනවා. Import එකේදී storage එකේ `site-public/` යටතේ restore
+ * වෙන නිසා ඊළඟ backups වලටත් මේවා අහුවෙනවා.
+ * ⚠ public/ එකට අලුත් file එකක් දැම්මොත් මේ list එකටත් දාන්න.
+ */
+export const PUBLIC_ASSET_PATHS = [
+  "icons/phone-call.png",
+  "icons/location.png",
+  "icons/comment.png",
+  "icons/message.png",
+  "images/businesses/consumer.jpg",
+  "images/businesses/fuel-station.jpg",
+  "images/businesses/funeral.jpg",
+  "images/businesses/hemas.jpg",
+  "images/businesses/maliban-biscuits.jpg",
+  "images/businesses/maliban-kiri.jpg",
+  "images/businesses/natures-secrets.jpg",
+  "images/businesses/ristbury-tiara.jpg",
+  "images/businesses/rural-bank.jpg",
+  "images/gallery/agm.jpg",
+  "images/gallery/headquarters.jpg",
+  "images/gallery/new.jpg",
+  "images/gallery/pirith.jpg",
+  "images/hero/hero-1.jpg",
+  "images/hero/hero-2.jpg",
+  "images/hero/hero-3.jpg",
+  "images/hero/hero-4.jpg",
+  "images/hero/hero-5.jpg",
+  "images/news/notice.jpg",
+  "images/sections/consumer.png",
+  "images/sections/coop-city.png",
+  "images/sections/fertilizer.png",
+  "images/sections/fuel-station.png",
+  "images/sections/funeral.png",
+  "images/sections/gold-loan.png",
+  "images/sections/hemas.png",
+  "images/sections/insurance.png",
+  "images/sections/maliban-biscuits.png",
+  "images/sections/maliban-kiri.png",
+  "images/sections/natures-secrets.png",
+  "images/sections/ristbury-tiara.png",
+  "images/sections/rural-bank.png",
+  "images/sections/transport.png",
+] as const;
+
+export interface SiteAssetFile {
+  /** public/ එක ඇතුළේ path එක (උදා: icons/phone-call.png) */
+  path: string;
+  /** storage + site_images_backup එකේ archive path එක (site-public/…) */
+  archivePath: string;
+  b64: string;
+  type: string;
+}
+
+/** Public assets fetch කරන්න site එකේ base URL එක හොයා ගනී */
+function resolveAssetBaseUrl(explicit?: string): string {
+  const clean = (u: string) => u.replace(/\/$/, "");
+  if (explicit) return clean(explicit);
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  const pub = process.env.NEXT_PUBLIC_SITE_URL;
+  if (pub) return clean(pub.startsWith("http") ? pub : `https://${pub}`);
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (prod) return clean(prod.startsWith("http") ? prod : `https://${prod}`);
+  return "https://website-blond-eta-94.vercel.app";
+}
+
+/** `public/` files ටික live site එකෙන් fetch කර base64 විදිහට ගනී (6 ගණනේ parallel) */
+export async function fetchPublicAssets(assetBaseUrl?: string): Promise<SiteAssetFile[]> {
+  const base = resolveAssetBaseUrl(assetBaseUrl);
+  const out: SiteAssetFile[] = [];
+  for (let i = 0; i < PUBLIC_ASSET_PATHS.length; i += 6) {
+    const batch = PUBLIC_ASSET_PATHS.slice(i, i + 6);
+    const fetched = await Promise.all(
+      batch.map(async (p) => {
+        const f = await fetchBase64(`${base}/${p}`);
+        return f ? { path: p, archivePath: `site-public/${p}`, b64: f.b64, type: f.type } : null;
+      })
+    );
+    for (const f of fetched) if (f) out.push(f);
+  }
+  return out;
+}
+
+function contentTypeForPath(path: string): string {
+  const ext = path.toLowerCase().split(".").pop() ?? "";
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  if (ext === "svg") return "image/svg+xml";
+  if (ext === "gif") return "image/gif";
+  return "application/octet-stream";
 }
 
 /* ------------------------------------------------------ LOGIN ACCOUNTS - */
@@ -297,11 +407,14 @@ END $$;`);
 /* ------------------------------------------------------------- GENERATE -- */
 export async function generateBackupSql(
   onProgress: (msg: string, pct: number) => void,
-  client?: BackupClient
+  client?: BackupClient,
+  assetBaseUrl?: string // Format v3: public/ assets fetch කරන site base URL එක (scheduled එක request origin එක දෙයි)
 ): Promise<{
   sql: string;
   tableCounts: Record<string, number>;
   imageCount: number;
+  /** Format v3: ZIP එකේ site-assets/ files විදිහටත් දාන්න public assets ටික */
+  siteAssets: SiteAssetFile[];
   /** ZIP registers වලට ආයෙත් fetch නොකර පාවිච්චි කරන්න (දෙපාරක් ගන්න එක නවත්වයි) */
   registerRows: { members: Record<string, unknown>[]; voters: Record<string, unknown>[] };
 }> {
@@ -384,7 +497,7 @@ export async function generateBackupSql(
   // images
   onProgress("Downloading site images…", 55);
   const paths = await collectImagePaths(gathered, client);
-  const imgRows: { path: string; b64: string; type: string }[] = [];
+  let imgRows: { path: string; b64: string; type: string }[] = [];
   // එකවර 10 ගණනේ බාගත කරයි (manual එකත් වේගවත් වෙනවා, server auto-backup එකටත් ඕනෙමයි) — පිළිවෙළ එලෙසමයි
   for (let i = 0; i < paths.length; i += 10) {
     onProgress(`Image ${Math.min(i + 10, paths.length)}/${paths.length}…`, 55 + Math.round((i / Math.max(paths.length, 1)) * 30));
@@ -397,6 +510,19 @@ export async function generateBackupSql(
       })
     );
     for (const f of fetched) if (f) imgRows.push(f);
+  }
+
+  // Format v3: repo එකේ public/ files ටිකත් (uploaded icons ඇතුළුව) image rows
+  // විදිහට එකතු කරයි — storage එකේ `site-public/` යටතේ දැනටමත් තියන ඒවා
+  // තිබුණත් අලුත්ම deployed file එකෙන් overwrite වේ (path එකෙන් dedupe).
+  onProgress("Adding site icons & public images…", 86);
+  const siteAssets = await fetchPublicAssets(assetBaseUrl);
+  if (siteAssets.length) {
+    const byPath = new Map(imgRows.map((r) => [r.path, r]));
+    for (const a of siteAssets) byPath.set(a.archivePath, { path: a.archivePath, b64: a.b64, type: a.type });
+    imgRows = [...byPath.values()];
+  } else {
+    lines.push(`-- ⚠ site public assets fetch කරගන්න බැරි වුණා (site URL එකෙන්) — icons/images ටික මේ backup එකේ නෑ`);
   }
 
   // image INSERTs
@@ -449,6 +575,7 @@ export async function generateBackupSql(
     sql: lines.join("\n"),
     tableCounts,
     imageCount: imgRows.length,
+    siteAssets,
     registerRows: {
       members: gathered.find((g) => g.name === "member_rows")?.rows ?? [],
       voters: gathered.find((g) => g.name === "voter_rows")?.rows ?? [],
@@ -463,8 +590,12 @@ export async function generateBackupSql(
 export async function restoreBackup(
   inserts: ParsedInsert[],
   onProgress: (msg: string, pct: number) => void,
-  opts?: { onlyTables?: string[] } // partial restore — තෝරගත් tables විතරක් (නැත්නම් සියල්ලම)
-): Promise<{ restored: Record<string, number>; errors: string[] }> {
+  opts?: {
+    onlyTables?: string[]; // partial restore — තෝරගත් tables විතරක් (නැත්නම් සියල්ලම)
+    /** Format v3: ZIP එකේ site-assets/public/ files — SQL එකේ නැති ඒවා storage එකට restore වේ */
+    siteAssets?: { path: string; bytes: Uint8Array }[];
+  }
+): Promise<{ restored: Record<string, number>; errors: string[]; siteAssets: number }> {
   const sb = await authedClient();
   const restored: Record<string, number> = {};
   const errors: string[] = [];
@@ -480,7 +611,27 @@ export async function restoreBackup(
   // 1) storage images first (URL rewrite එකට)
   onProgress("Restoring images to storage…", 5);
   const wantImages = !opts?.onlyTables || opts.onlyTables.includes("site_images_backup");
-  const imgRows = wantImages ? (byTable.get("site_images_backup") ?? []) : [];
+  const imgRows: Record<string, unknown>[] = wantImages ? [...(byTable.get("site_images_backup") ?? [])] : [];
+  // Format v3: ZIP එකේ site-assets/public/ files ටික SQL image rows වලට merge
+  // කරයි (SQL එකේ දැනටමත් තියන path එකක් නම් ඒකම තියේ — duplicate නෑ)
+  if (wantImages && opts?.siteAssets?.length) {
+    const seen = new Set(imgRows.map((r) => String(r.path ?? "")));
+    for (const a of opts.siteAssets) {
+      const archivePath = a.path.startsWith("site-assets/public/")
+        ? `site-public/${a.path.slice("site-assets/public/".length)}`
+        : a.path.startsWith("site-public/")
+          ? a.path
+          : `site-public/${a.path}`;
+      if (seen.has(archivePath)) continue;
+      seen.add(archivePath);
+      const row = { path: archivePath, data_base64: bytesToB64(a.bytes), content_type: contentTypeForPath(archivePath) };
+      imgRows.push(row);
+      // site_images_backup table එකටත් row එක යන්න byTable එකටත් දායි
+      if (!byTable.has("site_images_backup")) byTable.set("site_images_backup", []);
+      byTable.get("site_images_backup")!.push(row);
+    }
+  }
+  const siteAssetCount = imgRows.filter((r) => String(r.path ?? "").startsWith("site-public/")).length;
   const urlMap = new Map<string, string>(); // old url -> new url
   const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
   for (let i = 0; i < imgRows.length; i++) {
@@ -620,7 +771,7 @@ export async function restoreBackup(
   }
 
   onProgress("Restore complete ✅", 100);
-  return { restored, errors };
+  return { restored, errors, siteAssets: siteAssetCount };
 }
 
 /* ------------------------------------------------------------- SECRETS --- */
@@ -802,6 +953,7 @@ export async function generateBackupZip(
   opts?: {
     encryptPassword?: string; // දීලා ඇත්නම් database.sql එක AES-GCM වලින් encrypt වේ
     client?: BackupClient; // server scheduled-backup එක service-role client එක inject කරයි
+    assetBaseUrl?: string; // Format v3: public/ assets fetch කරන site base URL එක (නැත්නම් browser origin/env)
     onMeta?: (meta: { tableCounts: Record<string, number>; imageCount: number }) => void;
   }
 ): Promise<Blob> {
@@ -828,7 +980,11 @@ export async function generateBackupZip(
   }
 
   // 1) database.sql (images base64 + login accounts සමඟ)
-  const { sql, tableCounts, imageCount, registerRows } = await generateBackupSql((msg, pct) => onProgress(msg, Math.round(pct * 0.72)), opts?.client);
+  const { sql, tableCounts, imageCount, registerRows, siteAssets } = await generateBackupSql(
+    (msg, pct) => onProgress(msg, Math.round(pct * 0.72)),
+    opts?.client,
+    opts?.assetBaseUrl
+  );
   opts?.onMeta?.({ tableCounts, imageCount });
   const [databasePlainSha256, dbContent] = await Promise.all([
     sha256Hex(sql),
@@ -848,6 +1004,26 @@ export async function generateBackupZip(
       await addFile("schema.sql", schemaText);
     }
   } catch { /* schema embed බැරි වුණත් backup එක හැදේ */ }
+
+  // 1c) Format v3 — SITE DESIGN / UPDATE PACKAGE:
+  //     • site-assets/public/… = public/ files ටිකම (uploaded icons ඇතුළුව) —
+  //       Import එකේදී storage එකේ site-public/ යටතේ restore වේ
+  //     • site-source/… = CSS + mouse-cursor ඇතුළු අලුත්ම design/update
+  //       source files ටික (current build එකේ නියම content එකම)
+  onProgress("Adding site design & update files (CSS, cursor, icons)…", 75);
+  let siteSourceFiles: { path: string; content: string }[] = [];
+  let sitePackageVersion = "";
+  try {
+    const mod = await import("./site-source-assets");
+    siteSourceFiles = mod.getSiteSourceFiles();
+    sitePackageVersion = mod.SITE_PACKAGE_VERSION;
+  } catch { /* source snapshot බැරි වුණත් දත්ත backup එක හැදේ — manifest එකේ 0 කියා පෙනේ */ }
+  for (const asset of siteAssets) {
+    try {
+      await addFile(`site-assets/public/${asset.path}`, b64ToBytes(asset.b64).buffer as ArrayBuffer, true);
+    } catch { /* එක file එකක් බැරි වුණත් ඉතිරිය යයි */ }
+  }
+  for (const f of siteSourceFiles) await addFile(`site-source/${f.path}`, f.content);
 
   // 2) registers → XLSX
   const sb = opts?.client ?? (await authedClient());
@@ -915,6 +1091,11 @@ export async function generateBackupZip(
       "                          board, business, news, gallery, messages, live chat, applications,",
       "                          fuel, f28, activity logs) + සියලු images/photos (base64)",
       "                          + LOGIN accounts (auth.users) password සහිතව",
+      "  • site-assets/public/   — site එකේ public files " + siteAssets.length + "ක් (අලුත් phone/location/message",
+      "                          icons ඇතුළු සියලු icons + images) — Import එකේදී storage එකට restore වේ",
+      "  • site-source/          — අලුත්ම design/update source files " + siteSourceFiles.length + "ක්: globals.css (සියලු CSS),",
+      "                          mouse-cursor animation, icon components, mega-menu, hotline cards,",
+      "                          loading/speed files, Services fix — package " + (sitePackageVersion || "-"),
       "  • Members-Register.xlsx — සියලු සාමාජික විස්තර (" + members.length + " පේළි)",
       "  • Voters-Register.xlsx  — සියලු ඡන්ද හිමි විස්තර (" + voters.length + " පේළි)",
       "  • Members-Register.csv / Voters-Register.csv — UTF-8 CSV",
@@ -935,8 +1116,13 @@ export async function generateBackupZip(
       "     4) Admin → Backup & Restore → Import එකෙන් මේ ZIP එක එක් වරක් තෝරන්න (images storage එකට යයි)",
       "",
       "⚠ ආරක්ෂාව: මේ ZIP එකේ user login passwords + Gemini API key අඩංගුයි — ගොනුව රහසිගතව තබා ගන්න!",
-      "⚠ Website code එක (Baymax bot logic ඇතුළුව) ඇත්තේ GitHub repository එකේය; මේ ZIP එකට",
-      "   code එක ඇතුළත් වෙන්නේ නෑ. Database එකේ functions/logic සියල්ල schema.sql එකේ ඇත.",
+      "🌐 Site design එක: මේ ZIP එකේ site-assets/ + site-source/ folders දෙකේ අලුත්ම",
+      "   CSS, mouse-cursor animation, icons සහ design source files ටික ඇත. ඒම site",
+      "   එකේම Import කළාම දත්ත/settings/images + site icons/images ටික restore වේ",
+      "   (දැනට deploy වී ඇති design එක එලෙසම පවතියි). මුල සිටම site එක හදනවා නම්",
+      "   GitHub code එක අරගෙන, මේ folders දෙකේ files ටික project එකේ public/ සහ",
+      "   src/ තැන්වලට copy කරලා deploy කරන්න. සම්පූර්ණ code එක GitHub repo එකෙත් ඇත;",
+      "   Database එකේ functions/logic සියල්ල schema.sql එකේ ඇත.",
     ].join("\n")
   );
 
@@ -960,6 +1146,9 @@ export async function generateBackupZip(
         supabaseHost,
         schemaSha256,
         databasePlainSha256,
+        siteAssetCount: siteAssets.length,
+        siteSourceFileCount: siteSourceFiles.length,
+        sitePackageVersion,
         files,
       }),
       null,
