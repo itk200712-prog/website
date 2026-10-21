@@ -380,11 +380,13 @@ export default function AdminBusinessesPage() {
                 .slice(0, editFor.slug === "coop-city" ? COOP_CITY_BRANCH_LIMIT : undefined);
               setUnits((xs) => xs.map((b) => (b.slug === editFor.slug ? { ...b, ...patch, contacts: validContacts, branches: validBranches } as BusinessUnit : b)));
               let err = await dbUpdate("business_units", { slug: editFor.slug }, patch);
-              err ||= await dbDelete("business_contacts", { business_slug: editFor.slug });
+              // Replace-all save: පළමුවන වතාවට මකන්න rows නැති එක error එකක් නොවෙයි.
+              // (නැත්නම් Coop City branches වගේ අලුත්ම rows insert නොවී නතර වෙනවා.)
+              err ||= await dbDelete("business_contacts", { business_slug: editFor.slug }, { allowEmpty: true });
               for (const c of validContacts) {
                 err ||= await dbInsert("business_contacts", { business_slug: editFor.slug, ...c });
               }
-              err ||= await dbDelete("business_branches", { business_slug: editFor.slug });
+              err ||= await dbDelete("business_branches", { business_slug: editFor.slug }, { allowEmpty: true });
               for (const br of validBranches) {
                 err ||= await dbInsert("business_branches", { business_slug: editFor.slug, ...br });
               }

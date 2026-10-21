@@ -155,6 +155,12 @@ ok("Coop City branches: five Admin-managed cards above Department Contact & Inqu
   adminBusinessesSrc.includes('dbDelete("business_branches"') &&
   adminBusinessesSrc.includes('dbInsert("business_branches"') &&
   !adminBusinessesSrc.includes('role_en: "Regional Branch"'));
+ok("Branch first-save regression: empty replace-delete cannot block inserts + detail page is live",
+  adminShellEarlySrc.includes("opts: { allowEmpty?: boolean }") &&
+  adminShellEarlySrc.includes("!opts.allowEmpty") &&
+  adminBusinessesSrc.includes('dbDelete("business_contacts", { business_slug: editFor.slug }, { allowEmpty: true })') &&
+  adminBusinessesSrc.includes('dbDelete("business_branches", { business_slug: editFor.slug }, { allowEmpty: true })') &&
+  businessPageSrc.includes('export const dynamic = "force-dynamic"'));
 ok("Consumer page: long Regional rows above separate Sales/Store manager rows + branch Delete setting",
   businessDetailSrc.includes("export function ConsumerManagerContacts") &&
   businessDetailSrc.includes("Manager Type") &&

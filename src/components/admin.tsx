@@ -321,15 +321,22 @@ export async function dbUpsert(
   }
 }
 
-export async function dbDelete(table: string, match: Record<string, unknown>): Promise<string | null> {
+export async function dbDelete(
+  table: string,
+  match: Record<string, unknown>,
+  opts: { allowEmpty?: boolean } = {}
+): Promise<string | null> {
   if (!isSupabaseConfigured()) return "Supabase වින්‍යාස වී නොමැත — demo mode";
   try {
     let q = (await authedClient()).from(table).delete();
     for (const [k, v] of Object.entries(match)) q = q.eq(k, v);
     const { data, error } = await q.select("*");
     if (error) return error.message;
-    if (!data || data.length === 0) return "delete වුණේ නෑ — row එක හමු නොවුණා/permission නෑ";
-    void logActivity("DELETE", `${table} — where ${brief(match)}`);
+    // "Replace all rows" saves (contacts/branches) legitimately have nothing to
+    // delete the first time. In that mode an empty delete is success, not an
+    // error — otherwise the following inserts would be skipped entirely.
+    if ((!data || data.length === 0) && !opts.allowEmpty) return "delete වුණේ නෑ — row එක හමු නොවුණා/permission නෑ";
+    if (data && data.length > 0) void logActivity("DELETE", `${table} — where ${brief(match)}`);
     return null;
   } catch (e) {
     return String(e);
