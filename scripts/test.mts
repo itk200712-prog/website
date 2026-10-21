@@ -263,7 +263,13 @@ ok("animation: Admin section (bg+brightness+products per business) → settings 
   businessDetailSrc.includes("animationMarqueeDurationSeconds(products.length)") &&
   globalsCssSrc.includes("@keyframes bizProductsScroll") &&
   globalsCssSrc.includes("@keyframes bizMarqueeIn") &&
-  globalsCssSrc.includes("@keyframes bizBgZoom"));
+  globalsCssSrc.includes("@keyframes bizBgZoom") &&
+  // marquee track එක නිසා Admin පිටුව screen එකෙන් එළියට පැනලා Save/View Page හැංගෙන්නේ නෑ
+  adminAnimationSrc.includes("lg:grid-cols-[320px_minmax(0,1fr)]") &&
+  adminAnimationSrc.includes("card min-w-0 max-w-full overflow-hidden p-5") &&
+  adminAnimationSrc.includes("field min-w-0 flex-1") &&
+  adminAnimationSrc.includes("pb-36") &&
+  globalsCssSrc.includes("contain: inline-size"));
 const adminGallerySrc = readFileSync(join(root, "src/app/admin/gallery/page.tsx"), "utf8");
 ok("gallery: upload 2–3 photos at once under one tagline (batch insert, same title)",
   adminGallerySrc.includes("onBatchPhotos") &&

@@ -149,16 +149,16 @@ export default function AdminAnimationPage() {
   }
 
   return (
-    <div>
+    <div className="w-full min-w-0 max-w-full pb-36">
       <AdminTopbar
         title="Animation"
         sub="Business පිටුවල උඩ background / watermark image එකයි, animate වෙලා පේන product images ටිකයි මෙතැනින් හදන්න."
       />
       {node}
 
-      <div className="card p-5">
+      <div className="card min-w-0 max-w-full p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <h3 className="flex items-center gap-2 text-[15px] font-extrabold text-slate-900">
               <Sparkles size={17} className="text-indigo-600" /> Business Page Animation Settings
             </h3>
@@ -168,15 +168,15 @@ export default function AdminAnimationPage() {
               මෙතැනින් වෙනස් කළ හැක. Save කළාම අදාළ business පිටුවේම පේනවා. මේ settings සහ images දෙකම Backup එකටත් ඇතුළත් වෙනවා.
             </p>
           </div>
-          <button className="btn btn-primary" onClick={save} disabled={saving || uploadingBg || uploadingProducts}>
+          <button className="btn btn-primary max-w-full shrink-0 whitespace-nowrap" onClick={save} disabled={saving || uploadingBg || uploadingProducts}>
             <Save size={15} /> {saving ? "Saving..." : "Save Animation Settings"}
           </button>
         </div>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[320px_1fr]">
+      <div className="mt-5 grid min-w-0 max-w-full gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
         {/* ── Business list ─────────────────────────────────────────── */}
-        <div className="card h-fit p-4">
+        <div className="card h-fit min-w-0 max-w-full p-4">
           <div className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -186,7 +186,7 @@ export default function AdminAnimationPage() {
               placeholder="Search business..."
             />
           </div>
-          <div className="mt-3 max-h-[560px] space-y-1.5 overflow-y-auto pr-1">
+          <div className="mt-3 max-h-[560px] min-w-0 max-w-full space-y-1.5 overflow-y-auto pr-1">
             {filtered.map((u) => {
               const a = all[u.slug];
               const active = u.slug === selected;
@@ -231,24 +231,24 @@ export default function AdminAnimationPage() {
         </div>
 
         {/* ── Settings for selected business ─────────────────────────── */}
-        <div className="card p-5">
+        <div className="card min-w-0 max-w-full overflow-hidden p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h4 className="text-[15px] font-extrabold text-slate-900">{current?.name_en}</h4>
-              <p className="text-[11px] text-slate-400">{current?.name_si} · /businesses/{selected}</p>
+            <div className="min-w-0 flex-1">
+              <h4 className="break-words text-[15px] font-extrabold text-slate-900">{current?.name_en}</h4>
+              <p className="break-words text-[11px] text-slate-400">{current?.name_si} · /businesses/{selected}</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
               <a
                 href={`/businesses/${selected}`}
                 target="_blank"
                 rel="noreferrer"
-                className="btn btn-outline !px-3 !py-1.5 !text-[11.5px]"
+                className="btn btn-outline shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-[11.5px]"
               >
                 <ExternalLink size={13} /> View Page
               </a>
               <button
                 type="button"
-                className="btn btn-outline !px-3 !py-1.5 !text-[11.5px] !text-rose-600"
+                className="btn btn-outline shrink-0 whitespace-nowrap !px-3 !py-1.5 !text-[11.5px] !text-rose-600"
                 onClick={() => patch(emptyBusinessAnimation())}
               >
                 <Trash2 size={13} /> Clear All
@@ -257,13 +257,13 @@ export default function AdminAnimationPage() {
           </div>
 
           {/* Live preview — උඩ hero එකයි, යට මුළු පිටුවේම watermark එකයි */}
-          <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200">
+          <div className="mt-4 min-w-0 max-w-full overflow-hidden rounded-3xl border border-slate-200">
             <div className="hero-dark relative text-white">
-              <div className="relative px-5 py-6">
+              <div className="relative min-w-0 max-w-full px-5 py-6">
                 <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">Preview</div>
-                <div className="mt-1.5 text-xl font-black">{current?.name_en}</div>
+                <div className="mt-1.5 break-words text-xl font-black">{current?.name_en}</div>
                 {draft.products.length > 0 ? (
-                  <div className="biz-products-marquee mt-4">
+                  <div className="biz-products-marquee mt-4 w-full min-w-0 max-w-full">
                     <div
                       className="biz-products-track"
                       style={{ animationDuration: `${animationMarqueeDurationSeconds(draft.products.length)}s` }}
@@ -287,7 +287,7 @@ export default function AdminAnimationPage() {
               </div>
             </div>
             {/* පිටුවේ අනිත් කොටස — image එක මෙතැන watermark එකක් විදිහට පේනවා */}
-            <div className="relative overflow-hidden bg-slate-50 px-5 py-5">
+            <div className="relative min-w-0 max-w-full overflow-hidden bg-slate-50 px-5 py-5">
               {draft.bgImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -301,7 +301,7 @@ export default function AdminAnimationPage() {
                   }}
                 />
               ) : null}
-              <div className="relative">
+              <div className="relative min-w-0 max-w-full">
                 <div className="text-[13px] font-extrabold text-slate-900">Offered Services</div>
                 <div className="mt-2.5 grid gap-2.5 sm:grid-cols-3">
                   {[0, 1, 2].map((i) => (
@@ -342,7 +342,7 @@ export default function AdminAnimationPage() {
               )}
             </div>
             <input
-              className="field mt-2.5"
+              className="field mt-2.5 min-w-0 max-w-full"
               value={draft.bgImage}
               onChange={(e) => patch({ bgImage: e.target.value })}
               placeholder="or paste image URL / path"
@@ -354,7 +354,7 @@ export default function AdminAnimationPage() {
             <label className="field-label flex items-center gap-1.5">
               <SunMedium size={13} /> Watermark Brightness — {draft.brightness}%
             </label>
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 max-w-full items-center gap-3">
               <span className="text-[10.5px] font-bold text-slate-400">Faint</span>
               <input
                 type="range"
@@ -363,7 +363,7 @@ export default function AdminAnimationPage() {
                 step={5}
                 value={draft.brightness}
                 onChange={(e) => patch({ brightness: clampAnimationBrightness(Number(e.target.value)) })}
-                className="w-full accent-indigo-700"
+                className="min-w-0 flex-1 accent-indigo-700"
               />
               <span className="text-[10.5px] font-bold text-slate-400">Strong</span>
               <input
@@ -372,7 +372,7 @@ export default function AdminAnimationPage() {
                 max={MAX_ANIMATION_BRIGHTNESS}
                 value={draft.brightness}
                 onChange={(e) => patch({ brightness: clampAnimationBrightness(Number(e.target.value)) })}
-                className="field !w-24 !py-1.5 text-center"
+                className="field !w-24 shrink-0 !py-1.5 text-center"
               />
             </div>
             <p className="mt-1 text-[10.5px] text-slate-400">
@@ -386,9 +386,9 @@ export default function AdminAnimationPage() {
               Animated Product Images ({draft.products.length})
             </label>
             {draft.products.length > 0 && (
-              <div className="mb-3 grid grid-cols-4 gap-2.5 sm:grid-cols-6">
+              <div className="mb-3 grid min-w-0 max-w-full grid-cols-4 gap-2.5 sm:grid-cols-6">
                 {draft.products.map((src, i) => (
-                  <div key={`${src}-${i}`} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-1">
+                  <div key={`${src}-${i}`} className="group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={src} alt={`Product ${i + 1}`} className="h-16 w-full rounded-xl object-contain" />
                     <button
@@ -404,8 +404,8 @@ export default function AdminAnimationPage() {
                 ))}
               </div>
             )}
-            <div className="flex flex-wrap items-center gap-2.5">
-              <label className="btn btn-outline cursor-pointer !py-2 !text-[12px]">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2.5">
+              <label className="btn btn-outline max-w-full shrink-0 cursor-pointer whitespace-nowrap !py-2 !text-[12px]">
                 <Upload size={14} /> {uploadingProducts ? "Uploading..." : "Upload Product Images"}
                 <input
                   type="file"
@@ -416,9 +416,9 @@ export default function AdminAnimationPage() {
                   disabled={uploadingProducts}
                 />
               </label>
-              <div className="flex min-w-[240px] flex-1 gap-2">
+              <div className="flex min-w-0 flex-1 basis-[260px] gap-2">
                 <input
-                  className="field"
+                  className="field min-w-0 flex-1"
                   value={productUrl}
                   onChange={(e) => setProductUrl(e.target.value)}
                   onKeyDown={(e) => {
@@ -429,7 +429,7 @@ export default function AdminAnimationPage() {
                   }}
                   placeholder="or paste product image URL"
                 />
-                <button type="button" className="btn btn-outline !py-2 !text-[12px]" onClick={addProductUrl}>
+                <button type="button" className="btn btn-outline shrink-0 whitespace-nowrap !py-2 !text-[12px]" onClick={addProductUrl}>
                   <Plus size={13} /> Add
                 </button>
               </div>
@@ -440,11 +440,11 @@ export default function AdminAnimationPage() {
             </p>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <p className="text-[11px] text-slate-400">
+          <div className="mt-6 flex min-w-0 max-w-full flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <p className="min-w-0 flex-1 text-[11px] text-slate-400">
               {loaded ? "වෙනස්කම් Save කරන තෙක් site එකේ පේන්නේ නෑ." : "Settings load වෙමින්..."}
             </p>
-            <button className="btn btn-primary" onClick={save} disabled={saving || uploadingBg || uploadingProducts}>
+            <button className="btn btn-primary max-w-full shrink-0 whitespace-nowrap" onClick={save} disabled={saving || uploadingBg || uploadingProducts}>
               <Save size={15} /> {saving ? "Saving..." : "Save Animation Settings"}
             </button>
           </div>
