@@ -1068,6 +1068,27 @@ ok("schedule: Admin card (interval/time/destinations/encrypt/MEGA/cron SQL/test 
   backupSrc.includes('"backup_cron_secret"') &&
   backupTables.includes("backup_secrets"));
 
+// ⚡ Performance: parallel data fetching + request dedupe + instant loading UIs
+const slugPageSrc = readFileSync(join(root, "src/app/businesses/[slug]/page.tsx"), "utf8");
+const rootLoadingSrc = readFileSync(join(root, "src/app/loading.tsx"), "utf8");
+const slugLoadingSrc = readFileSync(join(root, "src/app/businesses/[slug]/loading.tsx"), "utf8");
+const adminLoadingSrc = readFileSync(join(root, "src/app/admin/loading.tsx"), "utf8");
+const nextConfigSrc = readFileSync(join(root, "next.config.ts"), "utf8");
+ok("perf: businesses ၅ම එකවර + cache() dedupe + targeted detail + settings keys + loading UIs",
+  siteDataSrc.includes('import { cache } from "react"') &&
+  siteDataSrc.includes("export const getBusinesses = cache(") &&
+  siteDataSrc.includes("const [units, svcs, contacts, branches, settingsRes] = await Promise.all([") &&
+  siteDataSrc.includes("export const getBusiness = cache(") &&
+  siteDataSrc.includes('.eq("slug", slug)') &&
+  siteDataSrc.includes("export const getGallery = cache(") &&
+  siteDataSrc.includes("export const getSettings = cache(") &&
+  siteDataSrc.includes("SITE_SETTING_KEYS") &&
+  slugPageSrc.includes("Promise.all([getBusiness(slug), getFuelPrices()])") &&
+  rootLoadingSrc.includes("animate-pulse") &&
+  slugLoadingSrc.includes("animate-pulse") &&
+  adminLoadingSrc.includes("animate-spin") &&
+  nextConfigSrc.includes("optimizePackageImports"));
+
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
 console.log(`══════════════════════════════════════\n`);

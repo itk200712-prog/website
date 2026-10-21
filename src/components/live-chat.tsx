@@ -2646,7 +2646,7 @@ export function LiveChat() {
                           {/* apply CTA */}
                           {m.card === "apply" && (
                             <a
-                              href="/membership/apply"
+                              href={`/${lang}/membership/apply`}
                               className="mt-2 flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-2.5 text-[12px] font-extrabold hover:opacity-95 transition"
                             >
                               <UserRound size={14} /> {si ? "අයදුම්පත් පිටුව විවෘත කරන්න" : "Open Application Form"} <ArrowRight size={14} />

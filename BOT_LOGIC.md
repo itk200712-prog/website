@@ -221,10 +221,20 @@ reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒව�
   (ඉන්ඳුවර නෙවෙයි) — canned පිළිතුරුවලත්, AI system instruction එකේත්
   එලෙසම ස්ථිර කර ඇත.
 
+## ⚡ Performance (2026-10-21)
+
+Click කළම පිටුව එන්න ගිය delay එක හදන්න: `data.ts` queries ඔක්කොම එකවර
+(parallel `Promise.all`) + React `cache()` එකෙන් එකම request එක තුළ dedupe;
+business detail පිටුව මුළු ලැයිස්තුවම නොගෙන slug එකෙන් targeted ගනී;
+`getSettings` ඕන keys 10 විතරක් ගනී; Gallery items+comments එකවර.
+Click කළ ගමන්ම loading skeleton එකක් පේනවා (`loading.tsx` — root /
+business detail / admin). Cross-request stale cache නෑ — Admin එකෙන්
+වෙනස් කළ ගමන්ම site එකේ පේන එක එහෙම්මයි.
+
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 303 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone/speed routing) + office hours + responsive header brand + hidden /hub route + Coop City branches (first-save insert fix) + branch photos/Rural Bank branch editor + fast Admin business save + Admin Animation section (per-business full-page watermark + brightness + unlimited animated products, professional marquee) + gallery 2–3 photo batch upload + Consumer regional/manager rows + professional animated contact cards + site brain/keywords + message box + backup (manifest/encryption/history latest-5 auto-prune inside download/import + manual delete/restore) + admin sidebar search autofill guard + CSS opacity scale + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation + scheduled auto-backup (full ZIP · encrypted v2 · interval/time → Supabase/MEGA)
+npx -y tsx scripts/test.mts   # 304 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone/speed routing) + office hours + responsive header brand + hidden /hub route + Coop City branches (first-save insert fix) + branch photos/Rural Bank branch editor + fast Admin business save + Admin Animation section (per-business full-page watermark + brightness + unlimited animated products, professional marquee) + gallery 2–3 photo batch upload + Consumer regional/manager rows + professional animated contact cards + site brain/keywords + message box + backup (manifest/encryption/history latest-5 auto-prune inside download/import + manual delete/restore) + admin sidebar search autofill guard + CSS opacity scale + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation + scheduled auto-backup (full ZIP · encrypted v2 · interval/time → Supabase/MEGA)
 npm run build                 # production build
 ```
 

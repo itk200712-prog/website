@@ -27,9 +27,9 @@ export async function generateStaticParams() {
 
 export default async function BusinessDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const b = await getBusiness(slug);
+  // ⚡ දෙකම එකවර (parallel) — එකින් එක await කළාම අමතර delay එකක් එනවා
+  const [b, prices] = await Promise.all([getBusiness(slug), getFuelPrices()]);
   if (!b || !b.active) notFound();
-  const prices = await getFuelPrices();
 
   return (
     <>

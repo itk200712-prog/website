@@ -2,6 +2,7 @@
 // Server-side data layer — Supabase නැති විට seed data fallback වේ
 // ============================================================================
 
+import { cache } from "react";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
@@ -53,52 +54,99 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
-export async function getBusinesses(): Promise<BusinessUnit[]> {
+const BUSINESS_SETTING_KEYS = [BUSINESS_BRANCH_PHOTOS_KEY, RURAL_BANK_BRANCHES_KEY, BUSINESS_ANIMATION_KEY];
+
+type BusinessExtras = {
+  services: { business_slug: string }[];
+  contacts: { business_slug: string }[];
+  branches: (BusinessBranch & { business_slug: string })[];
+  branchPhotos: ReturnType<typeof parseBranchPhotos>;
+  animations: ReturnType<typeof parseBusinessAnimations>;
+  ruralBranches: BusinessBranch[];
+  hasRuralSettings: boolean;
+};
+
+function businessExtras(
+  settingsRows: { key: string; value: string }[] | null | undefined,
+  services: BusinessExtras["services"],
+  contacts: BusinessExtras["contacts"],
+  branches: BusinessExtras["branches"]
+): BusinessExtras {
+  const settingsMap = new Map((settingsRows ?? []).map((r) => [r.key, r.value]));
+  const hasRuralSettings = settingsMap.has(RURAL_BANK_BRANCHES_KEY);
+  return {
+    services,
+    contacts,
+    branches,
+    hasRuralSettings,
+    branchPhotos: parseBranchPhotos(settingsMap.get(BUSINESS_BRANCH_PHOTOS_KEY)),
+    animations: parseBusinessAnimations(settingsMap.get(BUSINESS_ANIMATION_KEY)),
+    ruralBranches: ruralBranchesToBusinessBranches(
+      hasRuralSettings
+        ? parseRuralBankBranches(settingsMap.get(RURAL_BANK_BRANCHES_KEY), RURAL_BANK_BRANCHES)
+        : RURAL_BANK_BRANCHES
+    ),
+  };
+}
+
+function mapBusinessRow(b: Record<string, unknown>, ex: BusinessExtras): BusinessUnit {
+  const slug = String(b.slug ?? "");
+  const { branchPhotos, animations, ruralBranches, hasRuralSettings } = ex;
+  const dbBranches = ex.branches
+    .filter((x) => x.business_slug === slug)
+    .map(({ business_slug: _slug, ...br }) => br as BusinessBranch);
+  return {
+    ...(b as unknown as BusinessUnit),
+    animation: getBusinessAnimation(animations, slug),
+    services: ex.services.filter((s) => s.business_slug === slug),
+    contacts: ex.contacts.filter((c) => c.business_slug === slug),
+    branches:
+      slug === "rural-bank"
+        ? hasRuralSettings || dbBranches.length === 0
+          ? ruralBranches
+          : withBranchPhotos(dbBranches, slug, branchPhotos)
+        : withBranchPhotos(dbBranches, slug, branchPhotos),
+  } as unknown as BusinessUnit;
+}
+
+// ⚡ වේගය: queries 5ම එකවර (parallel) + cache() එකෙන් එකම request එක තුළ dedupe වේ.
+// (කලින්: business_units ඉවර වෙනකල් ඉඳලා ඊට පස්සේ අනිත් 4 — අමතර වටයක් නිසා delay වැඩියි)
+export const getBusinesses = cache(async (): Promise<BusinessUnit[]> => {
   return safe(async () => {
     const sb = createAnonClient();
-    const { data, error } = await sb.from("business_units").select("*").order("order");
-    if (error || !data) return BUSINESSES;
-    const [svcs, contacts, branches, branchSettings] = await Promise.all([
+    const [units, svcs, contacts, branches, settingsRes] = await Promise.all([
+      sb.from("business_units").select("*").order("order"),
       sb.from("business_services").select("*").order("order"),
       sb.from("business_contacts").select("*"),
       sb.from("business_branches").select("*"),
-      sb.from("system_settings").select("key,value").in("key", [BUSINESS_BRANCH_PHOTOS_KEY, RURAL_BANK_BRANCHES_KEY, BUSINESS_ANIMATION_KEY]),
+      sb.from("system_settings").select("key,value").in("key", BUSINESS_SETTING_KEYS),
     ]);
-    const settingsMap = new Map(
-      ((branchSettings.data ?? []) as { key: string; value: string }[]).map((r) => [r.key, r.value])
-    );
-    const branchPhotos = parseBranchPhotos(settingsMap.get(BUSINESS_BRANCH_PHOTOS_KEY));
-    const animations = parseBusinessAnimations(settingsMap.get(BUSINESS_ANIMATION_KEY));
-    const hasRuralSettings = settingsMap.has(RURAL_BANK_BRANCHES_KEY);
-    const ruralBranches = hasRuralSettings
-      ? ruralBranchesToBusinessBranches(parseRuralBankBranches(settingsMap.get(RURAL_BANK_BRANCHES_KEY), RURAL_BANK_BRANCHES))
-      : ruralBranchesToBusinessBranches(RURAL_BANK_BRANCHES);
-
-    return data.map((b: Record<string, unknown>) => {
-      const slug = String(b.slug ?? "");
-      const dbBranches = ((branches.data ?? []) as (BusinessBranch & { business_slug: string })[])
-        .filter((x) => x.business_slug === slug)
-        .map(({ business_slug: _slug, ...br }) => br as BusinessBranch);
-      return {
-        ...(b as unknown as BusinessUnit),
-        animation: getBusinessAnimation(animations, slug),
-        services: (svcs.data ?? []).filter((s: { business_slug: string }) => s.business_slug === slug),
-        contacts: (contacts.data ?? []).filter((c: { business_slug: string }) => c.business_slug === slug),
-        branches:
-          slug === "rural-bank"
-            ? hasRuralSettings || dbBranches.length === 0
-              ? ruralBranches
-              : withBranchPhotos(dbBranches, slug, branchPhotos)
-            : withBranchPhotos(dbBranches, slug, branchPhotos),
-      };
-    }) as BusinessUnit[];
+    if (units.error || !units.data) return BUSINESSES;
+    const ex = businessExtras(settingsRes.data, svcs.data ?? [], contacts.data ?? [], branches.data ?? []);
+    return (units.data as Record<string, unknown>[]).map((b) => mapBusinessRow(b, ex));
   }, BUSINESSES);
-}
+});
 
-export async function getBusiness(slug: string): Promise<BusinessUnit | null> {
+// ⚡ Detail පිටුවට: මුළු business ලැයිස්තුවම නොගෙන අදාළ slug එක විතරක් targeted ගනී.
+// DB එකේ නැති slug එකක් නම් කලින් විදිහටම සම්පූර්ණ ලැයිස්තුවෙන් හොයයි (seed fallback සහිතව).
+export const getBusiness = cache(async (slug: string): Promise<BusinessUnit | null> => {
+  const targeted = await safe<BusinessUnit | null>(async () => {
+    const sb = createAnonClient();
+    const [unit, svcs, contacts, branches, settingsRes] = await Promise.all([
+      sb.from("business_units").select("*").eq("slug", slug).maybeSingle(),
+      sb.from("business_services").select("*").eq("business_slug", slug).order("order"),
+      sb.from("business_contacts").select("*").eq("business_slug", slug),
+      sb.from("business_branches").select("*").eq("business_slug", slug),
+      sb.from("system_settings").select("key,value").in("key", BUSINESS_SETTING_KEYS),
+    ]);
+    if (unit.error || !unit.data) return null;
+    const ex = businessExtras(settingsRes.data, svcs.data ?? [], contacts.data ?? [], branches.data ?? []);
+    return mapBusinessRow(unit.data as Record<string, unknown>, ex);
+  }, null);
+  if (targeted) return targeted;
   const all = await getBusinesses();
   return all.find((b) => b.slug === slug) ?? null;
-}
+});
 
 export async function getBoard(): Promise<BoardMember[]> {
   return safe(async () => {
@@ -126,13 +174,18 @@ export async function getNews(): Promise<NewsItem[]> {
   }, NEWS);
 }
 
-export async function getGallery(): Promise<GalleryItem[]> {
+export const getGallery = cache(async (): Promise<GalleryItem[]> => {
   return safe(async () => {
     const sb = createAnonClient();
-    const { data, error } = await sb.from("gallery_items").select("*");
+    // ⚡ items + comments එකවර (parallel) — කලින් එකින් එක ගත් නිසා වටයක් වැඩියි
+    const [itemsRes, commentsRes] = await Promise.all([
+      sb.from("gallery_items").select("*"),
+      sb.from("gallery_comments").select("*").order("created_at", { ascending: true }),
+    ]);
+    const { data, error } = itemsRes;
     if (error || !data) return GALLERY;
     // ✅ comments gallery_comments table එකෙන් එකතු කරන්න (bug fix)
-    const { data: cm } = await sb.from("gallery_comments").select("*").order("created_at", { ascending: true });
+    const cm = commentsRes.data;
     return (data as unknown as GalleryItem[]).map((g) => ({
       ...g,
       comments: (cm ?? [])
@@ -147,7 +200,7 @@ export async function getGallery(): Promise<GalleryItem[]> {
       aspect: g.aspect ?? "4:3",
     }));
   }, GALLERY);
-}
+});
 
 export async function getFuelPrices(): Promise<FuelPrice[]> {
   return safe(async () => {
@@ -162,10 +215,24 @@ export async function getFuelPrices(): Promise<FuelPrice[]> {
   }, FUEL_PRICES);
 }
 
-export async function getSettings(): Promise<SiteSettings> {
+const SITE_SETTING_KEYS = [
+  "whatsapp_number",
+  "years_of_service",
+  "contact_email_1",
+  "contact_email_2",
+  "members_total",
+  "voters_total",
+  "members_files_count",
+  "voters_files_count",
+  "hero_images",
+  "board_bg",
+];
+
+export const getSettings = cache(async (): Promise<SiteSettings> => {
   return safe(async () => {
     const sb = createAnonClient();
-    const { data, error } = await sb.from("system_settings").select("*");
+    // ⚡ ඕන keys විතරයි — මුළු system_settings එකම (branch/animation JSON සහිතව) ඇද්දේ නෑ
+    const { data, error } = await sb.from("system_settings").select("key,value").in("key", SITE_SETTING_KEYS);
     if (error || !data) return SETTINGS;
     const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
     return {
@@ -181,7 +248,7 @@ export async function getSettings(): Promise<SiteSettings> {
       board_bg: map.get("board_bg") ?? "",
     };
   }, SETTINGS);
-}
+});
 
 /** system_settings.hero_images = JSON string[] (max 10) */
 function parseHeroImages(raw: string | undefined): string[] {

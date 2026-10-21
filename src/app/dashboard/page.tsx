@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Camera, Eye, EyeOff, FileSpreadsheet, Home, KeyRound, Lock, LogOut, Save, UserRound } from "lucide-react";
 import { authedClient } from "@/lib/supabase/client";
+import { useLang } from "@/lib/i18n";
 import { logout } from "@/lib/auth";
 import { decodePw, encodePw } from "@/lib/auth";
 import { SiteHeader } from "@/components/site-header";
@@ -27,6 +28,7 @@ interface Me {
 
 export default function DashboardPage() {
   const r = useRouter();
+  const { lang } = useLang();
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -163,11 +165,11 @@ export default function DashboardPage() {
 
           {/* ✅ උඩ section එකේ options — F28 authenticate කරපු අයට පමනක් */}
           <div className="flex flex-wrap gap-2.5 mt-6">
-            <Link href="/dashboard" className="btn btn-primary !bg-white !text-slate-900 hover:!bg-slate-100">
+            <Link href={`/${lang}/dashboard`} className="btn btn-primary !bg-white !text-slate-900 hover:!bg-slate-100">
               <Home size={15} /> Dashboard
             </Link>
             {me?.f28 && (
-              <Link href="/dashboard/f28" className="btn btn-primary !bg-amber-400 !text-amber-950 hover:!bg-amber-300">
+              <Link href={`/${lang}/dashboard/f28`} className="btn btn-primary !bg-amber-400 !text-amber-950 hover:!bg-amber-300">
                 <FileSpreadsheet size={15} /> F28
               </Link>
             )}

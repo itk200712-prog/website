@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, FileDown, FileSpreadsheet, Image as ImageIcon } from "lucide-react";
 import { authedClient } from "@/lib/supabase/client";
+import { useLang } from "@/lib/i18n";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -23,6 +24,7 @@ interface F28Item {
 
 export default function F28ViewPage() {
   const r = useRouter();
+  const { lang } = useLang();
   const [items, setItems] = useState<F28Item[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -54,7 +56,7 @@ export default function F28ViewPage() {
           <div className="section-badge !text-amber-300">F28</div>
           <h1 className="mt-3 text-3xl sm:text-4xl font-black">F28 — සමිතියේ ගිනුම්</h1>
           <p className="mt-2 text-slate-300 text-[13.5px]">ලාබ අලාබ වාර්තා සහ ගිනුම් තොරතුරු — තෝරාගත් සාමාජිකයන්ට පමනක්.</p>
-          <Link href="/dashboard" className="inline-flex items-center gap-2 mt-5 text-amber-300 text-[12.5px] font-bold hover:underline">
+          <Link href={`/${lang}/dashboard`} className="inline-flex items-center gap-2 mt-5 text-amber-300 text-[12.5px] font-bold hover:underline">
             <ArrowLeft size={14} /> Dashboard එකට
           </Link>
         </div>

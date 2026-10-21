@@ -303,7 +303,7 @@ export function RuralBankNetwork({ b }: { b: BusinessUnit }) {
           <div className="text-xl font-black">Become a Member of Panduwasnuwara MPCS</div>
           <div className="text-slate-300 text-sm mt-1">සාමාජිකත්වය ලබාගෙන අපේ බැංකු සේවා සියල්ලෙන් ප්‍රයෝජන ගන්න.</div>
         </div>
-        <Link href="/membership/apply" className="btn btn-amber">
+        <Link href={`/${lang}/membership/apply`} className="btn btn-amber">
           Apply for Membership →
         </Link>
       </div>
