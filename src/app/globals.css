@@ -403,3 +403,192 @@ body {
   font-family: "Iskoola Pota", "Iskoola-Pota", "Iskpota", var(--font-book), "Abhaya Libre", serif;
   font-feature-settings: "liga" 1, "kern" 1;
 }
+
+/* ============================================================================
+   Professional animated contact cards (site-wide)
+   Used by department contacts, Coop City/Consumer branches, HQ and people cards.
+   ============================================================================ */
+@keyframes contactRise {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+    filter: blur(3px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes contactPhoneRing {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  20% { transform: rotate(-12deg) scale(1.08); }
+  40% { transform: rotate(10deg) scale(1.08); }
+  60% { transform: rotate(-7deg) scale(1.04); }
+  80% { transform: rotate(5deg) scale(1.02); }
+}
+
+.contact-pro-card {
+  --contact-accent: #4f46e5;
+  --contact-accent-2: #7c3aed;
+  --contact-soft: rgba(79, 70, 229, 0.13);
+  --contact-shadow: rgba(49, 46, 129, 0.28);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(320px 170px at 0% 0%, var(--contact-soft), transparent 62%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
+  border-color: rgba(148, 163, 184, 0.28);
+  box-shadow: 0 16px 38px -30px var(--contact-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  animation: contactRise 0.68s cubic-bezier(0.2, 0.85, 0.25, 1) backwards;
+  transition:
+    transform 0.28s cubic-bezier(0.2, 0.85, 0.25, 1),
+    box-shadow 0.28s ease,
+    border-color 0.28s ease,
+    background 0.28s ease;
+  will-change: transform;
+}
+
+.contact-pro-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--contact-accent), var(--contact-accent-2)) top left / 100% 3px no-repeat,
+    radial-gradient(210px 120px at 100% 0%, var(--contact-soft), transparent 68%);
+  opacity: 0.95;
+}
+
+.contact-pro-card::after {
+  content: "";
+  position: absolute;
+  top: -45%;
+  bottom: -45%;
+  left: 0;
+  width: 42%;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.46), transparent);
+  transform: translateX(-170%) rotate(10deg);
+  transition: transform 0.9s ease;
+}
+
+.contact-pro-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.contact-pro-card:hover,
+.contact-pro-card:focus-within {
+  transform: translateY(-4px) scale(1.004);
+  border-color: var(--contact-accent);
+  box-shadow: 0 28px 52px -28px var(--contact-shadow), 0 0 0 1px var(--contact-soft), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.contact-pro-card:hover::after,
+.contact-pro-card:focus-within::after {
+  transform: translateX(330%) rotate(10deg);
+}
+
+.contact-pro-indigo {
+  --contact-accent: #4f46e5;
+  --contact-accent-2: #7c3aed;
+  --contact-soft: rgba(79, 70, 229, 0.13);
+  --contact-shadow: rgba(49, 46, 129, 0.3);
+}
+
+.contact-pro-emerald {
+  --contact-accent: #059669;
+  --contact-accent-2: #14b8a6;
+  --contact-soft: rgba(5, 150, 105, 0.13);
+  --contact-shadow: rgba(6, 78, 59, 0.3);
+}
+
+.contact-pro-amber {
+  --contact-accent: #d97706;
+  --contact-accent-2: #f59e0b;
+  --contact-soft: rgba(217, 119, 6, 0.14);
+  --contact-shadow: rgba(146, 64, 14, 0.28);
+}
+
+.contact-pro-slate {
+  --contact-accent: #334155;
+  --contact-accent-2: #64748b;
+  --contact-soft: rgba(51, 65, 85, 0.12);
+  --contact-shadow: rgba(15, 23, 42, 0.28);
+}
+
+.contact-pro-icon {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 10px 20px -16px var(--contact-shadow);
+  transition: transform 0.28s cubic-bezier(0.2, 0.85, 0.25, 1), box-shadow 0.28s ease, background 0.28s ease;
+}
+
+.contact-pro-card:hover .contact-pro-icon,
+.contact-pro-card:focus-within .contact-pro-icon {
+  transform: translateY(-2px) rotate(-3deg) scale(1.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 16px 26px -16px var(--contact-shadow);
+}
+
+.contact-pro-field {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.82));
+  transition: transform 0.24s ease, border-color 0.24s ease, background 0.24s ease, box-shadow 0.24s ease;
+}
+
+.contact-pro-card:hover .contact-pro-field {
+  border-color: var(--contact-soft);
+  background: linear-gradient(145deg, #fff, rgba(248, 250, 252, 0.95));
+  box-shadow: 0 14px 26px -24px var(--contact-shadow);
+  transform: translateY(-1px);
+}
+
+.contact-pro-hotline {
+  background: linear-gradient(135deg, var(--contact-accent), var(--contact-accent-2)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 18px 30px -22px var(--contact-shadow);
+}
+
+.contact-pro-call {
+  transition: transform 0.22s ease, background 0.22s ease, color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.contact-pro-card:hover .contact-pro-call,
+.contact-pro-call:hover {
+  background: #fde68a !important;
+  color: #111827 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px -12px rgba(15, 23, 42, 0.45);
+}
+
+.contact-pro-call:hover svg,
+.contact-pro-card:hover .contact-pro-call svg {
+  animation: contactPhoneRing 0.55s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contact-pro-card,
+  .contact-pro-card::after,
+  .contact-pro-icon,
+  .contact-pro-field,
+  .contact-pro-call {
+    animation: none !important;
+    transition: none !important;
+  }
+  .contact-pro-card:hover,
+  .contact-pro-card:focus-within,
+  .contact-pro-card:hover .contact-pro-icon,
+  .contact-pro-card:focus-within .contact-pro-icon,
+  .contact-pro-card:hover .contact-pro-field,
+  .contact-pro-card:hover .contact-pro-call,
+  .contact-pro-call:hover {
+    transform: none !important;
+  }
+}

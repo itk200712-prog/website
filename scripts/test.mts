@@ -140,6 +140,9 @@ ok("Hemas page has its own default-style services (6)", hemas.services.length ==
 const businessDetailSrc = readFileSync(join(root, "src/components/business-detail.tsx"), "utf8");
 const businessPageSrc = readFileSync(join(root, "src/app/businesses/[slug]/page.tsx"), "utf8");
 const adminBusinessesSrc = readFileSync(join(root, "src/app/admin/businesses/page.tsx"), "utf8");
+const siteSectionsSrc = readFileSync(join(root, "src/components/site-sections.tsx"), "utf8");
+const contactInfoSrc = readFileSync(join(root, "src/components/contact-info.tsx"), "utf8");
+const globalsCssSrc = readFileSync(join(root, "src/app/globals.css"), "utf8");
 ok("Coop City branches: five Admin-managed cards above Department Contact & Inquiries",
   businessDetailSrc.includes("export function CoopCityBranches") &&
   businessDetailSrc.includes("Our Coop City & Mini Coop City Branch") &&
@@ -172,6 +175,17 @@ ok("Consumer page: long Regional rows above separate Sales/Store manager rows + 
   adminBusinessesSrc.includes("To delete Mandapola or any other branch") &&
   adminBusinessesSrc.includes("Delete this branch") &&
   adminBusinessesSrc.includes('"Regional Name"'));
+ok("Site-wide professional animated contact cards",
+  globalsCssSrc.includes("@keyframes contactRise") &&
+  globalsCssSrc.includes(".contact-pro-card") &&
+  globalsCssSrc.includes(".contact-pro-call") &&
+  globalsCssSrc.includes("prefers-reduced-motion") &&
+  siteSectionsSrc.includes("contact-pro-card contact-pro-indigo") &&
+  siteSectionsSrc.includes("contact-pro-card contact-pro-slate") &&
+  businessDetailSrc.includes("contact-pro-card contact-pro-emerald") &&
+  businessDetailSrc.includes("contact-pro-hotline") &&
+  businessDetailSrc.includes("contact-pro-call") &&
+  contactInfoSrc.includes("card contact-pro-card contact-pro-indigo"));
 
 console.log("\n── 8) Board categories (director board page) ──");
 ok("chairman=1, vice-chairman=1", seed.BOARD.filter((m) => m.category === "chairman").length === 1 && seed.BOARD.filter((m) => m.category === "vice-chairman").length === 1);

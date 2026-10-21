@@ -224,7 +224,7 @@ reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒව�
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 293 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone/speed routing) + office hours + responsive header brand + hidden /hub route + Coop City branches (first-save insert fix) + Consumer regional/manager rows + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation + scheduled auto-backup (full ZIP · encrypted v2 · interval/time → Supabase/MEGA)
+npx -y tsx scripts/test.mts   # 294 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone/speed routing) + office hours + responsive header brand + hidden /hub route + Coop City branches (first-save insert fix) + Consumer regional/manager rows + professional animated contact cards + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation + scheduled auto-backup (full ZIP · encrypted v2 · interval/time → Supabase/MEGA)
 npm run build                 # production build
 ```
 

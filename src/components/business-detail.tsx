@@ -267,11 +267,12 @@ export function RegionalBranches({ b }: { b: BusinessUnit }) {
             return (
               <article
                 key={`${br.name}-${i}`}
-                className="grid gap-4 rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_14px_35px_-28px_rgba(6,78,59,0.55)] sm:p-5 md:grid-cols-[1.1fr_1fr_1fr_auto] md:items-center"
+                className="contact-pro-card contact-pro-emerald grid gap-4 rounded-3xl border border-emerald-100 bg-white p-4 sm:p-5 md:grid-cols-[1.1fr_1fr_1fr_auto] md:items-center"
+                style={{ animationDelay: `${i * 90}ms` }}
               >
                 {fields.map((field, fieldIndex) => (
-                  <div key={field.label} className="flex min-w-0 items-start gap-3">
-                    <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <div key={field.label} className="contact-pro-field flex min-w-0 items-start gap-3 rounded-2xl px-3 py-2.5">
+                    <span className="contact-pro-icon mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white">
                       {field.icon}
                     </span>
                     <span className="min-w-0">
@@ -284,7 +285,7 @@ export function RegionalBranches({ b }: { b: BusinessUnit }) {
                     </span>
                   </div>
                 ))}
-                <div className="rounded-2xl bg-emerald-700 px-4 py-3 text-white md:min-w-44">
+                <div className="contact-pro-hotline rounded-2xl bg-emerald-700 px-4 py-3 text-white md:min-w-44">
                   <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-100">
                     <PhoneCall size={14} /> {labels.hotline}
                   </div>
@@ -292,7 +293,7 @@ export function RegionalBranches({ b }: { b: BusinessUnit }) {
                   {phoneHref && (
                     <a
                       href={phoneHref}
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-black text-emerald-800"
+                      className="contact-pro-call mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-black text-emerald-800"
                     >
                       <Phone size={11} /> {labels.call}
                     </a>
@@ -344,11 +345,12 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
             return (
               <article
                 key={`${br.name}-${i}`}
-                className="group overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-[0_18px_45px_-30px_rgba(6,78,59,0.55)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_55px_-30px_rgba(6,78,59,0.65)]"
+                className="card contact-pro-card contact-pro-emerald group rounded-3xl border border-emerald-100 bg-white"
+                style={{ animationDelay: `${i * 100}ms` }}
               >
                 <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center">
                   <div className="flex items-center gap-4 lg:w-56 lg:shrink-0">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
+                    <div className="contact-pro-icon flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
                       <Store size={24} />
                     </div>
                     <div>
@@ -361,7 +363,7 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
 
                   <div className="grid flex-1 gap-3 sm:grid-cols-3">
                     {rows.map((row) => (
-                      <div key={row.label} className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <div key={row.label} className="contact-pro-field rounded-2xl px-4 py-3">
                         <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
                           <span className="text-emerald-600">{row.icon}</span>
                           {row.label}
@@ -373,7 +375,7 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
                     ))}
                   </div>
 
-                  <div className="rounded-2xl bg-emerald-700 p-4 text-white lg:w-52 lg:shrink-0">
+                  <div className="contact-pro-hotline rounded-2xl bg-emerald-700 p-4 text-white lg:w-52 lg:shrink-0">
                     <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-100">
                       <PhoneCall size={15} /> {labels.hotline}
                     </div>
@@ -381,7 +383,7 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
                     {phoneHref && (
                       <a
                         href={phoneHref}
-                        className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-[11.5px] font-black text-emerald-800 transition group-hover:bg-amber-300 group-hover:text-slate-900"
+                        className="contact-pro-call mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-[11.5px] font-black text-emerald-800"
                       >
                         <Phone size={12} /> {labels.call}
                       </a>
@@ -399,7 +401,7 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
 
 function BusinessHoursCard() {
   return (
-    <div className="card p-5 text-[12.5px] text-slate-500 space-y-2">
+    <div className="card contact-pro-card contact-pro-amber rounded-3xl p-5 text-[12.5px] text-slate-500 space-y-2">
       <div className="flex items-center gap-2 text-slate-700 font-bold text-[13px]">
         <Clock size={15} /> Business Hours
       </div>
@@ -442,11 +444,12 @@ export function ConsumerManagerContacts({ contacts }: { contacts: BusinessContac
         return (
           <article
             key={`${c.role_en}-${c.name}-${i}`}
-            className="grid gap-4 rounded-2xl border border-indigo-100 bg-white p-4 shadow-[0_14px_35px_-28px_rgba(49,46,129,0.55)] sm:p-5 md:grid-cols-[1.15fr_1fr_1fr_auto] md:items-center"
+            className="contact-pro-card contact-pro-indigo grid gap-4 rounded-3xl border border-indigo-100 bg-white p-4 sm:p-5 md:grid-cols-[1.15fr_1fr_1fr_auto] md:items-center"
+            style={{ animationDelay: `${i * 90}ms` }}
           >
             {fields.map((field, fieldIndex) => (
-              <div key={field.label} className="flex min-w-0 items-start gap-3">
-                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
+              <div key={field.label} className="contact-pro-field flex min-w-0 items-start gap-3 rounded-2xl px-3 py-2.5">
+                <span className="contact-pro-icon mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white">
                   {field.icon}
                 </span>
                 <span className="min-w-0">
@@ -459,7 +462,7 @@ export function ConsumerManagerContacts({ contacts }: { contacts: BusinessContac
                 </span>
               </div>
             ))}
-            <div className="rounded-2xl bg-indigo-700 px-4 py-3 text-white md:min-w-44">
+            <div className="contact-pro-hotline rounded-2xl bg-indigo-700 px-4 py-3 text-white md:min-w-44">
               <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-indigo-100">
                 <PhoneCall size={14} /> {labels.hotline}
               </div>
@@ -467,7 +470,7 @@ export function ConsumerManagerContacts({ contacts }: { contacts: BusinessContac
               {phoneHref && (
                 <a
                   href={phoneHref}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-black text-indigo-800"
+                  className="contact-pro-call mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-black text-indigo-800"
                 >
                   <Phone size={11} /> {labels.call}
                 </a>

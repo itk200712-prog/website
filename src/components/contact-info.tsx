@@ -10,9 +10,9 @@ import { SITE } from "@/lib/seed";
 export function ContactInfoCard() {
   const { t, lang } = useLang();
   return (
-    <div className="card p-7">
+    <div className="card contact-pro-card contact-pro-indigo rounded-3xl p-7">
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
+        <div className="contact-pro-icon w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center">
           <Building2 size={22} />
         </div>
         <div>
@@ -23,9 +23,9 @@ export function ContactInfoCard() {
 
       <div className="border-t border-slate-100 my-5" />
 
-      <ul className="space-y-5">
-        <li className="flex gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+      <ul className="space-y-3">
+        <li className="contact-pro-field flex gap-3.5 rounded-2xl px-3.5 py-3">
+          <div className="contact-pro-icon w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
             <BoxIcon name="map" size={18} />
           </div>
           <div>
@@ -42,8 +42,8 @@ export function ContactInfoCard() {
             <div className="text-slate-500 text-[12px]">{lang === "si" ? SITE.address_en : SITE.address_si}</div>
           </div>
         </li>
-        <li className="flex gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+        <li className="contact-pro-field flex gap-3.5 rounded-2xl px-3.5 py-3">
+          <div className="contact-pro-icon w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <BoxIcon name="phone" size={18} />
           </div>
           <div>
@@ -55,8 +55,8 @@ export function ContactInfoCard() {
             </div>
           </div>
         </li>
-        <li className="flex gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+        <li className="contact-pro-field flex gap-3.5 rounded-2xl px-3.5 py-3">
+          <div className="contact-pro-icon w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
             <BoxIcon name="envelope" size={18} />
           </div>
           <div>
@@ -64,8 +64,8 @@ export function ContactInfoCard() {
             <a href={`mailto:${SITE.email}`} className="font-semibold text-slate-800 text-[13.5px] mt-0.5 inline-block hover:text-indigo-700 transition-colors">{SITE.email}</a>
           </div>
         </li>
-        <li className="flex gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+        <li className="contact-pro-field flex gap-3.5 rounded-2xl px-3.5 py-3">
+          <div className="contact-pro-icon w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
             <BoxIcon name="clock" size={18} />
           </div>
           <div>

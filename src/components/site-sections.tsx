@@ -66,49 +66,98 @@ export function ServiceCard({ service, unitName, index }: { service: BusinessSer
 }
 
 export function ContactCards({ contacts, sub }: { contacts: BusinessContact[]; sub?: string }) {
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const main = contacts[0];
   if (!main) return null;
+  const si = lang === "si";
+
   return (
     <div>
       <SectionHead badge="Contact & Information" title={t.sections.contacts} sub={sub ?? t.sections.contactsSub} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {contacts.map((c, i) => (
-          <div key={i} className="card p-5">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-              {i === 0 ? <Users size={19} /> : <Headphones size={19} />}
-            </div>
-            <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{c.role_en}</div>
-            <div className="font-bold text-slate-900 text-[15px] mt-0.5">{c.name}</div>
-            <div className="text-slate-500 text-[12px] mt-1">{c.note_en ?? "Department Operations"}</div>
+
+      {/* Manager / contact-person cards — each person now shows role, location and direct call action. */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {contacts.map((c, i) => {
+          const role = si ? c.role_si || c.role_en : c.role_en || c.role_si;
+          const note = si ? c.note_si || c.note_en : c.note_en || c.note_si;
+          const phoneHref = c.phone ? `tel:${c.phone.replace(/\s/g, "")}` : undefined;
+          return (
+            <article
+              key={`${role}-${c.name}-${i}`}
+              className={`card contact-pro-card contact-pro-indigo group flex flex-col rounded-3xl p-5 ${contacts.length === 1 ? "md:col-span-2" : ""}`}
+              style={{ animationDelay: `${i * 90}ms` }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="contact-pro-icon flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white">
+                  {i === 0 ? <Users size={21} /> : <Headphones size={21} />}
+                </div>
+                <span className="rounded-full border border-indigo-100 bg-white/80 px-2.5 py-1 text-[10px] font-black tracking-[0.14em] text-indigo-500">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              </div>
+
+              <div className="mt-4 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-500">{role || t.labels.manager}</div>
+              <h3 className="mt-1 text-[16px] font-black leading-snug text-slate-900">{c.name || "—"}</h3>
+              {note && <p className="mt-1 text-[12.5px] leading-relaxed text-slate-500">{note}</p>}
+
+              <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+                <div className="contact-pro-field rounded-2xl px-3.5 py-3">
+                  <div className="flex items-center gap-1.5 text-[9.5px] font-black uppercase tracking-[0.14em] text-slate-400">
+                    <MapPin size={13} className="text-emerald-600" /> {t.labels.location}
+                  </div>
+                  <div className="mt-1 break-words text-[12.5px] font-bold leading-snug text-slate-700">{c.location || "—"}</div>
+                </div>
+                <div className="contact-pro-field rounded-2xl px-3.5 py-3">
+                  <div className="flex items-center gap-1.5 text-[9.5px] font-black uppercase tracking-[0.14em] text-slate-400">
+                    <Phone size={13} className="text-amber-600" /> {t.labels.hotline}
+                  </div>
+                  <div className="mt-1 break-words text-[13px] font-black tabular-nums leading-snug text-slate-800">{c.phone || "—"}</div>
+                </div>
+              </div>
+
+              {phoneHref && (
+                <a
+                  href={phoneHref}
+                  className="contact-pro-call mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-indigo-700 px-4 py-2.5 text-[12px] font-black text-white shadow-lg shadow-indigo-700/20"
+                >
+                  <Phone size={13} /> {t.labels.callNow}
+                </a>
+              )}
+            </article>
+          );
+        })}
+      </div>
+
+      {/* Quick contact summary strip */}
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <article className="card contact-pro-card contact-pro-emerald rounded-3xl p-5" style={{ animationDelay: `${contacts.length * 90}ms` }}>
+          <div className="contact-pro-icon flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+            <MapPin size={20} />
           </div>
-        ))}
-        <div className="card p-5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-            <MapPin size={19} />
+          <div className="mt-3.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-600">{t.labels.location}</div>
+          <div className="mt-1 text-[14px] font-black leading-snug text-slate-900">{main.location}</div>
+          <div className="mt-1 text-[12px] text-slate-500">{t.labels.openMonSat}</div>
+        </article>
+
+        <article className="card contact-pro-card contact-pro-amber rounded-3xl p-5" style={{ animationDelay: `${(contacts.length + 1) * 90}ms` }}>
+          <div className="contact-pro-icon flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
+            <Phone size={20} />
           </div>
-          <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{t.labels.location}</div>
-          <div className="font-bold text-slate-900 text-[14px] mt-0.5">{main.location}</div>
-          <div className="text-slate-500 text-[12px] mt-1">{t.labels.openMonSat}</div>
-        </div>
-        <div className="card p-5">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
-            <Phone size={19} />
-          </div>
-          <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{t.labels.hotline}</div>
-          <div className="font-bold text-slate-900 text-[15px] mt-0.5 tabular-nums">{main.phone}</div>
-          <a href={`tel:${main.phone.replace(/\s/g, "")}`} className="text-indigo-700 text-[12px] font-bold mt-1 inline-flex items-center gap-1">
+          <div className="mt-3.5 text-[10px] font-black uppercase tracking-[0.16em] text-amber-600">{t.labels.hotline}</div>
+          <div className="mt-1 text-[15px] font-black tabular-nums text-slate-900">{main.phone}</div>
+          <a href={`tel:${main.phone.replace(/\s/g, "")}`} className="contact-pro-call mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-[11px] font-black text-white">
             <Phone size={12} /> {t.labels.callNow}
           </a>
-        </div>
-        <div className="card p-5">
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center">
-            <MessageSquare size={19} />
+        </article>
+
+        <article className="card contact-pro-card contact-pro-indigo rounded-3xl p-5" style={{ animationDelay: `${(contacts.length + 2) * 90}ms` }}>
+          <div className="contact-pro-icon flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-700">
+            <MessageSquare size={20} />
           </div>
-          <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{t.labels.inquiry}</div>
-          <div className="text-slate-600 text-[12.5px] mt-1">{t.labels.inquiryNote}</div>
-          <div className="text-indigo-700 text-[12px] font-bold mt-1.5">{t.labels.response}</div>
-        </div>
+          <div className="mt-3.5 text-[10px] font-black uppercase tracking-[0.16em] text-violet-600">{t.labels.inquiry}</div>
+          <div className="mt-1 text-[12.5px] leading-relaxed text-slate-600">{t.labels.inquiryNote}</div>
+          <div className="mt-2 inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-black text-indigo-700">{t.labels.response}</div>
+        </article>
       </div>
     </div>
   );
@@ -128,9 +177,9 @@ export function PersonCard({ person }: { person: BoardMember }) {
     officer: { label: lang === "si" ? "නිලධාරී" : "Administrative Officer", cls: "badge-red" },
   };
   return (
-    <div className="card card-hover p-6 flex flex-col">
+    <div className="card contact-pro-card contact-pro-slate p-6 flex flex-col rounded-3xl">
       <div className="flex items-start gap-4">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-700 flex items-center justify-center text-xl font-black shrink-0 overflow-hidden">
+        <div className="contact-pro-icon w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-100 to-indigo-200 text-indigo-700 flex items-center justify-center text-xl font-black shrink-0 overflow-hidden">
           {person.photo ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={person.photo} alt={person.name_en} className="w-full h-full object-cover" />
@@ -146,7 +195,7 @@ export function PersonCard({ person }: { person: BoardMember }) {
           <div className="text-slate-500 text-[12.5px]">{lang === "si" ? person.position_si : person.position_en}</div>
         </div>
       </div>
-      <div className="mt-4 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 text-[12px] text-slate-600">
+      <div className="contact-pro-field mt-4 rounded-xl px-3 py-2.5 text-[12px] text-slate-600">
         🎓 {person.qualification}
       </div>
       <div className="mt-3 space-y-1.5 text-[12.5px] text-slate-600">
