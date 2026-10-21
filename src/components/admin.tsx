@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut,
-  AtSign, Mail, Megaphone, MessageCircle, Newspaper, Settings, ShieldCheck, UserRound, UsersRound, X, Save, Activity } from "lucide-react";
+  AtSign, Mail, Megaphone, MessageCircle, Newspaper, Settings, ShieldCheck, Sparkles, UserRound, UsersRound, X, Save, Activity } from "lucide-react";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { logout } from "@/lib/auth";
 import { SiteLogoBadge } from "@/components/site-logo";
@@ -41,6 +41,7 @@ const NAV = [
   { href: "/admin/emails", label: "Emails", icon: AtSign, badge: "", key: "emails" },
   { href: "/admin/live-chat", label: "Live Chat", icon: MessageCircle, badge: "", key: "livechat" },
   { href: "/admin/businesses", label: "Businesses & Services", icon: Building2, badge: "", key: "businesses" },
+  { href: "/admin/animation", label: "Animation", icon: Sparkles, badge: "NEW", key: "animation" },
   { href: "/admin/fuel-prices", label: "Fuel Prices", icon: Fuel, badge: "", key: "fuel" },
   { href: "/admin/f28", label: "F28", icon: Lock, badge: "", key: "f28" },
   { href: "/admin/settings", label: "System Settings", icon: Settings, badge: "", key: "settings" },

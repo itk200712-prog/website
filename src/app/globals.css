@@ -592,3 +592,55 @@ body {
     transform: none !important;
   }
 }
+
+/* ---- Business page animation (Admin → Animation) ---- */
+.biz-anim-bg {
+  animation: bizBgZoom 24s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes bizBgZoom {
+  from { transform: scale(1); }
+  to { transform: scale(1.09); }
+}
+
+.biz-products-marquee {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+
+.biz-products-track {
+  display: flex;
+  gap: 1rem;
+  width: max-content;
+  padding: 0.25rem 0;
+  animation: bizProductsScroll 28s linear infinite;
+  will-change: transform;
+}
+
+.biz-products-marquee:hover .biz-products-track {
+  animation-play-state: paused;
+}
+
+@keyframes bizProductsScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-50% - 0.5rem)); }
+}
+
+.biz-product-float {
+  animation: bizProductFloat 4.5s ease-in-out infinite alternate;
+}
+
+@keyframes bizProductFloat {
+  from { transform: translateY(0); }
+  to { transform: translateY(-7px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .biz-anim-bg,
+  .biz-products-track,
+  .biz-product-float {
+    animation: none !important;
+  }
+}

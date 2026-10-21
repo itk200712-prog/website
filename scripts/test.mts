@@ -18,6 +18,7 @@ function ok(name, cond, extra = "") {
 const seed = await import("../src/lib/seed.ts");
 const auth = await import("../src/lib/auth.ts");
 const branchSettings = await import("../src/lib/branch-settings.ts");
+const animSettings = await import("../src/lib/animation-settings.ts");
 
 console.log("\n── 1) Seed data (screenshots) ──");
 ok("14 business divisions", seed.BUSINESSES.length === 14, `got ${seed.BUSINESSES.length}`);
@@ -210,6 +211,45 @@ ok("Branch photo/Rural edit-delete settings + fast Admin business save",
   businessDetailSrc.includes("export function RuralBankNetwork({ b }") &&
   businessDetailSrc.includes("br.photo") &&
   businessPageSrc.includes("<RuralBankNetwork b={b} />"));
+ok("animation settings helpers: brightness clamp + products dedupe/cap + empty entries dropped",
+  animSettings.BUSINESS_ANIMATION_KEY === "business_animation_settings" &&
+  animSettings.clampAnimationBrightness(5) === 10 &&
+  animSettings.clampAnimationBrightness(999) === 120 &&
+  animSettings.clampAnimationBrightness("abc") === 55 &&
+  animSettings.parseBusinessAnimations(JSON.stringify({
+    "coop-city": { bgImage: " https://x/bg.jpg ", brightness: 40, products: ["a.jpg", "a.jpg", "b.jpg"] },
+    hemas: { bgImage: "", brightness: 55, products: [] },
+  }))["coop-city"].products.join(",") === "a.jpg,b.jpg" &&
+  animSettings.parseBusinessAnimations(JSON.stringify({ hemas: { products: [] } })).hemas === undefined &&
+  animSettings.normalizeBusinessAnimation({ products: Array.from({ length: 12 }, (_, i) => `p${i}.jpg`) }).products.length === 8 &&
+  animSettings.getBusinessAnimation({}, "coop-city") === undefined);
+const adminAnimationSrc = readFileSync(join(root, "src/app/admin/animation/page.tsx"), "utf8");
+const siteDataSrc = readFileSync(join(root, "src/lib/data.ts"), "utf8");
+ok("animation: Admin section (bg+brightness+products per business) → settings → animated public hero",
+  adminShellEarlySrc.includes('href: "/admin/animation"') &&
+  adminShellEarlySrc.includes('label: "Animation"') &&
+  adminAnimationSrc.includes("BUSINESS_ANIMATION_KEY") &&
+  adminAnimationSrc.includes('dbUpsert("system_settings"') &&
+  adminAnimationSrc.includes("Background / Watermark Image") &&
+  adminAnimationSrc.includes("Background Brightness") &&
+  adminAnimationSrc.includes("Animated Product Images") &&
+  adminAnimationSrc.includes('uploadSiteImage(f, "animation-bg"') &&
+  adminAnimationSrc.includes('uploadSiteImage(f, "animation-products"') &&
+  siteDataSrc.includes("parseBusinessAnimations") &&
+  siteDataSrc.includes("getBusinessAnimation(animations, slug)") &&
+  businessDetailSrc.includes("biz-anim-bg") &&
+  businessDetailSrc.includes("biz-products-marquee") &&
+  businessDetailSrc.includes("brightness(${brightness}%)") &&
+  globalsCssSrc.includes("@keyframes bizProductsScroll") &&
+  globalsCssSrc.includes("@keyframes bizBgZoom"));
+const adminGallerySrc = readFileSync(join(root, "src/app/admin/gallery/page.tsx"), "utf8");
+ok("gallery: upload 2–3 photos at once under one tagline (batch insert, same title)",
+  adminGallerySrc.includes("onBatchPhotos") &&
+  adminGallerySrc.includes("batchPhotos") &&
+  adminGallerySrc.includes("multiple") &&
+  adminGallerySrc.includes("slice(0, 3)") &&
+  adminGallerySrc.includes('dbInsertMany("gallery_items"') &&
+  adminGallerySrc.includes("එකවර Photos 2–3ක්"));
 
 console.log("\n── 8) Board categories (director board page) ──");
 ok("chairman=1, vice-chairman=1", seed.BOARD.filter((m) => m.category === "chairman").length === 1 && seed.BOARD.filter((m) => m.category === "vice-chairman").length === 1);
@@ -812,6 +852,7 @@ ok("backup: latest updates ride inside download/import (settings branches/photos
   backupTables.includes("site_images_backup") &&
   branchSettings.BUSINESS_BRANCH_PHOTOS_KEY === "business_branch_photos" &&
   branchSettings.RURAL_BANK_BRANCHES_KEY === "rural_bank_branches" &&
+  animSettings.BUSINESS_ANIMATION_KEY === "business_animation_settings" &&
   readFileSync(join(root, "src/lib/scheduled-backup.ts"), "utf8").includes("backup_schedule_last_success_date") &&
   backupSrc.includes("if (!opts?.client) await pruneBackupHistory(BACKUP_HISTORY_KEEP)") &&
   backupSrc.includes("Import එකෙන් පස්සේ Backup History එකත් අලුත්ම 5") &&

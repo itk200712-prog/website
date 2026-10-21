@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { ImageIcon, MessageSquare, Pencil, Plus, Search, ThumbsUp, Trash2, Upload } from "lucide-react";
-import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
+import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbInsertMany, dbUpdate, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { GALLERY } from "@/lib/seed";
@@ -17,6 +17,8 @@ export default function AdminGalleryPage() {
   const [modal, setModal] = useState(false);
   const [editFor, setEditFor] = useState<GalleryItem | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
+  // එකම tagline එක යටතේ එකවර upload කරන photos 2–3 (Add mode එකේදී විතරයි)
+  const [batchPhotos, setBatchPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [items, setItems] = useState<GalleryItem[]>([...GALLERY]);
   const [loaded, setLoaded] = useState(false);
@@ -51,11 +53,13 @@ export default function AdminGalleryPage() {
   function openAdd() {
     setEditFor(null);
     setPhoto(null);
+    setBatchPhotos([]);
     setModal(true);
   }
   function openEdit(g: GalleryItem) {
     setEditFor(g);
     setPhoto(g.image || null);
+    setBatchPhotos([]);
     setModal(true);
   }
 
@@ -67,6 +71,29 @@ export default function AdminGalleryPage() {
     setUploading(false);
     if (r && r.url) { setPhoto(r.url); show("✅ Photo upload වුණා — Save ඔබන්න"); }
     else show(`⚠ ${r && r.error ? r.error : "upload failed"}`);
+  }
+
+  // එකවර photos 2–3ක් තෝරලා එකම tagline (Title) එක යටතේ upload කරයි
+  async function onBatchPhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!picked.length) return;
+    const files = picked.slice(0, 3);
+    if (picked.length > 3) show("⚠ එකවර ගත හැක්කේ photos 3ක් විතරයි — මුල් 3 විතරක් ගත්තා");
+    setUploading(true);
+    const urls: string[] = [];
+    for (const f of files) {
+      const r = await uploadSiteImage(f, "gallery");
+      if (r?.url) urls.push(r.url);
+    }
+    setUploading(false);
+    if (urls.length) {
+      setBatchPhotos(urls);
+      setPhoto(null);
+      show(`✅ Photos ${urls.length}ක් upload වුණා — එකම Title එකෙන් Save කරන්න`);
+    } else {
+      show("⚠ Photos upload වුණේ නෑ");
+    }
   }
 
   async function submitItem(e: React.FormEvent<HTMLFormElement>) {
@@ -82,15 +109,30 @@ export default function AdminGalleryPage() {
       likes: editFor?.likes ?? 0,
     };
     let err: string | null;
+    let addedCount = 1;
     if (editFor) {
       err = await dbUpdate("gallery_items", { id: editFor.id }, row);
+    } else if (batchPhotos.length > 0) {
+      // එකම tagline (Title) එක යටතේ photos ඔක්කොම එකවර save කරයි
+      const rows = batchPhotos.map((url, i) => ({ ...row, id: `gal-${Date.now()}-${i + 1}`, image: url }));
+      addedCount = rows.length;
+      err = await dbInsertMany("gallery_items", rows as unknown as Record<string, unknown>[]);
     } else {
       err = await dbInsert("gallery_items", row as unknown as Record<string, unknown>);
     }
     setModal(false);
     setPhoto(null);
+    setBatchPhotos([]);
     await load();
-    show(err ? `⚠ ${err}` : editFor ? "✅ Gallery item updated" : "✅ Gallery item added (public එකේ පේනවා)");
+    show(
+      err
+        ? `⚠ ${err}`
+        : editFor
+          ? "✅ Gallery item updated"
+          : addedCount > 1
+            ? `✅ Gallery items ${addedCount}ක් එකම tagline එකෙන් add වුණා (public එකේ පේනවා)`
+            : "✅ Gallery item added (public එකේ පේනවා)"
+    );
   }
 
   async function removeItem(g: GalleryItem) {
@@ -189,8 +231,8 @@ export default function AdminGalleryPage() {
       {modal && (
         <AdminModal
           title={editFor ? "Edit Gallery Item" : "Add New Gallery Item"}
-          sub={editFor ? `${editFor.title} — update කර Save ඔබන්න` : "Photo එකක් upload කරලා save කරන්න"}
-          onClose={() => { setModal(false); setPhoto(null); }}
+          sub={editFor ? `${editFor.title} — update කර Save ඔබන්න` : "Photo එකක් — හෝ photos 2–3ක් එකම tagline එකෙන් — upload කරලා save කරන්න"}
+          onClose={() => { setModal(false); setPhoto(null); setBatchPhotos([]); }}
         >
           <form key={editFor ? `edit-${editFor.id}` : "add"} onSubmit={submitItem} className="space-y-4">
             <div>
@@ -233,11 +275,48 @@ export default function AdminGalleryPage() {
                 </label>
               </div>
               <input name="image" className="field mt-2.5" defaultValue={editFor?.image ?? ""} placeholder="or enter image path / URL" />
+              {!editFor && (
+                <div className="mt-3 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/60 p-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                    <div className="text-[12px] font-extrabold text-slate-800">
+                      එකවර Photos 2–3ක් — එකම Tagline එකෙන්
+                      <span className="block text-[10.5px] font-medium text-slate-500">
+                        උඩ Title එකම මේ photos ඔක්කෝටම වැටෙනවා. (එකවර උපරිම 3යි)
+                      </span>
+                    </div>
+                    <label className="btn btn-outline cursor-pointer !py-2 !text-[12px]">
+                      <Upload size={14} /> {uploading ? "Uploading…" : "Upload 2–3 Photos"}
+                      <input type="file" accept="image/*" multiple className="hidden" onChange={onBatchPhotos} />
+                    </label>
+                  </div>
+                  {batchPhotos.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                      {batchPhotos.map((src, i) => (
+                        <span key={`${src}-${i}`} className="relative inline-block">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt={`batch ${i + 1}`} className="h-16 w-16 rounded-xl border border-slate-200 object-cover" />
+                          <button
+                            type="button"
+                            title="Remove"
+                            className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-white"
+                            onClick={() => setBatchPhotos((xs) => xs.filter((_, j) => j !== i))}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      <span className="text-[11px] font-bold text-indigo-700">
+                        Photos {batchPhotos.length}ක් — Save කළාම එකම Title එකෙන් add වෙනවා
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-2.5 pt-2">
-              <button type="button" className="btn btn-outline" onClick={() => { setModal(false); setPhoto(null); }}>Cancel</button>
+              <button type="button" className="btn btn-outline" onClick={() => { setModal(false); setPhoto(null); setBatchPhotos([]); }}>Cancel</button>
               <button type="submit" className="btn btn-primary">
-                {editFor ? <><Pencil size={15} /> Save Changes</> : "✓ Add Gallery Item"}
+                {editFor ? <><Pencil size={15} /> Save Changes</> : batchPhotos.length > 1 ? `✓ Add ${batchPhotos.length} Gallery Items` : "✓ Add Gallery Item"}
               </button>
             </div>
           </form>

@@ -36,6 +36,16 @@ export interface BusinessService {
   active: boolean;
 }
 
+/** Admin → Animation settings (system_settings එකේ save වේ; DB column එකක් නෑ) */
+export interface BusinessAnimation {
+  /** පිටුවේ උඩ background / watermark image එක */
+  bgImage: string;
+  /** background image එකේ brightness % (10–120) */
+  brightness: number;
+  /** උඩින් animate වෙලා පේන product images */
+  products: string[];
+}
+
 export interface BusinessUnit {
   slug: string;
   order: number;
@@ -55,6 +65,8 @@ export interface BusinessUnit {
   contacts: BusinessContact[];
   branches: BusinessBranch[];
   services: BusinessService[];
+  /** Admin → Animation එකෙන් දාපු background/watermark + animated products (තියේ නම් විතරයි) */
+  animation?: BusinessAnimation;
 }
 
 export interface BoardMember {
