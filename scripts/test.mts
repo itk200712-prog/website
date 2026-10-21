@@ -1238,7 +1238,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-21-gallery-delete-fix-v7"));
+  genSiteSourceSrc.includes("2026-10-21-admin-gallery-albums-v8"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1252,7 +1252,20 @@ ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrow
   homeSectionsSrc.includes("View More") &&
   homeSectionsSrc.includes("galGo") &&
   adminGallerySrc.includes("groupGalleryItems(items)") &&
-  adminGallerySrc.includes("Album · Photos"));
+  adminGallerySrc.includes("Open Album"));
+ok("admin gallery albums: collapsed professional album cards -> open inside to edit/delete each photo + edit album tagline/description for all",
+  adminGallerySrc.includes("openAlbumKey") &&
+  adminGallerySrc.includes("Photo Album") &&
+  adminGallerySrc.includes("Album Content · Manage Photos") &&
+  adminGallerySrc.includes("Edit Photo") &&
+  adminGallerySrc.includes("Delete Photo") &&
+  adminGallerySrc.includes("editAlbumFor") &&
+  adminGallerySrc.includes("Edit Album Details") &&
+  adminGallerySrc.includes("Save Album Details") &&
+  adminGallerySrc.includes("Album Title / Tagline") &&
+  adminGallerySrc.includes("Album Description") &&
+  adminGallerySrc.includes("for (const p of editAlbumFor.photos)") &&
+  adminGallerySrc.includes("setQuery(e.target.value)"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
