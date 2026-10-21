@@ -111,8 +111,8 @@ karaganna ona` · `Please connect me to someone at the office`.
 
 සමිතියට අදාළ නැති **නිදහස් ප්‍රශ්නවලට** (උදා: `සමූපකාරයක් යනු කුමක්ද?`,
 `සීගිරිය කොහෙද තියෙන්නේ?`) Baymax සාමාන්‍ය AI chat bot එකක් වගේ Gemini AI
-එකෙන් — Google Search grounding එකත් එක්ක — උත්තර දෙනවා. කලින් කතා කරපු දේත්
-(AI වට 8ක් දක්වා) යවන නිසා `ඒක කොහෙද තියෙන්නේ?` වගේ follow-up ප්‍රශ්නත්
+එකෙන් — අවශ්‍ය විට Google Search grounding එකත් එක්ක — උත්තර දෙනවා. කලින් කතා කරපු දේත්
+(AI වට 6ක් දක්වා) යවන නිසා `ඒක කොහෙද තියෙන්නේ?` වගේ follow-up ප්‍රශ්නත්
 තේරෙනවා. පිළිතුරු භාෂාව ප්‍රශ්නයේ භාෂාවමයි: සිංහල/Singlish ඇහුවොත් සිංහල
 අකුරෙන්, English ඇහුවොත් English වලින්. සමිතියට අදාළ ඇත්ත තොරතුරු (නම්,
 දුරකථන, මිල, සාමාජික වාර්තා) AI එක හදලා කියන්නේ නෑ — ඒවා site
@@ -134,6 +134,12 @@ brain/officer flow එකෙන්මයි. Keyword විතරක් ති�
 - **Quota/model වැටුණොත්:** තෝරපු model එකට 429 (quota) හෝ 404 ආවොත් server
   එක search නැතිවත් සහ වෙනත් models කීපයක්ද auto try කරනවා. සේරම fail නම්
   visitor ට “තේරුණේ නෑ” වෙනුවට AI සීමාව පැන ඇති බව කියනවා.
+- **වේගය:** සාමාන්‍ය ස්ථාවර ප්‍රශ්න (අර්ථ දැක්වීම් වගේ) වේගවත් Flash-Lite
+  model එකෙන්, search නැතිව සහ කුඩා output budget එකකින් පිළිතුරු දෙයි.
+  අදට අදාළ/නවතම තොරතුරු, නිල සබැඳි සහ විස්තරාත්මක ප්‍රශ්න තෝරපු model එක
+  සහ search සමඟම යයි. AI config එක තත්පර 30ක් cache වී settings/secrets
+  parallel කියවයි; එක් Gemini attempt එකක් තත්පර 14කටත්, මුළු AI ඉල්ලීම
+  තත්පර 32කටත් සීමා කර ඇත.
 
 ## 🕘 Live Chat කාර්යාල වේලාවන්
 
@@ -195,7 +201,7 @@ reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒව�
   වැඩි කළා; අකුරු 1,800න් මැදින් කප던 සීමාව ඉවත් කළා (ආරක්ෂිත උපරිමය
   20,000). පිළිතුර `MAX_TOKENS` වලින් කැඩුණොත් server එක නැවතුණු තැනින්ම
   **auto-continue** කර සම්පූර්ණ කරලා යවයි. AI ඉතිහාසයත් පිළිතුරක් මැදින්
-  නොකපා (අකුරු 4,000 දක්වා) තබා ගනී. System instruction එකෙන් නිවැරදි
+  නොකපා (අකුරු 2,500 දක්වා) තබා ගනී. System instruction එකෙන් නිවැරදි
   අක්ෂර වින්‍යාසය/ව්‍යාකරණයත්, වාක්‍ය සම්පූර්ණයෙන් අවසන් කිරීමත් අවශ්‍ය කරයි.
   පුවත් විස්තරත් chat එකේ කෙටි නොකර සම්පූර්ණයෙන්ම පෙන්වයි.
 - **Search + clickable links:** පිට තොරතුරු (උදා: ගැසට් පත්‍ර ගන්න site එක)
@@ -218,7 +224,7 @@ reset කරන්න හෝ ගිණුම මකන්න බෑ — ඒව�
 ## ✅ පරීක්ෂණ
 
 ```bash
-npx -y tsx scripts/test.mts   # 289 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone) + office hours + responsive header brand + hidden /hub route + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation + scheduled auto-backup (full ZIP · encrypted v2 · interval/time → Supabase/MEGA)
+npx -y tsx scripts/test.mts   # 291 tests — smalltalk + Sinhala officer intent + Gemini AI (search/history/routing/pro tone/speed routing) + office hours + responsive header brand + hidden /hub route + Coop City branches + site brain/keywords + message box + backup (manifest/encryption/history/restore) + root-admin protection + NIC/phone validation + admin delete controls + Baymax professional (signed-in greeting/identity/complete answers/links) + multi API-key rotation + scheduled auto-backup (full ZIP · encrypted v2 · interval/time → Supabase/MEGA)
 npm run build                 # production build
 ```
 

@@ -15,9 +15,11 @@ import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { authedClient } from "@/lib/supabase/client";
 import { BUSINESSES } from "@/lib/seed";
-import type { BusinessUnit, BusinessService } from "@/lib/types";
+import type { BusinessBranch, BusinessUnit, BusinessService } from "@/lib/types";
 
 const DEFAULT_FEATURES = "Trusted quality, Member privileges, Certified standard";
+const COOP_CITY_BRANCH_LIMIT = 5;
+const emptyBranch = (): BusinessBranch => ({ name: "", manager: "", location: "", phone: "" });
 
 export default function AdminBusinessesPage() {
   const { show, node } = useNotice();
@@ -29,6 +31,7 @@ export default function AdminBusinessesPage() {
   const [svcOpen, setSvcOpen] = useState(false);
   const [units, setUnits] = useState<BusinessUnit[]>([...BUSINESSES]);
   const [mgrRows, setMgrRows] = useState<Array<{ role_en: string; role_si: string; name: string; location: string; phone: string }>>([]);
+  const [branchRows, setBranchRows] = useState<BusinessBranch[]>([]);
   const [coverPreview, setCoverPreview] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
   const [addLogo, setAddLogo] = useState("");
@@ -59,6 +62,13 @@ export default function AdminBusinessesPage() {
   const openEdit = (b: BusinessUnit) => {
     setEditFor(b);
     setMgrRows(b.contacts.map((c) => ({ role_en: c.role_en, role_si: c.role_si, name: c.name, location: c.location, phone: c.phone })));
+    const nextBranches = b.branches.map((br) => ({ ...br }));
+    // Coop City එකට ශාඛා 5ක් එකතු කිරීමට ලේසි වෙන්න හිස් slot 5ක් මුලින්ම දෙයි.
+    // හිස් rows Save කිරීමේදී ඉවත් වන නිසා වැරදි හිස් ශාඛා site එකේ පෙන්වන්නේ නෑ.
+    if (b.slug === "coop-city") {
+      while (nextBranches.length < COOP_CITY_BRANCH_LIMIT) nextBranches.push(emptyBranch());
+    }
+    setBranchRows(nextBranches);
     setCoverPreview(b.cover ?? "");
     setLogoPreview(b.logo ?? "");
   };
@@ -335,13 +345,48 @@ export default function AdminBusinessesPage() {
                 logo: String(fd.get("logo") ?? ""),
                 cover: String(fd.get("cover") ?? "") || null,
               };
-              setUnits((xs) => xs.map((b) => (b.slug === editFor.slug ? { ...b, ...patch } as BusinessUnit : b)));
-              const err = await dbUpdate("business_units", { slug: editFor.slug }, patch);
-              await dbDelete("business_contacts", { business_slug: editFor.slug });
-              for (const c of mgrRows) {
-                if (c.role_en || c.role_si || c.name || c.location || c.phone) {
-                  await dbInsert("business_contacts", { business_slug: editFor.slug, ...c });
-                }
+              const validContacts = mgrRows
+                .map((c) => ({
+                  role_en: c.role_en.trim(),
+                  role_si: c.role_si.trim(),
+                  name: c.name.trim(),
+                  location: c.location.trim(),
+                  phone: c.phone.trim(),
+                }))
+                .filter((c) => c.role_en || c.role_si || c.name || c.location || c.phone);
+              const branchNameSeen = new Map<string, number>();
+              const validBranches = branchRows
+                .map((br, i) => {
+                  const row = {
+                    name: br.name.trim(),
+                    manager: br.manager.trim(),
+                    location: br.location.trim(),
+                    phone: br.phone.trim(),
+                  };
+                  if (!row.name && !row.manager && !row.location && !row.phone) return null;
+                  const baseName = row.name || (editFor.slug === "coop-city" ? `Coop City Branch ${i + 1}` : `Branch ${i + 1}`);
+                  let name = baseName;
+                  let suffix = (branchNameSeen.get(baseName.toLowerCase()) ?? 0) + 1;
+                  while (branchNameSeen.has(name.toLowerCase())) {
+                    name = `${baseName} – ${row.location || suffix}`;
+                    if (branchNameSeen.has(name.toLowerCase())) name = `${name} (${suffix})`;
+                    suffix++;
+                  }
+                  branchNameSeen.set(baseName.toLowerCase(), (branchNameSeen.get(baseName.toLowerCase()) ?? 0) + 1);
+                  branchNameSeen.set(name.toLowerCase(), 1);
+                  return { ...row, name };
+                })
+                .filter((br): br is BusinessBranch => Boolean(br))
+                .slice(0, editFor.slug === "coop-city" ? COOP_CITY_BRANCH_LIMIT : undefined);
+              setUnits((xs) => xs.map((b) => (b.slug === editFor.slug ? { ...b, ...patch, contacts: validContacts, branches: validBranches } as BusinessUnit : b)));
+              let err = await dbUpdate("business_units", { slug: editFor.slug }, patch);
+              err ||= await dbDelete("business_contacts", { business_slug: editFor.slug });
+              for (const c of validContacts) {
+                err ||= await dbInsert("business_contacts", { business_slug: editFor.slug, ...c });
+              }
+              err ||= await dbDelete("business_branches", { business_slug: editFor.slug });
+              for (const br of validBranches) {
+                err ||= await dbInsert("business_branches", { business_slug: editFor.slug, ...br });
               }
               setEditFor(null);
               show(err ? `⚠ ${err}` : "✅ Business division updated");
@@ -382,21 +427,16 @@ export default function AdminBusinessesPage() {
               <textarea name="desc_si" rows={3} defaultValue={editFor.desc_si} className="field" />
             </div>
 
-            {/* managers & branches */}
+            {/* department managers & contact persons */}
             <div className="rounded-2xl border border-slate-200 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="font-extrabold text-slate-900 text-[14px]">Managers, Branches &amp; Contact Persons</div>
-                  <div className="text-slate-400 text-[11px]">Add one or more branch locations or department managers for this business unit.</div>
+                  <div className="font-extrabold text-slate-900 text-[14px]">Department Managers &amp; Contact Persons</div>
+                  <div className="text-slate-400 text-[11px]">These appear under Department Contact &amp; Inquiries on the business page.</div>
                 </div>
-                <div className="flex gap-2">
-                  <button type="button" className="btn btn-primary !py-1.5 !px-3.5 !text-[11.5px]" onClick={() => setMgrRows((rs) => [...rs, { role_en: "", role_si: "", name: "", location: "", phone: "" }])}>
-                    <Plus size={13} /> Add Manager
-                  </button>
-                  <button type="button" className="btn btn-green !py-1.5 !px-3.5 !text-[11.5px]" onClick={() => setMgrRows((rs) => [...rs, { role_en: "Regional Branch", role_si: "ප්‍රාදේශීය ශාඛාව", name: "", location: "", phone: "" }])}>
-                    <Plus size={13} /> Add Regional Branch
-                  </button>
-                </div>
+                <button type="button" className="btn btn-primary !py-1.5 !px-3.5 !text-[11.5px]" onClick={() => setMgrRows((rs) => [...rs, { role_en: "", role_si: "", name: "", location: "", phone: "" }])}>
+                  <Plus size={13} /> Add Manager
+                </button>
               </div>
               {mgrRows.length === 0 && (
                 <div className="text-slate-400 text-[12px] mt-3">දැනට managers නෑ — "+ Add Manager" ඔබලා විස්තර එකතු කරන්න.</div>
@@ -405,10 +445,10 @@ export default function AdminBusinessesPage() {
                 <div key={i} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 mt-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" /> MANAGER / BRANCH #{i + 1}
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" /> CONTACT PERSON #{i + 1}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="badge-blue rounded-full px-2.5 py-0.5 text-[9.5px] font-bold">{c.role_en.toLowerCase().includes("branch") || c.role_en.toLowerCase().includes("ශාඛා") ? "Branch" : "Manager"}</span>
+                      <span className="badge-blue rounded-full px-2.5 py-0.5 text-[9.5px] font-bold">Contact</span>
                       <button type="button" title="Remove" className="text-rose-500 hover:text-rose-700" onClick={() => setMgrRows((rs) => rs.filter((_, j) => j !== i))}>
                         <Trash2 size={13} />
                       </button>
@@ -422,6 +462,86 @@ export default function AdminBusinessesPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* branch settings — Coop City gets its own five-card branch setup */}
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-extrabold text-slate-900 text-[14px]">
+                    {editFor.slug === "coop-city" ? "Our Coop City & Mini Coop City Branch Settings" : "Regional Branch Settings"}
+                  </div>
+                  <div className="text-slate-500 text-[11px] leading-relaxed">
+                    {editFor.slug === "coop-city"
+                      ? "Add up to 5 branches. They appear as ordered cards above Department Contact & Inquiries on the Coop City page."
+                      : "Branches are saved separately and shown in the Regional Branches section where this business template uses it."}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={editFor.slug === "coop-city" && branchRows.length >= COOP_CITY_BRANCH_LIMIT}
+                  className="btn btn-green !py-1.5 !px-3.5 !text-[11.5px] disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => setBranchRows((rs) => [...rs, emptyBranch()])}
+                >
+                  <Plus size={13} /> {editFor.slug === "coop-city" ? `Add Branch (${branchRows.length}/${COOP_CITY_BRANCH_LIMIT})` : "Add Regional Branch"}
+                </button>
+              </div>
+
+              {branchRows.length === 0 && (
+                <div className="text-slate-500 text-[12px] mt-3">දැනට ශාඛා නෑ — “Add Branch” ඔබලා විස්තර එකතු කරන්න.</div>
+              )}
+              {branchRows.map((br, i) => (
+                <div key={i} className="rounded-xl border border-emerald-100 bg-white p-4 mt-4 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[11px] font-black text-emerald-700">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                      {editFor.slug === "coop-city" ? "COOP CITY BRANCH" : "REGIONAL BRANCH"} #{i + 1}
+                    </div>
+                    <button type="button" title="Remove branch" className="text-rose-500 hover:text-rose-700" onClick={() => setBranchRows((rs) => rs.filter((_, j) => j !== i))}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
+                    <div>
+                      <label className="field-label !mb-1">{editFor.slug === "coop-city" ? "Coop City Type" : "Branch Name"}</label>
+                      <input
+                        className="field !py-2 !text-[11.5px]"
+                        placeholder={editFor.slug === "coop-city" ? "e.g. Mini Coop City – Hettipola" : "e.g. Mandapola"}
+                        value={br.name}
+                        onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label !mb-1">Manager Name</label>
+                      <input
+                        className="field !py-2 !text-[11.5px]"
+                        placeholder="කළමනාකරුගේ නම"
+                        value={br.manager}
+                        onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, manager: e.target.value } : r)))}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label !mb-1">Location</label>
+                      <input
+                        className="field !py-2 !text-[11.5px]"
+                        placeholder="ස්ථානය / ලිපිනය"
+                        value={br.location}
+                        onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, location: e.target.value } : r)))}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label !mb-1">Hot Line</label>
+                      <input
+                        className="field !py-2 !text-[11.5px]"
+                        placeholder="037 229 1017"
+                        value={br.phone}
+                        onChange={(e) => setBranchRows((rs) => rs.map((r, j) => (j === i ? { ...r, phone: e.target.value } : r)))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <p className="text-[10.5px] text-slate-400 mt-3">හිස් branch rows Save කිරීමේදී ඉවත් වේ. Type එක ශාඛාව අනුව වෙනස්ව ලියන්න (උදා: Coop City – Hettipola).</p>
             </div>
 
             {/* logo + cover */}

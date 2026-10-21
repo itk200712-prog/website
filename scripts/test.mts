@@ -137,6 +137,24 @@ ok("Hemas-format default features", fresh.services[0].features_en.includes("Trus
 ok("Default desc fallback present", fresh.services[0].desc_en.startsWith("Premier service offered by"));
 const hemas = seed.BUSINESSES.find((b) => b.slug === "hemas");
 ok("Hemas page has its own default-style services (6)", hemas.services.length === 6);
+const businessDetailSrc = readFileSync(join(root, "src/components/business-detail.tsx"), "utf8");
+const businessPageSrc = readFileSync(join(root, "src/app/businesses/[slug]/page.tsx"), "utf8");
+const adminBusinessesSrc = readFileSync(join(root, "src/app/admin/businesses/page.tsx"), "utf8");
+ok("Coop City branches: five Admin-managed cards above Department Contact & Inquiries",
+  businessDetailSrc.includes("export function CoopCityBranches") &&
+  businessDetailSrc.includes("Our Coop City & Mini Coop City Branch") &&
+  businessDetailSrc.includes("Coop City Type") &&
+  businessDetailSrc.includes("Manager Name") &&
+  businessDetailSrc.includes("Hot Line") &&
+  businessDetailSrc.includes('b.slug !== "coop-city"') &&
+  businessPageSrc.indexOf("<CoopCityBranches") > -1 &&
+  businessPageSrc.indexOf("<CoopCityBranches") < businessPageSrc.indexOf("<BusinessContacts") &&
+  adminBusinessesSrc.includes("COOP_CITY_BRANCH_LIMIT = 5") &&
+  adminBusinessesSrc.includes("Our Coop City & Mini Coop City Branch Settings") &&
+  adminBusinessesSrc.includes("const [branchRows, setBranchRows]") &&
+  adminBusinessesSrc.includes('dbDelete("business_branches"') &&
+  adminBusinessesSrc.includes('dbInsert("business_branches"') &&
+  !adminBusinessesSrc.includes('role_en: "Regional Branch"'));
 
 console.log("\n── 8) Board categories (director board page) ──");
 ok("chairman=1, vice-chairman=1", seed.BOARD.filter((m) => m.category === "chairman").length === 1 && seed.BOARD.filter((m) => m.category === "vice-chairman").length === 1);
@@ -452,7 +470,15 @@ const baymaxAi = await import("../src/lib/baymax-ai.ts");
 ok("ai: model id normalizes models/ prefix + case", baymaxAi.normalizeGeminiModel("models/Gemini-3.8-Flash") === "gemini-3.8-flash");
 ok("ai: blank model falls back to default", baymaxAi.normalizeGeminiModel("  ") === baymaxAi.DEFAULT_GEMINI_MODEL);
 const fallbackChain = baymaxAi.modelFallbackChain("gemini-3.5-flash-lite");
-ok("ai: model fallback chain (selected first, unique, capped)", fallbackChain[0] === "gemini-3.5-flash-lite" && fallbackChain.includes("gemini-2.5-flash") && fallbackChain.length === 5 && new Set(fallbackChain).size === fallbackChain.length);
+ok("ai: model fallback chain (selected first, unique, short/fast)", fallbackChain[0] === "gemini-3.5-flash-lite" && fallbackChain.includes("gemini-2.5-flash-lite") && fallbackChain.length === 3 && new Set(fallbackChain).size === fallbackChain.length);
+ok("ai: speed routing (simple → Flash-Lite/no-search/small budget; current/link/detail → selected/search/full)",
+  baymaxAi.preferredAiModel("What is photosynthesis?", "gemini-3.8-flash") === "gemini-3.5-flash-lite" &&
+  baymaxAi.needsWebSearch("What is photosynthesis?") === false &&
+  baymaxAi.aiMaxOutputTokens("What is photosynthesis?") === 1024 &&
+  baymaxAi.needsWebSearch("අද කාලගුණය කොහොමද?") === true &&
+  baymaxAi.preferredAiModel("අද කාලගුණය කොහොමද?", "gemini-3.8-flash") === "gemini-3.8-flash" &&
+  baymaxAi.needsWebSearch("Gazette eke link eka denna") === true &&
+  baymaxAi.aiMaxOutputTokens("විස්තර කියන්න") === 4096);
 ok("ai: general-knowledge detector (general → AI, society facts → site brain)",
   baymaxAi.isGeneralKnowledgeQuestion("සමූපකාරයක් යනු කුමක්ද?") === true &&
   baymaxAi.isGeneralKnowledgeQuestion("What is a cooperative?") === true &&
@@ -470,7 +496,7 @@ ok("ai: normal-chat routing (free questions + follow-ups → AI, society keyword
   baymaxAi.shouldAskAiFirst("Maliban eka koheda thiyenne") === false &&
   baymaxAi.shouldAskAiFirst("සභාපතිගේ දුරකථන අංකය කීයද?") === false &&
   baymaxAi.shouldAskAiFirst("mata aluth deyak igena ganna asai kiyala hithuna") === true);
-ok("ai: history is sanitized (roles mapped, long answers kept whole up to cap)",
+ok("ai: history is sanitized (roles mapped, prompt kept lean for speed)",
   JSON.stringify(baymaxAi.normalizeAiHistory([
     { role: "assistant", text: "  ආයුබෝවන්   ලෝකය " },
     { role: "weird", text: "කොහොමද" },
@@ -479,7 +505,7 @@ ok("ai: history is sanitized (roles mapped, long answers kept whole up to cap)",
   ])) === JSON.stringify([
     { role: "model", text: "ආයුබෝවන් ලෝකය" },
     { role: "user", text: "කොහොමද" },
-    { role: "model", text: "y".repeat(4000) },
+    { role: "model", text: "y".repeat(2500) },
   ]));
 ok("ai: enabled only for explicit on values", baymaxAi.isAiEnabledValue("1") === true && baymaxAi.isAiEnabledValue("true") === true && baymaxAi.isAiEnabledValue("0") === false && baymaxAi.isAiEnabledValue("") === false);
 ok("ai: secret mask never reveals the full key", baymaxAi.maskSecret("prod-secret-123456abcd") === "prod…abcd" && baymaxAi.maskSecret("short") === "••••••••" && baymaxAi.maskSecret("") === "");
@@ -533,7 +559,13 @@ ok("ai: server route reads secret with service role + sends x-goog-api-key",
   baymaxAiRouteSrc.includes("modelFallbackChain") &&
   baymaxAiRouteSrc.includes("quota_exceeded") &&
   baymaxAiRouteSrc.includes("normalizeAiHistory") &&
-  baymaxAiRouteSrc.includes("result.status !== 400 && result.status !== 429"));
+  baymaxAiRouteSrc.includes("CONFIG_CACHE_TTL_MS") &&
+  baymaxAiRouteSrc.includes("Promise.all") &&
+  baymaxAiRouteSrc.includes("GEMINI_ATTEMPT_TIMEOUT_MS") &&
+  baymaxAiRouteSrc.includes("AI_TOTAL_DEADLINE_MS") &&
+  baymaxAiRouteSrc.includes("preferredAiModel") &&
+  baymaxAiRouteSrc.includes("needsWebSearch") &&
+  baymaxAiRouteSrc.includes("[400, 408, 429]"));
 ok("ai: widget sends free questions to AI first (with history) + keeps final AI fallback",
   liveChatSrc.indexOf("shouldAskAiFirst(q") > -1 &&
   liveChatSrc.indexOf("shouldAskAiFirst(q") < liveChatSrc.indexOf("answerFromKnowledge(q, rsi)") &&
@@ -777,7 +809,7 @@ ok("keys: 5 slots, first keeps legacy name; collect trims/dedupes in order",
   JSON.stringify(baymaxAi.collectApiKeys(["", "  "])) === JSON.stringify([]));
 ok("keys: server rotates Key1→Key2→… on quota/invalid and reports key count only",
   baymaxAiRouteSrc.includes("for (const apiKey of apiKeys)") &&
-  baymaxAiRouteSrc.includes("[400, 401, 403, 429].includes(lastStatus)") &&
+  baymaxAiRouteSrc.includes("[0, 400, 401, 403, 404, 408, 429].includes(lastStatus)") &&
   baymaxAiRouteSrc.includes("tryWithKey(apiKey") &&
   baymaxAiRouteSrc.includes("collectApiKeys([envKey, ...storedKeys])") &&
   baymaxAiRouteSrc.includes("keys: c.apiKeys.length") &&

@@ -9,6 +9,7 @@ import {
   BusinessContacts,
   BusinessHero,
   BusinessServices,
+  CoopCityBranches,
   FuelPriceSection,
   FuelLiveStockSection,
   RegionalBranches,
@@ -43,6 +44,9 @@ export default async function BusinessDetailPage({ params }: { params: Promise<{
 
       {/* Consumer — regional branches */}
       {b.special === "consumer" && <RegionalBranches b={b} />}
+
+      {/* Coop City — Coop City / Mini Coop City branches above department contacts */}
+      {b.slug === "coop-city" && <CoopCityBranches b={b} />}
 
       <BusinessContacts b={b} />
       <SiteFooter />

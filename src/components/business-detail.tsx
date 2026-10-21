@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import {
-  ChevronRight, Clock, Fuel, Home, MapPin, Phone, Search, ShieldCheck, Star, TrendingUp, UserRound, 
+  ChevronRight, Clock, Fuel, Home, MapPin, Phone, PhoneCall, Search, ShieldCheck, Star, Store, TrendingUp, UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/i18n";
@@ -261,6 +261,96 @@ export function RegionalBranches({ b }: { b: BusinessUnit }) {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------- Coop City branch cards ----- */
+export function CoopCityBranches({ b }: { b: BusinessUnit }) {
+  const { lang } = useLang();
+  if (b.slug !== "coop-city" || b.branches.length === 0) return null;
+  const si = lang === "si";
+  const labels = {
+    type: si ? "Coop City වර්ගය" : "Coop City Type",
+    manager: si ? "කළමනාකරුගේ නම" : "Manager Name",
+    location: si ? "ස්ථානය" : "Location",
+    hotline: si ? "හොට්ලයින්" : "Hot Line",
+    call: si ? "අමතන්න" : "Call",
+  };
+
+  return (
+    <section className="bg-gradient-to-b from-emerald-50/80 via-white to-white border-y border-emerald-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
+        <SectionHead
+          badge={si ? "Coop City ශාඛා" : "Coop City Branches"}
+          title={si ? "අපගේ Coop City සහ Mini Coop City ශාඛා" : "Our Coop City & Mini Coop City Branch"}
+          sub={
+            si
+              ? "ඔබට ළඟම Coop City හෝ Mini Coop City ශාඛාව තෝරා ගන්න — වර්ගය, කළමනාකරු, ස්ථානය සහ හොට්ලයින් අංකය මෙහි ඇත."
+              : "Choose your nearest Coop City or Mini Coop City branch — branch type, manager, location and hotline are listed here."
+          }
+        />
+
+        <div className="mx-auto max-w-5xl space-y-4">
+          {b.branches.map((br, i) => {
+            const phoneHref = br.phone ? `tel:${br.phone.replace(/\s/g, "")}` : undefined;
+            const rows = [
+              { label: labels.type, value: br.name, icon: <Store size={17} /> },
+              { label: labels.manager, value: br.manager, icon: <UserRound size={17} /> },
+              { label: labels.location, value: br.location, icon: <MapPin size={17} /> },
+            ];
+            return (
+              <article
+                key={`${br.name}-${i}`}
+                className="group overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-[0_18px_45px_-30px_rgba(6,78,59,0.55)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_55px_-30px_rgba(6,78,59,0.65)]"
+              >
+                <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center">
+                  <div className="flex items-center gap-4 lg:w-56 lg:shrink-0">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
+                      <Store size={24} />
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">
+                        {si ? `ශාඛාව ${String(i + 1).padStart(2, "0")}` : `Branch ${String(i + 1).padStart(2, "0")}`}
+                      </div>
+                      <h3 className="mt-1 text-lg font-black leading-snug text-slate-900">{br.name || "—"}</h3>
+                    </div>
+                  </div>
+
+                  <div className="grid flex-1 gap-3 sm:grid-cols-3">
+                    {rows.map((row) => (
+                      <div key={row.label} className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                          <span className="text-emerald-600">{row.icon}</span>
+                          {row.label}
+                        </div>
+                        <div className="mt-1.5 break-words text-[13px] font-bold leading-snug text-slate-800">
+                          {row.value || "—"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-2xl bg-emerald-700 p-4 text-white lg:w-52 lg:shrink-0">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-100">
+                      <PhoneCall size={15} /> {labels.hotline}
+                    </div>
+                    <div className="mt-1 text-lg font-black tabular-nums">{br.phone || "—"}</div>
+                    {phoneHref && (
+                      <a
+                        href={phoneHref}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-[11.5px] font-black text-emerald-800 transition group-hover:bg-amber-300 group-hover:text-slate-900"
+                      >
+                        <Phone size={12} /> {labels.call}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>

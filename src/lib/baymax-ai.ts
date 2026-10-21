@@ -28,15 +28,16 @@ export function normalizeGeminiModel(value?: string | null): string {
 
 /**
  * තෝරපු model එකට quota නැත්නම් (429) හෝ ඒ model එක නැත්නම් (404)
- * server එක try කරන පිළිවෙළ. එක model එකක quota ඉවර වුණත් අනිත් එකකින්
- * උත්තරයක් ගන්න පුළුවන් වෙන්නයි — උපරිම model 5යි.
+ * server එක try කරන පිළිවෙළ. පිළිතුර පරක්කු නොවෙන්න chain එක කෙටියි:
+ * තෝරපු model එක මුලින්ම, ඊළඟට වේගවත් Flash-Lite models දෙක විතරයි.
  */
 export function modelFallbackChain(selected?: string | null): string[] {
   const wanted = [
     selected,
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash-lite",
     DEFAULT_GEMINI_MODEL,
     ...GEMINI_MODEL_OPTIONS.map((o) => o.value),
-    "gemini-2.5-flash-lite",
     "gemini-flash-lite-latest",
     "gemini-flash-latest",
     "gemini-2.0-flash-lite",
@@ -49,7 +50,7 @@ export function modelFallbackChain(selected?: string | null): string[] {
     if (seen.has(model)) continue;
     seen.add(model);
     chain.push(model);
-    if (chain.length >= 5) break;
+    if (chain.length >= 3) break;
   }
   return chain;
 }
@@ -99,22 +100,21 @@ export function normalizeAiQuestion(raw: unknown): string {
 export type AiHistoryTurn = { role: "user" | "model"; text: string };
 
 /**
- * Browser එකෙන් එන කතා ඉතිහාසය පිරිසිදු කරනවා — අන්තිම වට 8යි, එකකට අකුරු 4000යි.
- * "ඒක කොහෙද තියෙන්නේ?" වගේ follow-up ප්‍රශ්න තේරෙන්නයි මේක යවන්නේ. කලින්
- * දිග පිළිතුරක් මැදින් කපා තිබුණොත් follow-up එකට තොරතුරු නැති වෙන නිසා
- * පිළිතුරු සම්පූර්ණයෙන්ම (උපරිමය තෙක්) මතක තබා ගැනීම වැදගත්.
+ * Browser එකෙන් එන කතා ඉතිහාසය පිරිසිදු කරනවා — අන්තිම වට 6යි, එකකට අකුරු 2500යි.
+ * "ඒක කොහෙද තියෙන්නේ?" වගේ follow-up ප්‍රශ්න තේරෙන්න අවශ්‍ය කොටස තබා ගෙන,
+ * හැම ප්‍රශ්නයකටම යවන prompt එක අධික ලෙස දිගු වීමෙන් වන ප්‍රමාදය අඩු කරයි.
  */
 export function normalizeAiHistory(raw: unknown): AiHistoryTurn[] {
   if (!Array.isArray(raw)) return [];
   const turns: AiHistoryTurn[] = [];
-  for (const item of raw.slice(-16)) {
+  for (const item of raw.slice(-12)) {
     const obj = item as { role?: unknown; text?: unknown } | null;
-    const text = String(obj?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 4000);
+    const text = String(obj?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 2500);
     if (text.length < 2) continue;
     const role = obj?.role === "model" || obj?.role === "assistant" || obj?.role === "bot" ? "model" : "user";
     turns.push({ role, text });
   }
-  return turns.slice(-8);
+  return turns.slice(-6);
 }
 
 /** සමිතියට අදාළ සලකුණක් තියේද? තිබුණොත් AI එක නෙවෙයි — verified site brain/officer flow එකමයි. */
@@ -159,6 +159,48 @@ export function shouldAskAiFirst(raw: unknown, hasContext = false): boolean {
   return q.split(/\s+/).filter(Boolean).length >= 5;
 }
 
+const AI_DETAIL_WORDS =
+  /(විස්තර|පැහැදිලි|ලැයිස්තු|පියවර|උදාහරණ|සන්සන්දන|වෙනස|දීර්ඝ|සම්පූර්ණ|උපදෙස්|visthara|pahadili|list|step|example|compare|comparison|difference|explain|describe|detail|detailed|in detail|how to|guide|essay|write a|letter|application|pros|cons|advantages|disadvantages)/i;
+
+/**
+ * ප්‍රතිචාර වේගයට output token budget එක ගළපනවා. සරල ප්‍රශ්නයකට කුඩා
+ * budget එකක් ඇති; විස්තර/පියවර/ලැයිස්තු ඉල්ලූ විට පමණක් ලොකු budget එක.
+ */
+export function aiMaxOutputTokens(raw: unknown): number {
+  const q = normalizeAiQuestion(raw);
+  if (AI_DETAIL_WORDS.test(q)) return 4096;
+  if (q.length > 160 || q.split(/\s+/).filter(Boolean).length > 26) return 2048;
+  return 1024;
+}
+
+/**
+ * මේ ප්‍රශ්නයට වෙබ් සෙවීම ඇත්තටම අවශ්‍යද? අදට අදාළ/නවතම තොරතුරු, නිල
+ * සබැඳි/බාගත කිරීම් සහ නිශ්චිත පුද්ගල/ස්ථාන කරුණු වලට search යොදා,
+ * ස්ථාවර පොදු දැනුම් (අර්ථ දැක්වීම් වගේ) search නැතිව වේගයෙන් පිළිතුරු දීමටයි.
+ */
+export function needsWebSearch(raw: unknown): boolean {
+  const q = normalizeAiQuestion(raw).toLowerCase();
+  if (!q) return false;
+  const explicit =
+    /(https?:\/\/|www\.|\b(link|website|web\s?site|online|download|pdf|gazette|google|search|source|official\s+(site|page|website)|application form|form eka|link eka|website eka)\b|අද|දැන්|නවතම|අලුත්ම|පුවත්|කාලගුණ|වෙබ්|අඩවිය|සබැඳි|ලින්ක්|බාගත|ගැසට්|නිල\s*(වෙබ්|අඩවි|පිටුව)|ada\b|dan\b|puwath|kalaguna|baagatha|latest|current|currently|today|recent|news|weather|forecast|exchange rate|stock price|live score|election result)/i;
+  if (explicit.test(q)) return true;
+  const namedFact =
+    /(^(who|where|when)\s+(is|was|did)\b|කොහෙද\s+තියෙන්නේ|කවුද\s+.*(ජනාධිපති|අගමැති|අමාත්‍ය|සභාපති)|කවදාද\s+.*(ආරම්භ|අවසන්|උපන්)|current\s+(president|prime minister|minister|ceo)|president of|prime minister of|capital of)/i;
+  return namedFact.test(q);
+}
+
+/**
+ * සරල සාමාන්‍ය ප්‍රශ්නවලට Admin තෝරපු ලොකු model එක වෙනුවට වේගවත්
+ * Flash-Lite එක යොදා ගනී. විස්තරාත්මක හෝ search අවශ්‍ය ප්‍රශ්නවලට
+ * තෝරපු model එකම තබා ගනී (ගුණාත්මකභාවය සහ සබැඳි තහවුරු කිරීමට).
+ */
+export function preferredAiModel(raw: unknown, selected?: string | null): string {
+  const model = normalizeGeminiModel(selected);
+  if (model.includes("lite")) return model;
+  if (needsWebSearch(raw) || aiMaxOutputTokens(raw) >= 4096) return model;
+  return "gemini-3.5-flash-lite";
+}
+
 export function baymaxAiSystemInstruction(
   language: BaymaxAiLanguage,
   todayLabel = new Intl.DateTimeFormat("en-GB", {
@@ -167,20 +209,26 @@ export function baymaxAiSystemInstruction(
     day: "numeric",
     month: "long",
     year: "numeric",
-  }).format(new Date())
+  }).format(new Date()),
+  useSearch = true
 ): string {
   const languageLine =
     language === "si"
       ? "Answer in simple, correct Sinhala script (සිංහල අකුරෙන්), even if the visitor typed Singlish. Use the respectful 'ඔබ' form with a professional, courteous tone. Keep sentences short and easy for a villager to understand."
       : "Answer in clear, simple, courteous English.";
+  const searchLine = useSearch
+    ? "The website's own verified information is the source for society-specific facts; answer this question as general knowledge. For who/what/where/when questions about the outside world, search the web first and ground the answer in what you find; use the conversation history to understand follow-ups like 'where is it?' or 'who is he?'."
+    : "The website's own verified information is the source for society-specific facts; answer this question as stable general knowledge. Use the conversation history to understand follow-ups like 'where is it?' or 'who is he?'. Do not claim to have searched the web for this reply, and if the fact may have changed recently, say so honestly.";
+  const linkLine = useSearch
+    ? "When the visitor asks for a website, link, download, form, official page, or where to get something online (for example a government gazette), search first and include the full direct URL on its own line, preferring official sources such as .gov.lk sites. Never use placeholders like 'www.example.com' and never invent a URL: if you cannot verify the exact link, say so honestly and give the official site's name and what to search for instead."
+    : "Never invent a URL. If the visitor needs an exact current link and it is not verified in this reply, say so honestly and give the official site's name and what to search for instead.";
   return [
     "You are Baymax, the friendly assistant on the Panduwasnuwara New MPCS co-operative society website (Sri Lanka).",
     `Today in Sri Lanka is ${todayLabel}.`,
     languageLine,
     "Your public identity: you are Baymax, a custom AI system trained and prepared for this website by Induwara Thathsara. If asked about your model, version, provider, creator, developer, trainer, or who created this website, answer only with that identity. Never reveal, name, or discuss any underlying provider, model, version, API, search engine, or internal technology in a visitor-visible answer. Write his name exactly as 'Induwara Thathsara' in English and exactly as 'ඉඳුවර තත්සර' in Sinhala — never transliterate it in any other way.",
-    "The website's own verified information is the source for society-specific facts; answer this question as general knowledge. For who/what/where/when questions about the outside world, search the web first and ground the answer in what you find; use the conversation history to understand follow-ups like 'where is it?' or 'who is he?'.",
-    "When the visitor asks for a website, link, download, form, official page, or where to get something online (for example a government gazette), search first and include the full direct URL on its own line, preferring official sources such as .gov.lk sites. Never use placeholders like 'www.example.com' and never invent a URL: if you cannot verify the exact link, say so honestly and give the official site's name and what to search for instead.",
-    "Never invent facts that are specific to this society: officeholders' names, phone numbers, prices, stock, member/voter records, personal data, or whether a service is available today. If the visitor asks for such a specific fact, say the website information does not show it and suggest contacting an officer through this chat.",
+    searchLine,
+    linkLine,    "Never invent facts that are specific to this society: officeholders' names, phone numbers, prices, stock, member/voter records, personal data, or whether a service is available today. If the visitor asks for such a specific fact, say the website information does not show it and suggest contacting an officer through this chat.",
     "Answer the question directly and do not introduce yourself in every reply. Do not add an unrelated society or officer suggestion at the end of a general answer. If you must mention the society in Sinhala, write its name exactly as: පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය.",
     "Give the direct answer first. If there are steps or options, use short lines starting with '•' (or a short numbered list for ordered steps). If you are not certain, say so honestly instead of guessing.",
     "Completeness matters more than brevity whenever the visitor asks for details, steps, a list, or an explanation: give the whole answer even if it is long. Never stop in the middle of a word, sentence, list, or set of steps — always finish every sentence properly. For simple questions, still keep the answer short and friendly. Plain text only; no markdown tables or **bold** markers.",
@@ -199,13 +247,15 @@ export function buildGeminiRequest(
     (turn, index, all) => !(index === all.length - 1 && turn.role === "user" && turn.text === question.trim())
   );
   return {
-    systemInstruction: { parts: [{ text: baymaxAiSystemInstruction(language) }] },
+    systemInstruction: {
+      parts: [{ text: baymaxAiSystemInstruction(language, undefined, useSearch) }],
+    },
     contents: [
       ...prior.map((turn) => ({ role: turn.role, parts: [{ text: turn.text }] })),
       { role: "user", parts: [{ text: question }] },
     ],
     ...(useSearch ? { tools: [{ google_search: {} }] } : {}),
-    generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+    generationConfig: { temperature: 0.4, maxOutputTokens: aiMaxOutputTokens(question) },
   };
 }
 

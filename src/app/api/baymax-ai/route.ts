@@ -17,9 +17,11 @@ import {
   GEMINI_API_KEY_SLOTS,
   isAiEnabledValue,
   modelFallbackChain,
+  needsWebSearch,
   normalizeAiHistory,
   normalizeAiQuestion,
   normalizeGeminiModel,
+  preferredAiModel,
   withSourceLinks,
   type AiHistoryTurn,
   type AiSourceLink,
@@ -85,19 +87,37 @@ type AiConfig = {
   serverConfigured: boolean;
 };
 
+// හැම AI ප්‍රශ්නයකදීම Supabase එකට දෙපාරක් යන එක response එක පරක්කු කරයි.
+// Warm serverless instance එකක config එක තත්පර 30ක් cache කර, settings සහ
+// secrets කියවීම් දෙකම එකවර (parallel) කරයි. Admin වෙනසක් උපරිම තත්පර 30කින් පෙනේ.
+const CONFIG_CACHE_TTL_MS = 30_000;
+let configCache: { at: number; config: AiConfig } | null = null;
+
 async function loadConfig(): Promise<AiConfig> {
+  if (configCache && Date.now() - configCache.at < CONFIG_CACHE_TTL_MS) {
+    return configCache.config;
+  }
+
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
   const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
   const envKey = (process.env.GEMINI_API_KEY ?? "").trim();
+  const readKey = serviceKey || anonKey;
+
+  const [settingsRowsRaw, secretRowsRaw] = await Promise.all([
+    readKey
+      ? supabaseRest("system_settings?select=key,value&key=in.(chat_ai_enabled,chat_ai_model)", readKey)
+      : Promise.resolve(null),
+    serviceKey
+      ? supabaseRest(`backup_secrets?select=key,value&key=in.(${GEMINI_API_KEY_SLOTS.join(",")})`, serviceKey)
+      : Promise.resolve(null),
+  ]);
 
   let enabled = false;
   let model: string = DEFAULT_GEMINI_MODEL;
-  const readKey = serviceKey || anonKey;
+  let settingsOk = !readKey;
   if (readKey) {
-    const rows = (await supabaseRest(
-      "system_settings?select=key,value&key=in.(chat_ai_enabled,chat_ai_model)",
-      readKey
-    )) as { key: string; value: string }[] | null;
+    const rows = settingsRowsRaw as { key: string; value: string }[] | null;
+    settingsOk = rows !== null;
     const map = new Map((rows ?? []).map((r) => [r.key, r.value]));
     enabled = isAiEnabledValue(map.get("chat_ai_enabled"));
     model = normalizeGeminiModel(map.get("chat_ai_model"));
@@ -105,17 +125,19 @@ async function loadConfig(): Promise<AiConfig> {
 
   // Admin එකෙන් දාපු keys 5ම (slot පිළිවෙළට) — එකක් limit වුණොත් ඊළඟ එක
   let storedKeys: string[] = [];
+  let secretsOk = !serviceKey;
   if (serviceKey) {
-    const rows = (await supabaseRest(
-      `backup_secrets?select=key,value&key=in.(${GEMINI_API_KEY_SLOTS.join(",")})`,
-      serviceKey
-    )) as { key: string; value: string }[] | null;
+    const rows = secretRowsRaw as { key: string; value: string }[] | null;
+    secretsOk = rows !== null;
     const bySlot = new Map((rows ?? []).map((r) => [r.key, r.value]));
     storedKeys = GEMINI_API_KEY_SLOTS.map((slot) => bySlot.get(slot) ?? "");
   }
   const apiKeys = collectApiKeys([envKey, ...storedKeys]);
+  const config = { enabled, model, apiKeys, serverConfigured: Boolean(envKey || serviceKey) };
 
-  return { enabled, model, apiKeys, serverConfigured: Boolean(envKey || serviceKey) };
+  // Network අසාර්ථක වීමක් cache කරන්නේ නෑ — ඊළඟ ප්‍රශ්නයේදීම ආයේ උත්සාහ කරයි.
+  if (settingsOk && secretsOk) configCache = { at: Date.now(), config };
+  return config;
 }
 
 /** Admin → Live Chat එකේ setup status එක පෙන්වන්න (key එක return වෙන්නේ නෑ) */
@@ -143,13 +165,17 @@ function appendContinuation(current: string, next: string): string {
   return `${current} ${next}`;
 }
 
+const GEMINI_ATTEMPT_TIMEOUT_MS = 14_000;
+const AI_TOTAL_DEADLINE_MS = 32_000;
+
 async function callGemini(
   apiKey: string,
   model: string,
   question: string,
   language: BaymaxAiLanguage,
   useSearch: boolean,
-  history: AiHistoryTurn[]
+  history: AiHistoryTurn[],
+  deadlineAt: number
 ): Promise<GeminiResult> {
   let fullAnswer = "";
   const sources: AiSourceLink[] = [];
@@ -158,9 +184,20 @@ async function callGemini(
 
   // පිළිතුර token සීමාවෙන් (MAX_TOKENS) මැදින් කැඩුණොත්, නැවතුණු තැනින්ම
   // ඉතිරිය ලියවා ගෙන සම්පූර්ණ පිළිතුරක් විදිහට යවනවා — අඩක් උත්තර බෑ.
+  // එක් attempt එකක් තත්පර 14කට සීමා කර ඇති නිසා hang වන model/key එකක්
+  // නිසා මුළු chat එකම විනාඩියක් නවතින්නේ නෑ.
   for (let pass = 0; pass < 3; pass++) {
+    const remaining = deadlineAt - Date.now();
+    if (remaining <= 750) {
+      return fullAnswer
+        ? { ok: true, answer: withSourceLinks(fullAnswer, sources, language) }
+        : { ok: false, status: 408 };
+    }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25_000);
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.max(750, Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, remaining))
+    );
     try {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -189,8 +226,11 @@ async function callGemini(
       requestHistory = [...history, { role: "user", text: question }, { role: "model", text: fullAnswer }];
       requestQuestion =
         "Continue exactly where the previous answer stopped and finish it completely. Do not repeat anything already written, do not add a new introduction, and make sure the final sentence is complete.";
-    } catch {
-      return fullAnswer ? { ok: true, answer: withSourceLinks(fullAnswer, sources, language) } : { ok: false, status: 0 };
+    } catch (err) {
+      const timedOut = err instanceof Error && err.name === "AbortError";
+      return fullAnswer
+        ? { ok: true, answer: withSourceLinks(fullAnswer, sources, language) }
+        : { ok: false, status: timedOut ? 408 : 0 };
     } finally {
       clearTimeout(timer);
     }
@@ -207,30 +247,38 @@ type GeminiAnswer = { ok: true; answer: string; model: string } | { ok: false; s
  * Model එකක් නැත්නම් (404) හෝ එහි quota ඉවර නම් (429) ඊළඟ model එකට යනවා;
  * quota එක model එක අනුව වෙනස් නිසා එකක් බ්ලොක් වුණත් අනිකෙන් උත්තරේ එන්න පුළුවන්.
  */
-/** එක් key එකකින් model fallback chain එකම උත්සාහ කරයි */
+/** එක් key එකකින් කෙටි model fallback chain එක උත්සාහ කරයි (deadline එක තුළ) */
 async function tryWithKey(
   apiKey: string,
   selectedModel: string,
   question: string,
   language: BaymaxAiLanguage,
-  history: AiHistoryTurn[]
+  history: AiHistoryTurn[],
+  searchPreferred: boolean,
+  deadlineAt: number
 ): Promise<GeminiAnswer> {
   const chain = modelFallbackChain(selectedModel);
   let lastStatus = 0;
 
   for (let i = 0; i < chain.length; i++) {
+    if (Date.now() >= deadlineAt) break;
     const model = chain[i];
-    // හැම model එකකින්ම මුලින් Google Search එක්ක; ඒකට 400/429 ආවොත් විතරක් search නැතිව
-    const attempts = [true, false];
+    // Search අවශ්‍ය ප්‍රශ්නයකට පමණක් මුලින් search; සාමාන්‍ය ප්‍රශ්නයකට
+    // search නැති වේගවත් මාර්ගයමයි. Search එක අසාර්ථක නම් එකම model එකෙන්
+    // search නැතිව එක් වරක් උත්සාහ කරයි.
+    const attempts = searchPreferred ? [true, false] : [false];
     for (const useSearch of attempts) {
-      const result = await callGemini(apiKey, model, question, language, useSearch, history);
+      if (Date.now() >= deadlineAt) break;
+      const result = await callGemini(apiKey, model, question, language, useSearch, history, deadlineAt);
       if (result.ok) return { ok: true, answer: result.answer, model };
       lastStatus = result.status;
       // search එක්ක ගැටලුවක් නම් විතරක් search නැති උත්සාහයට යනවා
-      if (useSearch && result.status !== 400 && result.status !== 429) break;
+      if (useSearch && ![400, 408, 429].includes(result.status)) break;
     }
-    // key එකම වැරදි නම් (401) හෝ ඉල්ලීමම වැරදි නම් (400) තව model try කරලා වැඩක් නෑ
-    if (lastStatus === 401 || lastStatus === 400) break;
+    // Key එක වැරදි/අවසර නැති නම් මේ key එකෙන් තව models උත්සාහ කරන්නේ නෑ.
+    // 404 (model නෑ), 408 (timeout), 429 (quota), 5xx/network නම් ඊළඟ model එකට.
+    if (lastStatus === 401 || lastStatus === 403) break;
+    if (lastStatus === 400 && !searchPreferred) break;
   }
 
   return { ok: false, status: lastStatus };
@@ -248,13 +296,18 @@ async function callGeminiWithFallbacks(
   language: BaymaxAiLanguage,
   history: AiHistoryTurn[]
 ): Promise<GeminiAnswer> {
+  const deadlineAt = Date.now() + AI_TOTAL_DEADLINE_MS;
+  const model = preferredAiModel(question, selectedModel);
+  const searchPreferred = needsWebSearch(question);
   let lastStatus = 0;
   for (const apiKey of apiKeys) {
-    const result = await tryWithKey(apiKey, selectedModel, question, language, history);
+    if (Date.now() >= deadlineAt) break;
+    const result = await tryWithKey(apiKey, model, question, language, history, searchPreferred, deadlineAt);
     if (result.ok) return result;
     lastStatus = result.status;
-    // quota ඉවරයි (429) හෝ key එක වැරදියි (400/401/403) නම් විතරක් ඊළඟ key එකට
-    if (![400, 401, 403, 429].includes(lastStatus)) break;
+    // quota/key/model/timeout/network ගැටලුවක් නම් ඊළඟ key එකට යනවා;
+    // මුළු උත්සාහයම deadline එකෙන් සීමා වී ඇති නිසා chat එක එල්ලිලා තියෙන්නේ නෑ.
+    if (![0, 400, 401, 403, 404, 408, 429].includes(lastStatus) && lastStatus < 500) break;
   }
   return { ok: false, status: lastStatus };
 }
@@ -286,11 +339,13 @@ export async function POST(req: NextRequest) {
     reason:
       result.status === 429
         ? "quota_exceeded"
-        : result.status === 404
-          ? "invalid_model"
-          : result.status === 400 || result.status === 401 || result.status === 403
-            ? "invalid_key"
-            : "ai_error",
+        : result.status === 408
+          ? "ai_timeout"
+          : result.status === 404
+            ? "invalid_model"
+            : result.status === 400 || result.status === 401 || result.status === 403
+              ? "invalid_key"
+              : "ai_error",
     status: result.status || undefined,
   });
 }
