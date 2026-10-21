@@ -1165,6 +1165,51 @@ ok("backup v3: public icons/images + CSS/cursor source in ZIP, manifest-hashed, 
   adminBackupSrc.includes("Site update package") &&
   recText.includes("site-assets/public/"));
 
+// 🖼 Gallery social: replies + comment/reply likes + photo views + superadmin boost
+const gallerySocial = await import("../src/lib/gallery-social.ts");
+const gsTree = gallerySocial.buildGalleryCommentTree([
+  { id: "c1", author: "A", text: "top", created_at: "2026-01-01", parent_id: null, likes: 2 },
+  { id: "r1", author: "B", text: "reply", created_at: "2026-01-02", parent_id: "c1", likes: 3 },
+  { id: "r2", author: "C", text: "reply to reply", created_at: "2026-01-03", parent_id: "r1", likes: 4 },
+  { id: "orphan", author: "D", text: "orphan", created_at: "2026-01-04", parent_id: "missing", likes: 0 },
+]);
+ok("gallery social: one-level reply tree + counts + boost clamps + random views bounds",
+  gsTree.length === 2 &&
+  gsTree[0].id === "c1" &&
+  gsTree[0].replies.map((r) => r.id).join(",") === "r1,r2" &&
+  gallerySocial.countGalleryComments(gsTree.flatMap((n) => [n, ...n.replies])) === 4 &&
+  gallerySocial.normalizeGalleryCount(-5) === 0 &&
+  gallerySocial.normalizeGalleryCount("42.9") === 42 &&
+  gallerySocial.clampBoostAmount("") === 0 &&
+  gallerySocial.clampBoostAmount("250000") === 100000 &&
+  gallerySocial.randomGalleryViews(() => 0) === 25 &&
+  gallerySocial.randomGalleryViews(() => 0.999999) === 250 &&
+  gallerySocial.updateGalleryCommentLikes([{ id: "x", author: "", text: "", created_at: "", likes: 1 }], "x", 9)[0].likes === 9);
+const galleryGridSrc = readFileSync(join(root, "src/components/gallery-grid.tsx"), "utf8");
+ok("gallery social: everyone like/view + signed-in replies + superadmin-only boost (UI + RPC + schema + admin + backup snapshot)",
+  galleryGridSrc.includes("buildGalleryCommentTree") &&
+  galleryGridSrc.includes('me?.role === "superadmin"') &&
+  galleryGridSrc.includes("gallery_bump_photo") &&
+  galleryGridSrc.includes("gallery_bump_comment_likes") &&
+  galleryGridSrc.includes("Random Views (25–250)") &&
+  galleryGridSrc.includes("trackView") &&
+  galleryGridSrc.includes("parent_id: parentId") &&
+  siteDataSrc.includes("parent_id: c.parent_id") &&
+  siteDataSrc.includes("views: normalizeGalleryCount(g.views)") &&
+  adminGallerySrc.includes("buildGalleryCommentTree") &&
+  adminGallerySrc.includes("normalizeGalleryCount(g.views)") &&
+  schema.includes("views int not null default 0") &&
+  schema.includes("parent_id uuid references public.gallery_comments") &&
+  schema.includes("gallery_comment_parent_guard") &&
+  schema.includes("public.is_superadmin()") &&
+  schema.includes("only superadmins can add custom like/view amounts") &&
+  schema.includes("grant execute on function public.gallery_bump_photo(text, int, int) to anon, authenticated") &&
+  schema.includes("grant execute on function public.gallery_bump_comment_likes(uuid, int) to anon, authenticated") &&
+  genSiteSourceSrc.includes('"src/components/gallery-grid.tsx"') &&
+  genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
+  genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
+  genSiteSourceSrc.includes("2026-10-21-gallery-social-v4"));
+
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
 console.log(`══════════════════════════════════════\n`);

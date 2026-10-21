@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { PhoneImageIcon as Phone, LocationImageIcon as MapPin } from "@/components/site-icons";
 import { GallerySocial, useMe, updateItem, type Me } from "@/components/gallery-grid";
+import { updateGalleryCommentLikes } from "@/lib/gallery-social";
 import type { GalleryComment } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { HeroSlideshow } from "@/components/hero-slideshow";
@@ -338,9 +339,18 @@ export function HomeSections({
                     item={galCurrent}
                     me={me as Me}
                     onLike={(n) => setGalItems((xs) => updateItem(xs, galCurrent.id, { likes: n }))}
+                    onViews={(n) => setGalItems((xs) => updateItem(xs, galCurrent.id, { views: n }))}
                     onComment={(c: GalleryComment) =>
                       setGalItems((xs) => updateItem(xs, galCurrent.id, { comments: [...(xs.find((x) => x.id === galCurrent.id)?.comments ?? []), c] }))
                     }
+                    onCommentLike={(commentId, n) =>
+                      setGalItems((xs) =>
+                        updateItem(xs, galCurrent.id, {
+                          comments: updateGalleryCommentLikes(xs.find((x) => x.id === galCurrent.id)?.comments ?? [], commentId, n),
+                        })
+                      )
+                    }
+                    trackView
                   />
                 </div>
               )}

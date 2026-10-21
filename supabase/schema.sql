@@ -157,14 +157,18 @@ create table if not exists public.gallery_items (
   description text default '',
   aspect text default '4:3',
   image text default '',
-  likes int default 0
+  likes int not null default 0,
+  views int not null default 0
 );
 
 create table if not exists public.gallery_comments (
   id uuid primary key default gen_random_uuid(),
   item_id text references public.gallery_items (id) on delete cascade,
+  -- Reply එකක් නම් top-level comment එකේ id එක (එක මට්ටමේ threads විතරයි)
+  parent_id uuid references public.gallery_comments (id) on delete cascade,
   author text default '',
   text text default '',
+  likes int not null default 0,
   created_at timestamptz default now()
 );
 
@@ -942,16 +946,133 @@ create policy "site_images_anon_upload" on storage.objects for insert
 
 
 -- ---------------------------------------------------------------------------
--- 17. GALLERY LIKES + COMMENTS (signed-in members ලට like/comment කරන්න)
+-- 17. GALLERY SOCIAL — photo Views + comment Replies + comment/reply Likes
+--     • Comment/Reply ලියන්න: signed-in members ලට (කලින් විදිහටම)
+--     • Like (photo/comment/reply) + View count: හැමෝටම (වරකට ±1 විතරයි)
+--     • කැමති ගාණක් Likes/Views එකතු කරන්න (boost): SUPERADMIN ලට විතරයි
+--       — ඒක RPC functions දෙකෙන් DB එක ඇතුළෙදිම is_superadmin() බලලා කරනවා
+-- ⚠ දැනට තියෙන live project එකක නම් මේ §17 block එක SQL Editor එකේ run කරන්න
 -- ---------------------------------------------------------------------------
-drop policy if exists "gallery_items_member_like" on public.gallery_items;
-create policy "gallery_items_member_like" on public.gallery_items for update
-  using (auth.role() = 'authenticated')
-  with check (auth.role() = 'authenticated');
+alter table public.gallery_items add column if not exists views int not null default 0;
+alter table public.gallery_comments
+  add column if not exists parent_id uuid references public.gallery_comments (id) on delete cascade;
+alter table public.gallery_comments add column if not exists likes int not null default 0;
+update public.gallery_items set likes = coalesce(likes, 0), views = coalesce(views, 0);
+update public.gallery_comments set likes = coalesce(likes, 0);
+alter table public.gallery_items alter column likes set not null;
+alter table public.gallery_items alter column views set not null;
+alter table public.gallery_comments alter column likes set not null;
+create index if not exists gallery_comments_parent_idx on public.gallery_comments (parent_id);
+create index if not exists gallery_comments_item_created_idx on public.gallery_comments (item_id, created_at);
 
+-- Comment/Reply ලියන්න signed-in අයට විතරයි (author නම profile එකෙන් එන නිසා)
 drop policy if exists "gallery_comments_member_insert" on public.gallery_comments;
 create policy "gallery_comments_member_insert" on public.gallery_comments for insert
   with check (auth.role() = 'authenticated');
+
+-- කලින් තිබුණු "authenticated කෙනෙකුට gallery_items ඕන column එකක් update කරන්න"
+-- පුළුවන් broad policy එක අයින් කරනවා — likes/views දැන් යන්නේ ආරක්ෂිත RPC එකෙන්
+drop policy if exists "gallery_items_member_like" on public.gallery_items;
+
+-- Reply එකක් වෙන photo එකක comment එකට යාම වලක්වයි; reply එකකට reply දැම්මොත්
+-- එම thread එකේම top-level comment එකට අමුණයි (එක මට්ටමේ threads විතරයි)
+create or replace function public.gallery_comment_parent_guard() returns trigger
+language plpgsql set search_path = public as $$
+declare
+  p record;
+begin
+  if new.parent_id is null then
+    return new;
+  end if;
+  select item_id, parent_id into p from public.gallery_comments where id = new.parent_id;
+  if not found then
+    raise exception 'parent comment not found';
+  end if;
+  if p.item_id is distinct from new.item_id then
+    raise exception 'reply must belong to the same gallery item';
+  end if;
+  if p.parent_id is not null then
+    new.parent_id := p.parent_id;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists gallery_comment_parent_guard_trg on public.gallery_comments;
+create trigger gallery_comment_parent_guard_trg
+  before insert or update of parent_id, item_id on public.gallery_comments
+  for each row execute function public.gallery_comment_parent_guard();
+
+-- 📸 Photo likes/views වෙනස් කරන එකම ආරක්ෂිත දොරටුව:
+-- සාමාන්‍ය අය: like ±1, view +1 විතරයි · Superadmin: ±100000 දක්වා (custom boost)
+create or replace function public.gallery_bump_photo(
+  p_item_id text,
+  p_likes_delta int default 0,
+  p_views_delta int default 0
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_likes int;
+  v_views int;
+begin
+  p_likes_delta := coalesce(p_likes_delta, 0);
+  p_views_delta := coalesce(p_views_delta, 0);
+  if public.is_superadmin() then
+    if p_likes_delta < -100000 or p_likes_delta > 100000
+       or p_views_delta < -100000 or p_views_delta > 100000 then
+      raise exception 'boost amount out of range';
+    end if;
+  else
+    if p_likes_delta not in (-1, 0, 1) or p_views_delta not in (0, 1) then
+      raise exception 'only superadmins can add custom like/view amounts';
+    end if;
+  end if;
+
+  update public.gallery_items
+     set likes = greatest(0, likes + p_likes_delta),
+         views = greatest(0, views + p_views_delta)
+   where id = p_item_id
+  returning likes, views into v_likes, v_views;
+  if not found then
+    raise exception 'gallery item not found';
+  end if;
+  return jsonb_build_object('likes', v_likes, 'views', v_views);
+end;
+$$;
+revoke all on function public.gallery_bump_photo(text, int, int) from public;
+grant execute on function public.gallery_bump_photo(text, int, int) to anon, authenticated;
+
+-- 💬 Comment/Reply likes: සාමාන්‍ය අය ±1 විතරයි · Superadmin කැමති ගාණක්
+create or replace function public.gallery_bump_comment_likes(
+  p_comment_id uuid,
+  p_delta int
+) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  v_likes int;
+begin
+  p_delta := coalesce(p_delta, 0);
+  if public.is_superadmin() then
+    if p_delta < -100000 or p_delta > 100000 then
+      raise exception 'boost amount out of range';
+    end if;
+  else
+    if p_delta not in (-1, 0, 1) then
+      raise exception 'only superadmins can add custom like amounts';
+    end if;
+  end if;
+
+  update public.gallery_comments
+     set likes = greatest(0, likes + p_delta)
+   where id = p_comment_id
+  returning likes into v_likes;
+  if not found then
+    raise exception 'comment not found';
+  end if;
+  return v_likes;
+end;
+$$;
+revoke all on function public.gallery_bump_comment_likes(uuid, int) from public;
+grant execute on function public.gallery_bump_comment_likes(uuid, int) to anon, authenticated;
 
 
 -- ---------------------------------------------------------------------------

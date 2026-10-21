@@ -5,13 +5,14 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { ImageIcon, Pencil, Plus, Search, ThumbsUp, Trash2, Upload } from "lucide-react";
+import { Eye, Heart, ImageIcon, Pencil, Plus, Reply, Search, ThumbsUp, Trash2, Upload } from "lucide-react";
 import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
+import { buildGalleryCommentTree, normalizeGalleryCount } from "@/lib/gallery-social";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbInsertMany, dbUpdate, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { GALLERY } from "@/lib/seed";
-import type { GalleryItem } from "@/lib/types";
+import type { GalleryComment, GalleryItem } from "@/lib/types";
 
 export default function AdminGalleryPage() {
   const { show, node } = useNotice();
@@ -36,13 +37,16 @@ export default function AdminGalleryPage() {
             ...g,
             comments: (cm ?? [])
               .filter((c: { item_id: string }) => c.item_id === g.id)
-              .map((c: { id: string; author: string; text: string; created_at: string }) => ({
+              .map((c: { id: string; author: string; text: string; created_at: string; parent_id?: string | null; likes?: number }) => ({
                 id: String(c.id),
                 author: String(c.author ?? ""),
                 text: String(c.text ?? ""),
                 created_at: String(c.created_at ?? ""),
+                parent_id: c.parent_id ? String(c.parent_id) : null,
+                likes: normalizeGalleryCount(c.likes),
               })),
-            likes: typeof g.likes === "number" ? g.likes : 0,
+            likes: normalizeGalleryCount(g.likes),
+            views: normalizeGalleryCount(g.views),
           }))
         );
       }
@@ -107,7 +111,8 @@ export default function AdminGalleryPage() {
       description: String(fd.get("description")),
       aspect: String(fd.get("aspect")) as GalleryItem["aspect"],
       image: photo || String(fd.get("image")) || "",
-      likes: editFor?.likes ?? 0,
+      likes: normalizeGalleryCount(editFor?.likes),
+      views: normalizeGalleryCount(editFor?.views),
     };
     let err: string | null;
     let addedCount = 1;
@@ -141,6 +146,40 @@ export default function AdminGalleryPage() {
     const err = await dbDelete("gallery_items", { id: g.id });
     await load();
     show(err ? `⚠ ${err}` : "✅ Deleted");
+  }
+
+  function renderAdminComment(c: GalleryComment, isReply: boolean) {
+    return (
+      <div
+        key={c.id}
+        className={`flex items-start gap-2 rounded-xl px-3 py-2 ${
+          isReply ? "bg-white border border-slate-200/80 ml-6" : "bg-slate-50 border border-slate-100"
+        }`}
+      >
+        <div className="text-[12px] text-slate-600 flex-1">
+          {isReply && (
+            <span className="mr-1.5 inline-flex items-center gap-1 rounded-full bg-indigo-50 border border-indigo-100 px-2 py-px text-[9px] font-bold text-indigo-600 align-middle">
+              <Reply size={9} /> Reply
+            </span>
+          )}
+          <strong>{c.author}:</strong> {c.text}
+          <span className="ml-2 inline-flex items-center gap-1 text-[10.5px] font-semibold text-rose-500">
+            <Heart size={10} className="fill-rose-400 text-rose-400" /> {normalizeGalleryCount(c.likes).toLocaleString()}
+          </span>
+        </div>
+        <button
+          className="shrink-0 w-6 h-6 rounded-full bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors"
+          title={isReply ? "Delete reply" : "Delete comment (replies ද මැකේ)"}
+          onClick={async () => {
+            await createClient().from("gallery_comments").delete().eq("id", c.id);
+            await load();
+            show(isReply ? "✅ Reply deleted" : "✅ Comment deleted");
+          }}
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -178,7 +217,8 @@ export default function AdminGalleryPage() {
                   </div>
                   <div className="text-slate-500 text-[11.5px] mt-0.5">{g.description}</div>
                   <div className="flex items-center gap-3.5 mt-1.5 text-[11px] text-slate-500">
-                    <span className="flex items-center gap-1"><ThumbsUp size={12} /> {(g.likes ?? 0)} Likes</span>
+                    <span className="flex items-center gap-1"><ThumbsUp size={12} /> {normalizeGalleryCount(g.likes).toLocaleString()} Likes</span>
+                    <span className="flex items-center gap-1"><Eye size={12} /> {normalizeGalleryCount(g.views).toLocaleString()} Views</span>
                     <span className="flex items-center gap-1"><MessageSquare size={12} /> {(g.comments?.length ?? 0)} Comments</span>
                   </div>
                 </div>
@@ -201,22 +241,10 @@ export default function AdminGalleryPage() {
                 <div className="text-slate-400 text-[11.5px] italic mt-1">No comments on this post.</div>
               ) : (
                 <div className="space-y-1.5 mt-1.5">
-                  {g.comments.map((c) => (
-                    <div key={c.id} className="flex items-start gap-2 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
-                      <div className="text-[12px] text-slate-600 flex-1">
-                        <strong>{c.author}:</strong> {c.text}
-                      </div>
-                      <button
-                        className="shrink-0 w-6 h-6 rounded-full bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors"
-                        title="Delete comment"
-                        onClick={async () => {
-                          await createClient().from("gallery_comments").delete().eq("id", c.id);
-                          await load();
-                          show("✅ Comment deleted");
-                        }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                  {buildGalleryCommentTree(g.comments ?? []).map((node) => (
+                    <div key={node.id} className="space-y-1.5">
+                      {renderAdminComment(node, false)}
+                      {node.replies.map((r) => renderAdminComment(r, true))}
                     </div>
                   ))}
                 </div>

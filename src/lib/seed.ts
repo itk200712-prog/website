@@ -934,6 +934,7 @@ export const GALLERY: GalleryItem[] = [
     aspect: "4:3",
     image: "/images/gallery/pirith.jpg",
     likes: 1,
+    views: 0,
     comments: [],
   },
   {
@@ -943,6 +944,7 @@ export const GALLERY: GalleryItem[] = [
     aspect: "16:9",
     image: "/images/gallery/agm.jpg",
     likes: 3,
+    views: 0,
     comments: [],
   },
   {
@@ -952,6 +954,7 @@ export const GALLERY: GalleryItem[] = [
     aspect: "3:2",
     image: "/images/gallery/headquarters.jpg",
     likes: 2,
+    views: 0,
     comments: [],
   },
 ];

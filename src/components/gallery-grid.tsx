@@ -1,15 +1,25 @@
 "use client";
 
 // ============================================================================
-// Gallery grid — photo + Title + Description + ✅ Like & Comment (sign-in required)
+// Gallery grid — photo + Title + Description + Likes/Views + Comments/Replies
+// Like/View: හැමෝටම (වරකට 1) · Comment/Reply ලියන්න: sign-in අවශ්‍යයි
+// කැමති ගාණක් Likes/Views එකතු කරන Boost එක: SUPERADMIN ලට විතරයි (RPC වලිනුත්)
 // ============================================================================
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Heart, ImageIcon, LogIn, Send, X } from "lucide-react";
+import { Eye, Heart, ImageIcon, LogIn, Plus, Reply, Send, Shuffle, X } from "lucide-react";
 import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import type { GalleryComment, GalleryItem } from "@/lib/types";
+import {
+  buildGalleryCommentTree,
+  clampBoostAmount,
+  countGalleryComments,
+  normalizeGalleryCount,
+  randomGalleryViews,
+  updateGalleryCommentLikes,
+} from "@/lib/gallery-social";
 import { authedClient } from "@/lib/supabase/client";
 
 const ASPECT: Record<string, string> = {
@@ -105,8 +115,8 @@ function SignInPrompt({ open, onClose }: { open: boolean; onClose: () => void })
             </h3>
             <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-500">
               {si
-                ? "ඡායාරූප Like කිරීමට සහ අදහස් (Comments) දැමීමට කරුණාකර ඔබේ ගිණුමට පිවිසෙන්න."
-                : "Please sign in to your account to like photos and post comments."}
+                ? "අදහසක් (Comment) හෝ පිළිතුරක් (Reply) ලියන්න කරුණාකර ඔබේ ගිණුමට පිවිසෙන්න. Like කරන්න sign-in ඕන නෑ."
+                : "Please sign in to write a comment or reply. Liking does not need sign-in."}
             </p>
 
             <div className="mt-4 grid gap-2">
@@ -140,123 +150,562 @@ function SignInPrompt({ open, onClose }: { open: boolean; onClose: () => void })
 // ============================================================================
 // Like + Comment block — cards සහ lightbox දෙකේම use කරන්න
 // ============================================================================
+const PHOTO_LIKE_KEY = "mpcs_liked_gallery";
+const COMMENT_LIKE_KEY = "mpcs_liked_gallery_comments";
+const VIEW_KEY = "mpcs_gallery_viewed";
+
+function readBoolMap(storage: Storage, key: string): Record<string, boolean> {
+  try {
+    const parsed = JSON.parse(storage.getItem(key) || "{}") as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeBoolMap(storage: Storage, key: string, map: Record<string, boolean>) {
+  try {
+    storage.setItem(key, JSON.stringify(map));
+  } catch {
+    /* private mode — ignore */
+  }
+}
+
 export function GallerySocial({
   item,
   me,
   onLike,
+  onViews = () => {},
   onComment,
+  onCommentLike = () => {},
   compact = false,
+  trackView = false,
 }: {
   item: GalleryItem;
   me: Me;
   onLike: (newCount: number) => void;
+  onViews?: (newCount: number) => void;
   onComment: (c: GalleryComment) => void;
+  onCommentLike?: (commentId: string, newCount: number) => void;
   compact?: boolean;
+  /** Lightbox එකේ විතරක් true — photo එක open කළාම view +1 (session එකට වරක්) */
+  trackView?: boolean;
 }) {
-  const [busy, setBusy] = useState(false);
+  const { lang } = useLang();
+  const si = lang === "si";
+  const isSuper = me?.role === "superadmin";
   const [text, setText] = useState("");
   const [needSignin, setNeedSignin] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [likeBusy, setLikeBusy] = useState(false);
+  const [likedComments, setLikedComments] = useState<Record<string, boolean>>({});
+  const [commentLikeBusy, setCommentLikeBusy] = useState("");
+  const [replyToId, setReplyToId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [posting, setPosting] = useState("");
+  const [boostAmounts, setBoostAmounts] = useState<Record<string, string>>({});
+  const [boostBusy, setBoostBusy] = useState("");
+  const [notice, setNotice] = useState("");
+  const viewTrackedRef = useRef<Set<string>>(new Set());
+
+  const likes = normalizeGalleryCount(item.likes);
+  const views = normalizeGalleryCount(item.views);
+  const tree = buildGalleryCommentTree(item.comments ?? []);
+  const totalComments = countGalleryComments(item.comments);
 
   useEffect(() => {
     try {
-      const map = JSON.parse(localStorage.getItem("mpcs_liked_gallery") || "{}");
-      setLiked(!!map[item.id]);
+      setLiked(!!readBoolMap(localStorage, PHOTO_LIKE_KEY)[item.id]);
     } catch {
       /* ignore */
     }
   }, [item.id]);
 
-  async function toggleLike() {
-    if (!me) {
-      setNeedSignin(true);
-      return;
+  useEffect(() => {
+    try {
+      setLikedComments(readBoolMap(localStorage, COMMENT_LIKE_KEY));
+    } catch {
+      /* ignore */
     }
-    const newCount = Math.max(0, (item.likes ?? 0) + (liked ? -1 : 1));
-    setLiked(!liked);
+  }, []);
+
+  async function rpcPhoto(likesDelta: number, viewsDelta: number): Promise<{ likes: number; views: number }> {
+    const sb = await authedClient();
+    const { data, error } = await sb.rpc("gallery_bump_photo", {
+      p_item_id: item.id,
+      p_likes_delta: likesDelta,
+      p_views_delta: viewsDelta,
+    });
+    if (error) throw new Error(error.message);
+    const obj = (data ?? {}) as { likes?: unknown; views?: unknown };
+    return { likes: normalizeGalleryCount(obj.likes), views: normalizeGalleryCount(obj.views) };
+  }
+
+  /** RPC එකෙන් බැරි වුණොත් (§17 SQL එක තාම run නැති DB එකක) signed-in direct fallback */
+  async function bumpPhoto(
+    likesDelta: number,
+    viewsDelta: number,
+    nextLikes: number,
+    nextViews: number
+  ): Promise<{ likes: number; views: number }> {
+    try {
+      return await rpcPhoto(likesDelta, viewsDelta);
+    } catch (first) {
+      if (!me) throw first;
+      const sb = await authedClient();
+      let res = await sb.from("gallery_items").update({ likes: nextLikes, views: nextViews }).eq("id", item.id);
+      if (res.error && viewsDelta !== 0) {
+        res = await sb.from("gallery_items").update({ likes: nextLikes }).eq("id", item.id);
+      }
+      if (res.error) throw new Error(res.error.message);
+      return { likes: nextLikes, views: nextViews };
+    }
+  }
+
+  // 👁 Lightbox එකේ photo එක open කළාම view +1 (එක session එකකට photo එකකට වරක්)
+  useEffect(() => {
+    if (!trackView) return;
+    let already = false;
+    try {
+      const map = readBoolMap(sessionStorage, VIEW_KEY);
+      already = !!map[item.id];
+      if (!already) {
+        map[item.id] = true;
+        writeBoolMap(sessionStorage, VIEW_KEY, map);
+      }
+    } catch {
+      already = viewTrackedRef.current.has(item.id);
+      viewTrackedRef.current.add(item.id);
+    }
+    if (already) return;
+    onViews(views + 1);
+    void (async () => {
+      try {
+        const r = await rpcPhoto(0, 1);
+        onViews(r.views);
+      } catch {
+        /* SQL §17 එක නැති DB එකක local count එක විතරයි */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, trackView]);
+
+  async function toggleLike() {
+    if (likeBusy) return;
+    const wasLiked = liked;
+    const nextLiked = !wasLiked;
+    const newCount = Math.max(0, likes + (nextLiked ? 1 : -1));
+    setLikeBusy(true);
+    setLiked(nextLiked);
     onLike(newCount);
     try {
-      const map = JSON.parse(localStorage.getItem("mpcs_liked_gallery") || "{}");
-      if (!liked) map[item.id] = true;
+      const map = readBoolMap(localStorage, PHOTO_LIKE_KEY);
+      if (nextLiked) map[item.id] = true;
       else delete map[item.id];
-      localStorage.setItem("mpcs_liked_gallery", JSON.stringify(map));
+      writeBoolMap(localStorage, PHOTO_LIKE_KEY, map);
+    } catch {
+      /* ignore */
+    }
+    try {
+      const r = await bumpPhoto(nextLiked ? 1 : -1, 0, newCount, views);
+      onLike(r.likes);
+      onViews(r.views);
+    } catch {
+      setLiked(wasLiked);
+      onLike(likes);
+      try {
+        const map = readBoolMap(localStorage, PHOTO_LIKE_KEY);
+        if (wasLiked) map[item.id] = true;
+        else delete map[item.id];
+        writeBoolMap(localStorage, PHOTO_LIKE_KEY, map);
+      } catch {
+        /* ignore */
+      }
+      setNotice(si ? "⚠ Like එක save වුණේ නෑ — පොඩ්ඩක් ඉඳලා ආයේ බලන්න" : "⚠ Could not save the like — please try again");
+    }
+    setLikeBusy(false);
+  }
+
+  async function toggleCommentLike(c: GalleryComment) {
+    if (c.id.startsWith("tmp-") || commentLikeBusy === c.id) return;
+    const wasLiked = !!likedComments[c.id];
+    const nextLiked = !wasLiked;
+    const oldCount = normalizeGalleryCount(c.likes);
+    const newCount = Math.max(0, oldCount + (nextLiked ? 1 : -1));
+    setCommentLikeBusy(c.id);
+    setLikedComments((prev) => ({ ...prev, [c.id]: nextLiked }));
+    onCommentLike(c.id, newCount);
+    try {
+      const map = readBoolMap(localStorage, COMMENT_LIKE_KEY);
+      if (nextLiked) map[c.id] = true;
+      else delete map[c.id];
+      writeBoolMap(localStorage, COMMENT_LIKE_KEY, map);
     } catch {
       /* ignore */
     }
     try {
       const sb = await authedClient();
-      await sb.from("gallery_items").update({ likes: newCount }).eq("id", item.id);
+      const { data, error } = await sb.rpc("gallery_bump_comment_likes", {
+        p_comment_id: c.id,
+        p_delta: nextLiked ? 1 : -1,
+      });
+      if (error) throw new Error(error.message);
+      if (typeof data === "number") onCommentLike(c.id, normalizeGalleryCount(data));
     } catch {
-      /* offline — count local එක පෙන්වයි */
+      // RPC නැති පරණ DB එකක admin/superadmin ට විතරක් direct fallback එකක්
+      let saved = false;
+      if (me && (isSuper || me.role === "admin")) {
+        try {
+          const sb = await authedClient();
+          const { error } = await sb.from("gallery_comments").update({ likes: newCount }).eq("id", c.id);
+          saved = !error;
+        } catch {
+          saved = false;
+        }
+      }
+      if (!saved) {
+        setLikedComments((prev) => ({ ...prev, [c.id]: wasLiked }));
+        onCommentLike(c.id, oldCount);
+        setNotice(
+          si
+            ? "⚠ Comment Like එක save වුණේ නෑ (Gallery §17 SQL block එක run කරලා නැත්නම් ඒක run කරන්න)"
+            : "⚠ Could not save the comment like (run the Gallery §17 SQL block if not done)"
+        );
+      }
     }
+    setCommentLikeBusy("");
   }
 
-  async function postComment(e: React.FormEvent) {
-    e.preventDefault();
+  async function submitComment(parentId: string | null, raw: string, clear: () => void) {
     if (!me) {
       setNeedSignin(true);
       return;
     }
-    const t = text.trim();
+    const t = raw.trim();
     if (!t) return;
-    setBusy(true);
-    const c: GalleryComment = {
-      id: `tmp-${Date.now()}`,
-      author: me.name,
-      text: t,
-      created_at: new Date().toISOString(),
-    };
-    onComment(c);
-    setText("");
+    const busyKey = parentId ? `reply-${parentId}` : "comment";
+    if (posting === busyKey) return;
+    setPosting(busyKey);
+    setNotice("");
     try {
       const sb = await authedClient();
-      await sb.from("gallery_comments").insert({ item_id: item.id, author: me.name, text: t });
+      let res = await sb
+        .from("gallery_comments")
+        .insert({ item_id: item.id, author: me.name, text: t, parent_id: parentId, likes: 0 })
+        .select("id,author,text,created_at,parent_id,likes")
+        .single();
+      if (res.error && !parentId) {
+        // §17 SQL එක run නැති පරණ DB එකක top-level comment එක පරණ columns වලින්
+        res = await sb
+          .from("gallery_comments")
+          .insert({ item_id: item.id, author: me.name, text: t })
+          .select("id,author,text,created_at")
+          .single();
+      }
+      if (res.error || !res.data) throw new Error(res.error?.message || "comment failed");
+      const r = res.data as unknown as {
+        id: string;
+        author?: string;
+        text?: string;
+        created_at?: string;
+        parent_id?: string | null;
+        likes?: number;
+      };
+      onComment({
+        id: String(r.id),
+        author: String(r.author ?? me.name),
+        text: String(r.text ?? t),
+        created_at: String(r.created_at ?? new Date().toISOString()),
+        parent_id: r.parent_id ? String(r.parent_id) : parentId,
+        likes: normalizeGalleryCount(r.likes),
+      });
+      clear();
+      if (parentId) setReplyToId(null);
     } catch {
-      /* DB RLS — SQL block එක run කරලා නැත්නම් local එකේ පෙන්වයි */
+      setNotice(
+        si
+          ? "⚠ Comment/Reply එක save වුණේ නෑ (Gallery §17 SQL block එක run කරලා නැත්නම් ඒක run කරන්න)"
+          : "⚠ Could not save the comment/reply (run the Gallery §17 SQL block if not done)"
+      );
     }
-    setBusy(false);
+    setPosting("");
+  }
+
+  function boostAmount(key: string): number {
+    return clampBoostAmount(boostAmounts[key] ?? "");
+  }
+
+  async function boostPhotoLikes() {
+    const amount = boostAmount("photo");
+    if (!amount) {
+      setNotice(si ? "⚠ එකතු කරන්න ඕන Likes ගාණ ලියන්න (1–100000)" : "⚠ Enter how many likes to add (1–100000)");
+      return;
+    }
+    setBoostBusy("photo-likes");
+    const next = likes + amount;
+    onLike(next);
+    try {
+      const r = await bumpPhoto(amount, 0, next, views);
+      onLike(r.likes);
+      onViews(r.views);
+      setBoostAmounts((prev) => ({ ...prev, photo: "" }));
+      setNotice(`✅ +${amount.toLocaleString()} Likes එකතු වුණා`);
+    } catch {
+      onLike(likes);
+      setNotice(si ? "⚠ Boost එක save වුණේ නෑ" : "⚠ Boost could not be saved");
+    }
+    setBoostBusy("");
+  }
+
+  async function boostRandomViews() {
+    const amount = randomGalleryViews();
+    setBoostBusy("photo-views");
+    const next = views + amount;
+    onViews(next);
+    try {
+      const r = await bumpPhoto(0, amount, likes, next);
+      onViews(r.views);
+      onLike(r.likes);
+      setNotice(`🎲 Random Views +${amount.toLocaleString()} එකතු වුණා`);
+    } catch {
+      onViews(views);
+      setNotice(si ? "⚠ Random Views save වුණේ නෑ" : "⚠ Random views could not be saved");
+    }
+    setBoostBusy("");
+  }
+
+  async function boostComment(c: GalleryComment) {
+    const key = `c-${c.id}`;
+    const amount = boostAmount(key);
+    if (!amount) {
+      setNotice(si ? "⚠ එකතු කරන්න ඕන Likes ගාණ ලියන්න (1–100000)" : "⚠ Enter how many likes to add (1–100000)");
+      return;
+    }
+    setBoostBusy(key);
+    const oldCount = normalizeGalleryCount(c.likes);
+    const next = oldCount + amount;
+    onCommentLike(c.id, next);
+    try {
+      const sb = await authedClient();
+      const { data, error } = await sb.rpc("gallery_bump_comment_likes", {
+        p_comment_id: c.id,
+        p_delta: amount,
+      });
+      if (error) {
+        // RPC නැති DB එකක superadmin direct fallback (admin_write policy එකෙන්)
+        const { error: upErr } = await sb.from("gallery_comments").update({ likes: next }).eq("id", c.id);
+        if (upErr) throw new Error(upErr.message);
+      } else if (typeof data === "number") {
+        onCommentLike(c.id, normalizeGalleryCount(data));
+      }
+      setBoostAmounts((prev) => ({ ...prev, [key]: "" }));
+      setNotice(`✅ Comment එකට +${amount.toLocaleString()} Likes එකතු වුණා`);
+    } catch {
+      onCommentLike(c.id, oldCount);
+      setNotice(si ? "⚠ Comment Boost එක save වුණේ නෑ" : "⚠ Comment boost could not be saved");
+    }
+    setBoostBusy("");
+  }
+
+  function commentActions(c: GalleryComment, rootId: string) {
+    const likedC = !!likedComments[c.id];
+    const boostKey = `c-${c.id}`;
+    return (
+      <>
+        <div className="mt-2 flex flex-wrap items-center gap-3.5 text-[11.5px] text-slate-500">
+          <button
+            type="button"
+            onClick={() => void toggleCommentLike(c)}
+            disabled={commentLikeBusy === c.id}
+            className={`flex items-center gap-1 font-semibold transition-colors disabled:opacity-50 ${likedC ? "text-rose-600" : "hover:text-rose-600"}`}
+          >
+            <Heart size={13} className={likedC ? "fill-rose-500 text-rose-500" : ""} />
+            {normalizeGalleryCount(c.likes).toLocaleString()} Likes
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!me) {
+                setNeedSignin(true);
+                return;
+              }
+              setReplyToId(replyToId === rootId ? null : rootId);
+            }}
+            className="flex items-center gap-1 font-semibold hover:text-indigo-700 transition-colors"
+          >
+            <Reply size={13} /> Reply
+          </button>
+        </div>
+        {isSuper && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-fuchsia-200 bg-fuchsia-50/80 px-2 py-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wide text-fuchsia-700">👑 Superadmin</span>
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              value={boostAmounts[boostKey] ?? ""}
+              onChange={(e) => setBoostAmounts((prev) => ({ ...prev, [boostKey]: e.target.value }))}
+              placeholder={si ? "ගාණ" : "Amount"}
+              className="w-[78px] rounded-lg border border-fuchsia-200 bg-white px-2 py-1 text-[11px] outline-none focus:border-fuchsia-400"
+            />
+            <button
+              type="button"
+              onClick={() => void boostComment(c)}
+              disabled={boostBusy === boostKey}
+              className="rounded-lg bg-fuchsia-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-fuchsia-700 disabled:opacity-50"
+            >
+              <Plus size={11} className="inline" /> Likes
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  function commentCard(c: GalleryComment, rootId: string, isReply: boolean) {
+    return (
+      <div
+        key={c.id}
+        className={`rounded-xl px-3.5 py-2.5 ${
+          isReply ? "bg-white border border-slate-200/80" : "bg-slate-50 border border-slate-100"
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-[9px] font-black shrink-0">
+            {c.author.trim().charAt(0).toUpperCase() || "?"}
+          </div>
+          <div className="text-[11.5px] font-bold text-slate-800">{c.author}</div>
+          {isReply && (
+            <span className="rounded-full bg-indigo-50 border border-indigo-100 px-2 py-px text-[9px] font-bold text-indigo-600">
+              Reply
+            </span>
+          )}
+          <div className="text-[9.5px] text-slate-400 ml-auto">{new Date(c.created_at).toLocaleDateString()}</div>
+        </div>
+        <div className="text-[12px] text-slate-600 mt-1 leading-relaxed">{c.text}</div>
+        {commentActions(c, rootId)}
+      </div>
+    );
   }
 
   return (
     <div>
-      <div className="flex items-center gap-4 text-[12.5px] text-slate-500">
+      <div className="flex flex-wrap items-center gap-4 text-[12.5px] text-slate-500">
         <button
           type="button"
-          onClick={toggleLike}
-          className={`flex items-center gap-1.5 font-semibold transition-colors ${liked ? "text-rose-600" : "hover:text-rose-600"}`}
+          onClick={() => void toggleLike()}
+          disabled={likeBusy}
+          className={`flex items-center gap-1.5 font-semibold transition-colors disabled:opacity-50 ${liked ? "text-rose-600" : "hover:text-rose-600"}`}
         >
           <Heart size={15} className={liked ? "fill-rose-500 text-rose-500" : ""} />
-          {item.likes ?? 0} Likes
+          {likes.toLocaleString()} Likes
         </button>
         <span className="flex items-center gap-1.5">
-          <MessageSquare size={15} /> {(item.comments?.length ?? 0)} Comments
+          <MessageSquare size={15} /> {totalComments.toLocaleString()} Comments
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Eye size={15} /> {views.toLocaleString()} Views
         </span>
       </div>
 
+      {/* 👑 Superadmin විතරක් දකින Boost panel එක — photo likes + random views */}
+      {isSuper && (
+        <div className="mt-3 rounded-xl border border-fuchsia-200 bg-fuchsia-50/70 px-3 py-2.5">
+          <div className="text-[10.5px] font-black uppercase tracking-wider text-fuchsia-700">
+            👑 Superadmin Boost — Photo
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              value={boostAmounts.photo ?? ""}
+              onChange={(e) => setBoostAmounts((prev) => ({ ...prev, photo: e.target.value }))}
+              placeholder={si ? "Likes ගාණ" : "Likes amount"}
+              className="w-[110px] rounded-lg border border-fuchsia-200 bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-fuchsia-400"
+            />
+            <button
+              type="button"
+              onClick={() => void boostPhotoLikes()}
+              disabled={boostBusy === "photo-likes"}
+              className="rounded-lg bg-fuchsia-600 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-fuchsia-700 disabled:opacity-50"
+            >
+              <Plus size={12} className="inline" /> Likes
+            </button>
+            <button
+              type="button"
+              onClick={() => void boostRandomViews()}
+              disabled={boostBusy === "photo-views"}
+              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <Shuffle size={12} className="inline" /> Random Views (25–250)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {notice && <div className="mt-2 text-[11.5px] font-semibold text-indigo-700">{notice}</div>}
+
       <SignInPrompt open={needSignin} onClose={() => setNeedSignin(false)} />
 
-      {/* comments list */}
-      {(item.comments?.length ?? 0) > 0 && (
-        <div className={`mt-3 space-y-2 ${compact ? "" : ""}`}>
-          {item.comments.map((c) => (
-            <div key={c.id} className="rounded-xl bg-slate-50 border border-slate-100 px-3.5 py-2.5">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-[9px] font-black shrink-0">
-                  {c.author.trim().charAt(0).toUpperCase() || "?"}
+      {/* comments + replies (එක මට්ටමේ threads) */}
+      {tree.length > 0 && (
+        <div className="mt-3 space-y-3">
+          {tree.map((node) => (
+            <div key={node.id}>
+              {commentCard(node, node.id, false)}
+              {node.replies.length > 0 && (
+                <div className="ml-6 sm:ml-8 mt-2 space-y-2 border-l-2 border-indigo-100 pl-3">
+                  {node.replies.map((r) => commentCard(r, node.id, true))}
                 </div>
-                <div className="text-[11.5px] font-bold text-slate-800">{c.author}</div>
-                <div className="text-[9.5px] text-slate-400 ml-auto">
-                  {new Date(c.created_at).toLocaleDateString()}
-                </div>
-              </div>
-              <div className="text-[12px] text-slate-600 mt-1 leading-relaxed">{c.text}</div>
+              )}
+              {replyToId === node.id && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void submitComment(node.id, replyText, () => setReplyText(""));
+                  }}
+                  className="mt-2 ml-6 sm:ml-8 flex gap-2"
+                >
+                  <input
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder={si ? `${node.author} ට reply එකක් ලියන්න...` : `Reply to ${node.author}...`}
+                    className="field !py-2 !text-[12px] flex-1"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={posting === `reply-${node.id}` || !replyText.trim()}
+                    className="btn btn-primary !py-2 !px-3.5 !text-[12px]"
+                  >
+                    <Send size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReplyToId(null);
+                      setReplyText("");
+                    }}
+                    className="btn btn-outline !py-2 !px-3 !text-[12px]"
+                  >
+                    {si ? "එපා" : "Cancel"}
+                  </button>
+                </form>
+              )}
             </div>
           ))}
         </div>
       )}
 
       {/* comment form */}
-      <form onSubmit={postComment} className="mt-3 flex gap-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submitComment(null, text, () => setText(""));
+        }}
+        className="mt-3 flex gap-2"
+      >
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -266,10 +715,11 @@ export function GallerySocial({
             if (!me) setNeedSignin(true);
           }}
         />
-        <button type="submit" disabled={busy || !text.trim()} className="btn btn-primary !py-2 !px-4 !text-[12px]">
+        <button type="submit" disabled={posting === "comment" || !text.trim()} className="btn btn-primary !py-2 !px-4 !text-[12px]">
           <Send size={13} />
         </button>
       </form>
+      {compact && <span className="hidden" />}
     </div>
   );
 }
@@ -328,8 +778,16 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                   item={g}
                   me={me}
                   onLike={(n) => setItems((xs) => updateItem(xs, g.id, { likes: n }))}
+                  onViews={(n) => setItems((xs) => updateItem(xs, g.id, { views: n }))}
                   onComment={(c) =>
                     setItems((xs) => updateItem(xs, g.id, { comments: [...(xs.find((x) => x.id === g.id)?.comments ?? []), c] }))
+                  }
+                  onCommentLike={(commentId, n) =>
+                    setItems((xs) =>
+                      updateItem(xs, g.id, {
+                        comments: updateGalleryCommentLikes(xs.find((x) => x.id === g.id)?.comments ?? [], commentId, n),
+                      })
+                    )
                   }
                   compact
                 />
@@ -395,11 +853,20 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                   item={current}
                   me={me}
                   onLike={(n) => setItems((xs) => updateItem(xs, current.id, { likes: n }))}
+                  onViews={(n) => setItems((xs) => updateItem(xs, current.id, { views: n }))}
                   onComment={(c) =>
                     setItems((xs) =>
                       updateItem(xs, current.id, { comments: [...(xs.find((x) => x.id === current.id)?.comments ?? []), c] })
                     )
                   }
+                  onCommentLike={(commentId, n) =>
+                    setItems((xs) =>
+                      updateItem(xs, current.id, {
+                        comments: updateGalleryCommentLikes(xs.find((x) => x.id === current.id)?.comments ?? [], commentId, n),
+                      })
+                    )
+                  }
+                  trackView
                 />
               </div>
               <div className="flex items-center gap-4 mt-4 text-[12.5px] text-slate-500 border-t border-slate-100 pt-4">

@@ -108,6 +108,10 @@ export interface GalleryComment {
   author: string;
   text: string;
   created_at: string;
+  /** Reply එකක් නම් අදාළ top-level comment එකේ id එක; නැත්නම් null */
+  parent_id?: string | null;
+  /** Comment / reply එකට ලැබුණු likes ගණන */
+  likes?: number;
 }
 
 export interface GalleryItem {
@@ -117,6 +121,8 @@ export interface GalleryItem {
   aspect: "4:3" | "16:9" | "1:1" | "3:2";
   image: string;
   likes: number;
+  /** Photo එක open කර බැලූ වාර ගණන (+ superadmin random boost) */
+  views?: number;
   comments: GalleryComment[];
 }
 

@@ -30,6 +30,7 @@ import {
   getBusinessAnimation,
   parseBusinessAnimations,
 } from "@/lib/animation-settings";
+import { normalizeGalleryCount } from "@/lib/gallery-social";
 import type {
   BoardMember,
   BusinessBranch,
@@ -190,13 +191,16 @@ export const getGallery = cache(async (): Promise<GalleryItem[]> => {
       ...g,
       comments: (cm ?? [])
         .filter((c: { item_id: string }) => c.item_id === g.id)
-        .map((c: { id: string; author: string; text: string; created_at: string }) => ({
+        .map((c: { id: string; author: string; text: string; created_at: string; parent_id?: string | null; likes?: number }) => ({
           id: String(c.id),
           author: String(c.author ?? ""),
           text: String(c.text ?? ""),
           created_at: String(c.created_at ?? ""),
+          parent_id: c.parent_id ? String(c.parent_id) : null,
+          likes: normalizeGalleryCount(c.likes),
         })),
-      likes: typeof g.likes === "number" ? g.likes : 0,
+      likes: normalizeGalleryCount(g.likes),
+      views: normalizeGalleryCount(g.views),
       aspect: g.aspect ?? "4:3",
     }));
   }, GALLERY);

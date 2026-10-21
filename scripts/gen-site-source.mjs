@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-21-design-v3";
+const SITE_PACKAGE_VERSION = "2026-10-21-gallery-social-v4";
 
 const FILES = [
   "src/app/globals.css",
@@ -27,16 +27,19 @@ const FILES = [
   "src/app/admin/loading.tsx",
   "src/app/admin/businesses/page.tsx",
   "src/app/admin/animation/page.tsx",
+  "src/app/admin/gallery/page.tsx",
   "src/components/cursor-follower.tsx",
   "src/components/site-icons.tsx",
   "src/components/box-icon.tsx",
   "src/components/site-header.tsx",
   "src/components/business-detail.tsx",
+  "src/components/gallery-grid.tsx",
   "src/components/site-sections.tsx",
   "src/components/site-footer.tsx",
   "src/components/home-sections.tsx",
   "src/lib/data.ts",
   "src/lib/types.ts",
+  "src/lib/gallery-social.ts",
   "src/lib/animation-settings.ts",
   "src/lib/branch-settings.ts",
   "next.config.ts",
