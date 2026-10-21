@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Image as ImageIcon, Pencil, Plus, Search, Trash2, Upload, UserPlus, UsersRound } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
+import { PhoneImageIcon } from "@/components/site-icons";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { BOARD } from "@/lib/seed";
@@ -188,7 +189,7 @@ export default function AdminBoardPage() {
                 🎓 {m.qualification}
               </div>
               <div className="mt-2.5 space-y-1 text-[11.5px] text-slate-600">
-                <div>📞 {m.phone}</div>
+                <div className="flex items-center gap-1.5"><PhoneImageIcon size={12} className="text-indigo-600" /> {m.phone}</div>
                 <div>✉ {m.email}</div>
               </div>
               <div className="flex items-center justify-between mt-3.5">

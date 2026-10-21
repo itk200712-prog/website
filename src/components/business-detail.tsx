@@ -6,8 +6,9 @@
 
 import Link from "next/link";
 import {
-  ChevronRight, Clock, Fuel, Home, MapPin, Phone, PhoneCall, Search, ShieldCheck, Star, Store, TrendingUp, UserRound,
+  ChevronRight, Clock, Fuel, Home, Search, ShieldCheck, Star, Store, TrendingUp, UserRound,
 } from "lucide-react";
+import { LocationImageIcon as MapPin, PhoneImageIcon as Phone, PhoneImageIcon as PhoneCall } from "@/components/site-icons";
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/i18n";
 import { ContactCards, SectionHead, SendInquiryCard, ServiceCard } from "@/components/site-sections";
@@ -344,12 +345,12 @@ export function RegionalBranches({ b }: { b: BusinessUnit }) {
             return (
               <article
                 key={`${br.name}-${i}`}
-                className="contact-pro-card contact-pro-emerald grid gap-4 rounded-3xl border border-emerald-100 bg-white p-4 sm:p-5 md:grid-cols-[1.1fr_1fr_1fr_auto] md:items-center"
+                className="contact-pro-card contact-pro-charm grid gap-4 rounded-3xl border border-indigo-100 bg-white p-4 sm:p-5 md:grid-cols-[1.1fr_1fr_1fr_auto] md:items-center"
                 style={{ animationDelay: `${i * 90}ms` }}
               >
                 {fields.map((field, fieldIndex) => (
                   <div key={field.label} className="contact-pro-field flex min-w-0 items-start gap-3 rounded-2xl px-3 py-2.5">
-                    <span className="contact-pro-icon mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white">
+                    <span className="contact-pro-icon mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-indigo-950 to-violet-600 text-white">
                       {fieldIndex === 0 && br.photo ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={br.photo} alt={br.name} className="h-full w-full object-cover" loading="lazy" />
@@ -367,15 +368,15 @@ export function RegionalBranches({ b }: { b: BusinessUnit }) {
                     </span>
                   </div>
                 ))}
-                <div className="contact-pro-hotline rounded-2xl bg-emerald-700 px-4 py-3 text-white md:min-w-44">
-                  <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-100">
+                <div className="contact-pro-hotline rounded-2xl bg-indigo-900 px-4 py-3 text-white md:min-w-44">
+                  <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-indigo-100">
                     <PhoneCall size={14} /> {labels.hotline}
                   </div>
                   <div className="mt-1 text-[15px] font-black tabular-nums">{br.phone || "—"}</div>
                   {phoneHref && (
                     <a
                       href={phoneHref}
-                      className="contact-pro-call mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-black text-emerald-800"
+                      className="contact-pro-call mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-black text-indigo-900"
                     >
                       <Phone size={11} /> {labels.call}
                     </a>
@@ -404,7 +405,7 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
   };
 
   return (
-    <section className="bg-gradient-to-b from-emerald-50/80 via-white to-white border-y border-emerald-100">
+    <section className="bg-gradient-to-b from-indigo-50/80 via-white to-white border-y border-indigo-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
         <SectionHead
           badge={si ? "Coop City ශාඛා" : "Coop City Branches"}
@@ -427,12 +428,12 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
             return (
               <article
                 key={`${br.name}-${i}`}
-                className="card contact-pro-card contact-pro-emerald group rounded-3xl border border-emerald-100 bg-white"
+                className="card contact-pro-card contact-pro-charm group rounded-3xl border border-indigo-100 bg-white"
                 style={{ animationDelay: `${i * 100}ms` }}
               >
                 <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center">
                   <div className="flex items-center gap-4 lg:w-56 lg:shrink-0">
-                    <div className="contact-pro-icon flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/20">
+                    <div className="contact-pro-icon flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-950 to-violet-600 text-white shadow-lg shadow-indigo-900/25">
                       {br.photo ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={br.photo} alt={br.name} className="h-full w-full object-cover" loading="lazy" />
@@ -441,7 +442,7 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
                       )}
                     </div>
                     <div>
-                      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">
+                      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-700">
                         {si ? `ශාඛාව ${String(i + 1).padStart(2, "0")}` : `Branch ${String(i + 1).padStart(2, "0")}`}
                       </div>
                       <h3 className="mt-1 text-lg font-black leading-snug text-slate-900">{br.name || "—"}</h3>
@@ -452,7 +453,7 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
                     {rows.map((row) => (
                       <div key={row.label} className="contact-pro-field rounded-2xl px-4 py-3">
                         <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
-                          <span className="text-emerald-600">{row.icon}</span>
+                          <span className="text-indigo-700">{row.icon}</span>
                           {row.label}
                         </div>
                         <div className="mt-1.5 break-words text-[13px] font-bold leading-snug text-slate-800">
@@ -462,15 +463,15 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
                     ))}
                   </div>
 
-                  <div className="contact-pro-hotline rounded-2xl bg-emerald-700 p-4 text-white lg:w-52 lg:shrink-0">
-                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-100">
+                  <div className="contact-pro-hotline rounded-2xl bg-indigo-900 p-4 text-white lg:w-52 lg:shrink-0">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-indigo-100">
                       <PhoneCall size={15} /> {labels.hotline}
                     </div>
                     <div className="mt-1 text-lg font-black tabular-nums">{br.phone || "—"}</div>
                     {phoneHref && (
                       <a
                         href={phoneHref}
-                        className="contact-pro-call mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-[11.5px] font-black text-emerald-800"
+                        className="contact-pro-call mt-3 inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 text-[11.5px] font-black text-indigo-900"
                       >
                         <Phone size={12} /> {labels.call}
                       </a>

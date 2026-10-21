@@ -8,7 +8,8 @@
 // ============================================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCheck, Circle, Loader2, MessageCircle, Phone, Send, Trash2, UserRound, X } from "lucide-react";
+import { CheckCheck, Circle, Loader2, Send, Trash2, UserRound, X } from "lucide-react";
+import { MessageImageIcon as MessageCircle, PhoneImageIcon as Phone } from "@/components/site-icons";
 import { authedClient } from "@/lib/supabase/client";
 
 type Session = {

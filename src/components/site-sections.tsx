@@ -7,8 +7,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  Users, MapPin, Phone, MessageSquare, Send, Clock, CheckCircle2, Building2, Headphones,
+  Users, Send, Clock, CheckCircle2, Building2, Headphones,
 } from "lucide-react";
+import { LocationImageIcon as MapPin, PhoneImageIcon as Phone, CommentImageIcon as MessageSquare } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import type { BusinessContact, BusinessService, BoardMember } from "@/lib/types";
 

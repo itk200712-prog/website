@@ -5,7 +5,8 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { Check, Image as ImageIcon, Mail, MessageCircle, Plus, RefreshCw, Save, Settings, Trash2, Upload, Globe } from "lucide-react";
+import { Check, Image as ImageIcon, Mail, Plus, RefreshCw, Save, Settings, Trash2, Upload, Globe } from "lucide-react";
+import { MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { AdminTopbar, dbUpsert, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { deleteSiteImage, uploadSiteImage } from "@/lib/supabase/storage";
@@ -347,7 +348,7 @@ export default function AdminSettingsPage() {
           </div>
           <div className="mt-4 flex items-center gap-2.5 rounded-2xl bg-slate-900 px-4 py-3">
             <span className="text-[11px] text-slate-300 font-bold mr-1">Preview:</span>
-            <span className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center">💬</span>
+            <span className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center"><MessageCircle size={17} /></span>
             <span className="w-9 h-9 rounded-full bg-sky-600 text-white flex items-center justify-center">f</span>
             <span className="text-[10.5px] text-slate-400">මේ links යන්නේ footer එකේ උඩ icons දෙකට විතරයි</span>
           </div>

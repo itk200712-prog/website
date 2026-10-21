@@ -5,7 +5,8 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { ImageIcon, MessageSquare, Pencil, Plus, Search, ThumbsUp, Trash2, Upload } from "lucide-react";
+import { ImageIcon, Pencil, Plus, Search, ThumbsUp, Trash2, Upload } from "lucide-react";
+import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbInsertMany, dbUpdate, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";

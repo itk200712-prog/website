@@ -7,11 +7,11 @@
 //  · Recent chat activity + contact requests (call back list)
 // ============================================================================
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import {
-  Activity, ArrowUpRight, Bot, CheckCircle2, Clock, KeyRound, Mail, MessageCircle, Phone,
-  RefreshCw, Save, Search, Send, Sparkles, Trash2, TrendingUp, Upload, UserRound, X as XIcon,
+  Activity, ArrowUpRight, Bot, CheckCircle2, Clock, KeyRound, Mail, RefreshCw, Save, Search, Send, Sparkles, Trash2, TrendingUp, Upload, UserRound, X as XIcon,
 } from "lucide-react";
+import { MessageImageIcon as MessageCircle, PhoneImageIcon as Phone } from "@/components/site-icons";
 import { AdminStatCard, AdminTopbar, dbDelete, dbUpdate, useNotice } from "@/components/admin";
 import { AdminLiveChats } from "@/components/admin-live-chats";
 import { authedClient } from "@/lib/supabase/client";
@@ -49,7 +49,7 @@ type Msg = {
   subject: string; message: string; status: string; created_at: string;
 };
 
-const TYPE_META: Record<string, { label: string; tone: string; icon: typeof Activity }> = {
+const TYPE_META: Record<string, { label: string; tone: string; icon: ComponentType<{ size?: number | string; className?: string }> }> = {
   open: { label: "Chat opened", tone: "bg-indigo-50 text-indigo-700", icon: MessageCircle },
   search: { label: "Member search", tone: "bg-sky-50 text-sky-700", icon: Search },
   member_no: { label: "Member No lookup", tone: "bg-violet-50 text-violet-700", icon: UserRound },
@@ -391,7 +391,7 @@ export default function AdminLiveChatPage() {
         onClick={() => setView("chats")}
         className={`relative rounded-lg px-3.5 py-1.5 text-[11.5px] font-extrabold transition ${view === "chats" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}
       >
-        💬 Live Chats
+        <MessageCircle size={13} className="mr-1 align-[-2px]" /> Live Chats
         {chatCount.unread > 0 && (
           <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">{chatCount.unread}</span>
         )}

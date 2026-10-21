@@ -265,17 +265,195 @@ body {
   /* keep original rules below */
   left: 50%;
   transform: translateX(-50%);
+  transform-origin: top center;
   width: min(92vw, 760px);
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 1rem;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.98));
+  border: 1px solid rgba(199, 210, 254, 0.9);
+  border-radius: 1.15rem;
+  box-shadow: 0 28px 70px -18px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.55) inset;
   padding: 1.1rem;
   z-index: 60;
+  animation: megaIn 0.3s cubic-bezier(0.22, 0.9, 0.28, 1.15) both;
+  backdrop-filter: blur(14px);
+}
+@keyframes megaIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.975); }
+  65% { opacity: 1; transform: translateX(-50%) translateY(-1px) scale(1.002); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
 .mega-scroll {
   max-height: 340px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.45) transparent;
+  padding-right: 2px;
+}
+.mega-scroll::-webkit-scrollbar { width: 6px; }
+.mega-scroll::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.4); border-radius: 999px; }
+.mega-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Mega menu එකේ item එකක් තෝරද්දී එන professional animation එක */
+.mega-item {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  animation: megaItemIn 0.42s cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  animation-delay: calc(var(--mega-index, 0) * 26ms);
+  transition:
+    transform 0.24s cubic-bezier(0.2, 0.85, 0.25, 1),
+    border-color 0.24s ease,
+    background 0.24s ease,
+    box-shadow 0.24s ease;
+  will-change: transform;
+}
+@keyframes megaItemIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.mega-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f59e0b, #6366f1);
+  transform: scaleY(0);
+  transform-origin: center;
+  transition: transform 0.24s cubic-bezier(0.2, 0.85, 0.25, 1);
+  z-index: 1;
+}
+.mega-item::after {
+  content: "";
+  position: absolute;
+  inset: -35% auto -35% 0;
+  width: 38%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  transform: translateX(-170%) rotate(8deg);
+  transition: transform 0.65s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.mega-item:hover,
+.mega-item:focus-visible,
+.mega-item-current {
+  transform: translateY(-2px) scale(1.012);
+  border-color: rgba(129, 140, 248, 0.95) !important;
+  background: linear-gradient(100deg, rgba(238, 242, 255, 0.98), rgba(250, 245, 255, 0.72)) !important;
+  box-shadow: 0 16px 30px -20px rgba(67, 56, 202, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  outline: none;
+}
+.mega-item:hover::before,
+.mega-item:focus-visible::before,
+.mega-item-current::before { transform: scaleY(1); }
+.mega-item:hover::after,
+.mega-item:focus-visible::after { transform: translateX(320%) rotate(8deg); }
+.mega-item:active { transform: translateY(0) scale(0.992); }
+.mega-item-icon {
+  transition: transform 0.26s cubic-bezier(0.2, 0.85, 0.25, 1), box-shadow 0.26s ease, background 0.26s ease;
+}
+.mega-item:hover .mega-item-icon,
+.mega-item:focus-visible .mega-item-icon,
+.mega-item-current .mega-item-icon {
+  transform: translateY(-1px) rotate(-3deg) scale(1.08);
+  box-shadow: 0 10px 20px -14px rgba(67, 56, 202, 0.65);
+}
+.mega-item-arrow {
+  opacity: 0;
+  transform: translateX(-5px);
+  transition: opacity 0.22s ease, transform 0.24s cubic-bezier(0.2, 0.85, 0.25, 1), background 0.22s ease;
+}
+.mega-item:hover .mega-item-arrow,
+.mega-item:focus-visible .mega-item-arrow,
+.mega-item-current .mega-item-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mega, .mega-item { animation: none !important; }
+  .mega-item, .mega-item::before, .mega-item::after, .mega-item-icon, .mega-item-arrow { transition: none !important; }
+  .mega-item:hover, .mega-item:focus-visible, .mega-item-current,
+  .mega-item:hover .mega-item-icon, .mega-item:focus-visible .mega-item-icon, .mega-item-current .mega-item-icon,
+  .mega-item-arrow { transform: none !important; }
+}
+
+/* ---- Uploaded phone/location/message image icons (site-wide) ---- */
+.site-img-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  transform-origin: center;
+}
+.site-img-icon-phone { animation: siteIconRing 2.8s ease-in-out infinite; transform-origin: 50% 18%; }
+.site-img-icon-location { animation: siteIconPin 2.9s ease-in-out infinite; transform-origin: 50% 88%; }
+.site-img-icon-message,
+.site-img-icon-comment { animation: siteIconChat 3.1s ease-in-out infinite; }
+:is(a, button, [role="button"]):hover .site-img-icon,
+:is(a, button, [role="button"]):focus-visible .site-img-icon { animation-duration: 0.65s; }
+@keyframes siteIconRing {
+  0%, 68%, 100% { transform: rotate(0deg) scale(1); }
+  74% { transform: rotate(-11deg) scale(1.08); }
+  80% { transform: rotate(9deg) scale(1.08); }
+  86% { transform: rotate(-6deg) scale(1.04); }
+  92% { transform: rotate(4deg) scale(1.02); }
+}
+@keyframes siteIconPin {
+  0%, 66%, 100% { transform: translateY(0) scale(1); }
+  74% { transform: translateY(-2.5px) scale(1.07); }
+  82% { transform: translateY(0.5px) scale(0.98, 0.94); }
+  90% { transform: translateY(-1px) scale(1.03); }
+}
+@keyframes siteIconChat {
+  0%, 70%, 100% { transform: translateY(0) scale(1); }
+  78% { transform: translateY(-1.5px) scale(1.09) rotate(-2deg); }
+  88% { transform: translateY(0) scale(1.03) rotate(1deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-img-icon { animation: none !important; }
+}
+
+/* ---- Desktop mouse cursor animation (laptop/PC pointer විතරයි) ---- */
+.cursor-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+body.cursor-fx-on .cursor-fx { opacity: 1; }
+.cursor-fx-dot,
+.cursor-fx-ring {
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  will-change: transform;
+}
+.cursor-fx-dot {
+  width: 6px;
+  height: 6px;
+  background: #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.9), 0 0 22px rgba(99, 102, 241, 0.45);
+}
+.cursor-fx-ring {
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid rgba(99, 102, 241, 0.72);
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.09), rgba(245, 158, 11, 0.05) 58%, transparent 70%);
+  box-shadow: 0 0 24px rgba(79, 70, 229, 0.16), inset 0 0 14px rgba(245, 158, 11, 0.08);
+}
+@media (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .cursor-fx { display: none !important; }
 }
 
 /* person/service cards */
@@ -513,6 +691,61 @@ body {
   --contact-shadow: rgba(6, 78, 59, 0.3);
 }
 
+/* Image-1 hotline cards: කොළ පාට වෙනුවට royal-navy → violet charm palette එක */
+.contact-pro-charm {
+  --contact-accent: #1e3a8a;
+  --contact-accent-2: #7c3aed;
+  --contact-soft: rgba(79, 70, 229, 0.14);
+  --contact-shadow: rgba(30, 27, 75, 0.38);
+}
+.contact-pro-charm .contact-pro-icon {
+  background: linear-gradient(140deg, #172554 0%, #3730a3 52%, #7c3aed 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 16px 28px -18px rgba(49, 46, 129, 0.75);
+}
+.contact-pro-charm .contact-pro-hotline {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background:
+    radial-gradient(180px 105px at 92% -10%, rgba(245, 158, 11, 0.38), transparent 62%),
+    radial-gradient(220px 130px at 0% 115%, rgba(56, 189, 248, 0.22), transparent 64%),
+    linear-gradient(138deg, #111c4e 0%, #2e2a86 48%, #6d28d9 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -18px 32px rgba(2, 6, 23, 0.18),
+    0 22px 38px -24px rgba(49, 46, 129, 0.85);
+}
+.contact-pro-charm .contact-pro-hotline::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.16), transparent 38%);
+}
+.contact-pro-charm .contact-pro-hotline::after {
+  content: "";
+  position: absolute;
+  top: -45%;
+  bottom: -45%;
+  left: 0;
+  width: 36%;
+  pointer-events: none;
+  background: linear-gradient(95deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-180%) rotate(10deg);
+  transition: transform 0.8s ease;
+}
+.contact-pro-charm:hover .contact-pro-hotline::after,
+.contact-pro-charm:focus-within .contact-pro-hotline::after {
+  transform: translateX(340%) rotate(10deg);
+}
+.contact-pro-charm .contact-pro-hotline > * {
+  position: relative;
+  z-index: 1;
+}
+.contact-pro-charm .contact-pro-call {
+  box-shadow: 0 10px 20px -14px rgba(2, 6, 23, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
 .contact-pro-amber {
   --contact-accent: #d97706;
   --contact-accent-2: #f59e0b;
@@ -569,7 +802,9 @@ body {
 }
 
 .contact-pro-call:hover svg,
-.contact-pro-card:hover .contact-pro-call svg {
+.contact-pro-card:hover .contact-pro-call svg,
+.contact-pro-call:hover .site-img-icon,
+.contact-pro-card:hover .contact-pro-call .site-img-icon {
   animation: contactPhoneRing 0.55s ease;
 }
 

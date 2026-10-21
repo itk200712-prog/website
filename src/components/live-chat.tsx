@@ -17,7 +17,8 @@
 // ============================================================================
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Facebook, Fuel, Images, Loader2, Lock, MessageCircle, Minus, Newspaper, Phone, PhoneCall, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { ArrowRight, Bell, BellOff, Bot, Building2, CheckCircle2, Clock, Facebook, Fuel, Images, Loader2, Lock, Minus, Newspaper, Search, Send, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { MessageImageIcon as MessageCircle, PhoneImageIcon as Phone, PhoneImageIcon as PhoneCall } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { authedClient } from "@/lib/supabase/client";

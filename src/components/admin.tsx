@@ -8,8 +8,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut,
-  AtSign, Mail, Megaphone, MessageCircle, Newspaper, Settings, ShieldCheck, Sparkles, UserRound, UsersRound, X, Save, Activity } from "lucide-react";
+  BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut, AtSign, Mail, Megaphone, Newspaper, Settings, ShieldCheck, Sparkles, UserRound, UsersRound, X, Save, Activity,
+} from "lucide-react";
+import { MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { logout } from "@/lib/auth";
 import { SiteLogoBadge } from "@/components/site-logo";

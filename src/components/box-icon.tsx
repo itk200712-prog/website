@@ -5,6 +5,8 @@
 //  (CDN එකක් ඕන නෑ · offline/preview එකේත් වැඩ · currentColor වලින් theme වෙයි)
 // ============================================================================
 
+import { LocationImageIcon, PhoneImageIcon } from "@/components/site-icons";
+
 export type BoxIconName = "phone" | "map" | "envelope" | "clock" | "send";
 
 export function BoxIcon({
@@ -27,25 +29,13 @@ export function BoxIcon({
   };
 
   switch (name) {
-    // ☎ solid handset
+    // ☎ user දුන්නු phone image එක (site-wide icon set එක)
     case "phone":
-      return (
-        <svg {...common}>
-          <path d="M6.62 2.4 4.2 3.62a2.1 2.1 0 0 0-1.14 2.01c.52 8.72 7.79 15.99 16.51 16.51a2.1 2.1 0 0 0 2.01-1.14l1.22-2.42a2.1 2.1 0 0 0-.94-2.83l-3.16-1.53a2.1 2.1 0 0 0-2.31.42l-1.2 1.14a12.55 12.55 0 0 1-5.03-5.03l1.14-1.2a2.1 2.1 0 0 0 .42-2.31L9.45 3.34a2.1 2.1 0 0 0-2.83-.94Z" />
-        </svg>
-      );
+      return <PhoneImageIcon size={size} className={className} />;
 
-    // 📍 solid map pin
+    // 📍 user දුන්නු location image එක (site-wide icon set එක)
     case "map":
-      return (
-        <svg {...common}>
-          <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M12 1.8a7.3 7.3 0 0 0-7.3 7.3c0 5.3 7.3 13.1 7.3 13.1s7.3-7.8 7.3-13.1A7.3 7.3 0 0 0 12 1.8Zm0 9.9a2.6 2.6 0 1 1 0-5.2 2.6 2.6 0 0 1 0 5.2Z"
-          />
-        </svg>
-      );
+      return <LocationImageIcon size={size} className={className} />;
 
     // ✉ solid envelope — flap එක cut-out (evenodd) නිසා tile එකේ පාටින් පේනවා
     case "envelope":

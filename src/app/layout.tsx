@@ -4,6 +4,7 @@ import { FloatingLang } from "@/components/floating-lang";
 import { OnlinePresence } from "@/components/online-presence";
 import { LiveChat } from "@/components/live-chat";
 import { SessionGuard } from "@/components/session-guard";
+import { CursorFollower } from "@/components/cursor-follower";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
@@ -44,6 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <OnlinePresence />
           <LiveChat />
           <SessionGuard />
+          <CursorFollower />
         </LanguageProvider>
       </body>
     </html>

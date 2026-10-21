@@ -8,20 +8,9 @@
 
 import Link from "next/link";
 import {
-  ArrowRight,
-  BadgeCheck,
-  CalendarDays,
-  Newspaper,
-  Phone,
-  Send,
-  ShieldCheck,
-  Landmark,
-  Eye,
-  Target,
-  MapPin,
-  Mail,
-  Clock,
-  Images, X, GraduationCap, Users, CheckCircle2, Building2} from "lucide-react";
+  ArrowRight, BadgeCheck, CalendarDays, Newspaper, Send, ShieldCheck, Landmark, Eye, Target, Mail, Clock, Images, X, GraduationCap, Users, CheckCircle2, Building2,
+} from "lucide-react";
+import { PhoneImageIcon as Phone, LocationImageIcon as MapPin } from "@/components/site-icons";
 import { GallerySocial, useMe, updateItem, type Me } from "@/components/gallery-grid";
 import type { GalleryComment } from "@/lib/types";
 import { useEffect, useState } from "react";
@@ -629,7 +618,7 @@ export function HomeSections({
                 rel="noreferrer"
                 className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-bold text-rose-600 hover:underline"
               >
-                📍 {lang === "si" ? "සිතියමේ බලන්න" : "View on Map"} →
+                <MapPin size={13} /> {lang === "si" ? "සිතියමේ බලන්න" : "View on Map"} →
               </a>
             </div>
 

@@ -12,6 +12,7 @@ import {
   ArrowRight, Building2, CheckCircle2, ExternalLink, Image as ImageIcon, Pencil, Plus, RefreshCw, Search, Trash2,
 } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbInsertMany, dbUpdate, dbUpsert, useNotice } from "@/components/admin";
+import { LocationImageIcon, PhoneImageIcon } from "@/components/site-icons";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { authedClient } from "@/lib/supabase/client";
 import {
@@ -41,6 +42,9 @@ export default function AdminBusinessesPage() {
   const [editFor, setEditFor] = useState<BusinessUnit | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [svcOpen, setSvcOpen] = useState(false);
+  const [editingService, setEditingService] = useState<{ slug: string; service: BusinessService } | null>(null);
+  const [serviceSaving, setServiceSaving] = useState(false);
+  const [serviceDeleting, setServiceDeleting] = useState("");
   const [units, setUnits] = useState<BusinessUnit[]>([...BUSINESSES]);
   const [mgrRows, setMgrRows] = useState<Array<{ role_en: string; role_si: string; name: string; location: string; phone: string }>>([]);
   const [branchRows, setBranchRows] = useState<BusinessBranch[]>([]);
@@ -170,6 +174,42 @@ export default function AdminBusinessesPage() {
 
   const current = units.find((b) => b.slug === selected) ?? units[0];
 
+  // ✅ Service edit/delete: DB row එක id එකෙන්ම අඳුරගනී.
+  // (කලින් delete එක `order` එකෙන් ගියත් PostgREST වල `order` කියන්නේ sort
+  //  parameter එකක් නිසා request එක fail වෙලා refresh කළාම ආයෙම ආවා.)
+  const serviceKey = (s: BusinessService, i = 0) => s.id ?? `${current?.slug ?? ""}-${s.title_en}-${s.order}-${i}`;
+  const serviceMatch = (slug: string, s: BusinessService): Record<string, unknown> =>
+    s.id ? { id: s.id } : { business_slug: slug, title_en: s.title_en, title_si: s.title_si };
+  const sameService = (a: BusinessService, b: BusinessService) =>
+    a.id && b.id ? a.id === b.id : a.title_en === b.title_en && a.title_si === b.title_si && a.order === b.order;
+
+  const openAddService = () => {
+    setEditingService(null);
+    setSvcOpen(true);
+  };
+  const openEditService = (s: BusinessService) => {
+    if (!current) return;
+    setEditingService({ slug: current.slug, service: s });
+    setSvcOpen(true);
+  };
+  const deleteService = async (s: BusinessService, i: number) => {
+    if (!current || serviceDeleting) return;
+    const key = serviceKey(s, i);
+    setServiceDeleting(key);
+    const err = await dbDelete("business_services", serviceMatch(current.slug, s));
+    setServiceDeleting("");
+    if (err) {
+      show(`⚠ Service එක delete වුණේ නෑ — ${err}`);
+      return;
+    }
+    setUnits((xs) =>
+      xs.map((b) =>
+        b.slug === current.slug ? { ...b, services: b.services.filter((x) => !sameService(x, s)) } : b
+      )
+    );
+    show("✅ Service deleted");
+  };
+
   return (
     <div>
       <AdminTopbar title="Businesses & Services Management" sub="Review and manage member records, moderate gallery discussions, and configure communication preferences." />
@@ -261,9 +301,9 @@ export default function AdminBusinessesPage() {
               {b.desc_en && <p className="text-slate-500 text-[11.5px] leading-relaxed mt-2.5 line-clamp-2">{b.desc_en}</p>}
               {b.contacts[0] && (
                 <div className="mt-3 space-y-1 text-[11.5px] text-slate-600">
-                  <div>📍 {b.contacts[0].location}</div>
+                  <div className="flex items-center gap-1.5"><LocationImageIcon size={12} className="text-rose-500" /> {b.contacts[0].location}</div>
                   <div>👤 {b.contacts[0].name}</div>
-                  <div>📞 {b.contacts[0].phone}</div>
+                  <div className="flex items-center gap-1.5"><PhoneImageIcon size={12} className="text-indigo-600" /> {b.contacts[0].phone}</div>
                 </div>
               )}
               <div className="flex items-center gap-1.5 mt-4">
@@ -325,14 +365,14 @@ export default function AdminBusinessesPage() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 mt-6">
             <h3 className="text-lg font-extrabold text-slate-900">Services for: {current.name_en}</h3>
-            <button className="btn btn-primary" onClick={() => setSvcOpen(true)}>
+            <button className="btn btn-primary" onClick={openAddService}>
               <Plus size={15} /> Add Service
             </button>
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 mt-4">
             {current.services.map((s, i) => (
-              <div key={s.order} className="card p-5">
+              <div key={serviceKey(s, i)} className="card p-5">
                 <div className="flex items-start justify-between">
                   <div className="num-chip !w-9 !h-9 !text-[12px]">{String(i + 1).padStart(2, "0")}</div>
                   <span className={`rounded-full px-2.5 py-0.5 text-[9.5px] font-bold ${s.active ? "badge-green" : "badge-red"}`}>
@@ -354,23 +394,24 @@ export default function AdminBusinessesPage() {
                 <div className="flex items-center justify-between mt-3.5 pt-3 border-t border-slate-100">
                   <div className="text-[10.5px] text-slate-400 font-semibold">Order: {s.order}</div>
                   <div className="flex gap-1.5">
-                    <button className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500" onClick={() => show("Edit service")}>
+                    <button
+                      type="button"
+                      title="Edit service"
+                      aria-label={`Edit ${s.title_en}`}
+                      className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-indigo-700 hover:border-indigo-300"
+                      onClick={() => openEditService(s)}
+                    >
                       <Pencil size={13} />
                     </button>
                     <button
-                      className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-600"
-                      onClick={() => {
-                        setUnits((xs) =>
-                          xs.map((b) =>
-                            b.slug === current.slug
-                              ? { ...b, services: b.services.filter((x) => x.order !== s.order) }
-                              : b
-                          )
-                        );
-                        dbDelete("business_services", { business_slug: current.slug, order: s.order });
-                      }}
+                      type="button"
+                      title="Delete service"
+                      aria-label={`Delete ${s.title_en}`}
+                      disabled={serviceDeleting === serviceKey(s, i)}
+                      className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-red-600 hover:border-red-300 disabled:opacity-50"
+                      onClick={() => void deleteService(s, i)}
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={13} className={serviceDeleting === serviceKey(s, i) ? "animate-pulse" : ""} />
                     </button>
                   </div>
                 </div>
@@ -944,60 +985,121 @@ export default function AdminBusinessesPage() {
       )}
 
       {svcOpen && current && (
-        <AdminModal title="Add New Service" sub={`Add a service for ${current.name_en}`} onClose={() => setSvcOpen(false)}>
+        <AdminModal
+          title={editingService ? "Edit Service" : "Add New Service"}
+          sub={editingService ? `Update this service for ${current.name_en}` : `Add a service for ${current.name_en}`}
+          onClose={() => {
+            setSvcOpen(false);
+            setEditingService(null);
+          }}
+        >
           <form
+            key={editingService ? serviceKey(editingService.service) : `new-${current.slug}-${current.services.length}`}
             className="space-y-4"
             onSubmit={async (e) => {
               e.preventDefault();
+              if (serviceSaving) return;
+              setServiceSaving(true);
               const fd = new FormData(e.currentTarget);
+              const original = editingService?.service;
+              const targetSlug = editingService?.slug ?? current.slug;
               const row: BusinessService = {
-                order: current.services.length + 1,
-                title_en: String(fd.get("title_en")),
-                title_si: String(fd.get("title_si")),
-                desc_en: String(fd.get("desc_en")) || `Premier service offered by ${current.name_en}.`,
-                desc_si: String(fd.get("desc_si")) || `${current.name_si} විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.`,
+                id: original?.id,
+                order: Number(fd.get("order")) || original?.order || current.services.length + 1,
+                title_en: String(fd.get("title_en") ?? "").trim(),
+                title_si: String(fd.get("title_si") ?? "").trim(),
+                desc_en: String(fd.get("desc_en") ?? "").trim() || `Premier service offered by ${current.name_en}.`,
+                desc_si: String(fd.get("desc_si") ?? "").trim() || `${current.name_si} විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.`,
                 features_en: String(fd.get("features_en") || DEFAULT_FEATURES).split(",").map((x) => x.trim()).filter(Boolean),
                 features_si: String(fd.get("features_si") || "විශ්වාසනීය ගුණාත්මකභාවය, සාමාජික වරප්‍රසාද, සහතික කළ ප්‍රමිතිය").split(",").map((x) => x.trim()).filter(Boolean),
                 active: fd.get("active") === "on",
               };
-              setUnits((xs) => xs.map((b) => (b.slug === current.slug ? { ...b, services: [...b.services, row] } : b)));
-              const err = await dbInsert("business_services", { business_slug: current.slug, ...row } as unknown as Record<string, unknown>);
+
+              let err: string | null;
+              if (editingService && original) {
+                const patch: Record<string, unknown> = { ...row };
+                delete patch.id;
+                // ✅ id එකෙන්ම update කරයි — `order` එකෙන් filter කරන්නේ නෑ (PostgREST reserved word එකකි)
+                err = await dbUpdate("business_services", serviceMatch(targetSlug, original), patch);
+                if (!err) {
+                  setUnits((xs) =>
+                    xs.map((b) =>
+                      b.slug === targetSlug
+                        ? { ...b, services: b.services.map((x) => (sameService(x, original) ? row : x)).sort((a, b2) => a.order - b2.order) }
+                        : b
+                    )
+                  );
+                }
+              } else {
+                const insertRow: Record<string, unknown> = { business_slug: targetSlug, ...row };
+                delete insertRow.id;
+                err = await dbInsert("business_services", insertRow);
+                if (!err) {
+                  setUnits((xs) =>
+                    xs.map((b) =>
+                      b.slug === targetSlug ? { ...b, services: [...b.services, row].sort((a, b2) => a.order - b2.order) } : b
+                    )
+                  );
+                }
+              }
+
+              setServiceSaving(false);
+              if (err) {
+                show(`⚠ Service එක save වුණේ නෑ — ${err}`);
+                return;
+              }
               setSvcOpen(false);
-              show(err ? `⚠ ${err}` : "✅ Service added");
+              setEditingService(null);
+              show(editingService ? "✅ Service updated" : "✅ Service added");
             }}
           >
             <div>
               <label className="field-label">Service Title (English) *</label>
-              <input name="title_en" required className="field" placeholder="e.g. Fixed Deposit Scheme" />
+              <input name="title_en" required className="field" placeholder="e.g. Fixed Deposit Scheme" defaultValue={editingService?.service.title_en ?? ""} />
             </div>
             <div>
               <label className="field-label">Service Title (Sinhala) *</label>
-              <input name="title_si" required className="field" placeholder="e.g. ස්ථිර තැන්පතු යෝජනාව" />
+              <input name="title_si" required className="field" placeholder="e.g. ස්ථිර තැන්පතු යෝජනාව" defaultValue={editingService?.service.title_si ?? ""} />
             </div>
             <div>
               <label className="field-label">Features / Bullet Points (English, comma-separated)</label>
-              <input name="features_en" className="field" placeholder="e.g. High interest, Minimum deposit Rs. 1000, Flexible tenures" />
+              <input name="features_en" className="field" placeholder="e.g. High interest, Minimum deposit Rs. 1000, Flexible tenures" defaultValue={editingService?.service.features_en.join(", ") ?? ""} />
             </div>
             <div>
               <label className="field-label">Features / Bullet Points (Sinhala, comma-separated)</label>
-              <input name="features_si" className="field" placeholder="e.g. ඉහළ පොලිය, අවම තැන්පතු රු. 1000ක්, නම්‍යශීලී කාල සීමාවන්" />
+              <input name="features_si" className="field" placeholder="e.g. ඉහළ පොලිය, අවම තැන්පතු රු. 1000ක්, නම්‍යශීලී කාල සීමාවන්" defaultValue={editingService?.service.features_si.join(", ") ?? ""} />
             </div>
             <div>
-              <label className="field-label">Description (Optional)</label>
-              <textarea name="desc_en" rows={2} className="field" placeholder="Premier service offered by ..." />
+              <label className="field-label">Description — English (Optional)</label>
+              <textarea name="desc_en" rows={2} className="field" placeholder="Premier service offered by ..." defaultValue={editingService?.service.desc_en ?? ""} />
+            </div>
+            <div>
+              <label className="field-label">Description — Sinhala (Optional)</label>
+              <textarea name="desc_si" rows={2} className="field" placeholder="සේවාව පිළිබඳ විස්තරය..." defaultValue={editingService?.service.desc_si ?? ""} />
             </div>
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-700">
-                <input type="checkbox" name="active" defaultChecked className="accent-indigo-700 w-4 h-4" /> Active
+                <input type="checkbox" name="active" defaultChecked={editingService ? editingService.service.active : true} className="accent-indigo-700 w-4 h-4" /> Active
               </label>
               <div>
                 <label className="field-label !mb-1">Display Order:</label>
-                <input name="order" type="number" defaultValue={current.services.length + 1} className="field !w-24 !py-2" />
+                <input name="order" type="number" defaultValue={editingService?.service.order ?? current.services.length + 1} className="field !w-24 !py-2" />
               </div>
             </div>
             <div className="flex justify-end gap-2.5 pt-1">
-              <button type="button" className="btn btn-outline" onClick={() => setSvcOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save Service</button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  setSvcOpen(false);
+                  setEditingService(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={serviceSaving}>
+                {serviceSaving ? "Saving..." : editingService ? "Save Changes" : "Save Service"}
+              </button>
             </div>
           </form>
         </AdminModal>

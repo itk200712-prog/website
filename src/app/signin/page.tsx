@@ -6,7 +6,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, BadgeCheck, Eye, EyeOff, Lock, LogIn, MessageCircle, ShieldCheck, UserRound, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Eye, EyeOff, Lock, LogIn, ShieldCheck, UserRound, X } from "lucide-react";
+import { MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import { logActivity } from "@/lib/activity";
 import { loginWithNic } from "@/lib/auth";

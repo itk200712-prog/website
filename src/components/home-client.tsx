@@ -5,7 +5,8 @@
 // ============================================================================
 
 import Link from "next/link";
-import { ArrowRight, Phone, UserRound } from "lucide-react";
+import { ArrowRight, UserRound } from "lucide-react";
+import { PhoneImageIcon as Phone } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import type { BusinessUnit } from "@/lib/types";
 

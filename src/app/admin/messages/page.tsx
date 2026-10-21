@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, Mail, RefreshCw, Reply, Search, Send, Trash2 } from "lucide-react";
 import { AdminTopbar, dbDelete, dbUpdate, useNotice } from "@/components/admin";
+import { PhoneImageIcon } from "@/components/site-icons";
 import { authedClient } from "@/lib/supabase/client";
 
 type Msg = {
@@ -225,8 +226,8 @@ export default function AdminMessagesPage() {
                     {m.status === "unread" && <span className="badge-red rounded-full px-2 py-0.5 text-[9.5px] font-bold">Unread</span>}
                     {m.status === "replied" && <span className="badge-green rounded-full px-2 py-0.5 text-[9.5px] font-bold">Replied</span>}
                   </div>
-                  <div className="text-slate-500 text-[11.5px] mt-1">
-                    📞 {m.phone} · ✉ {m.email || "—"}
+                  <div className="text-slate-500 text-[11.5px] mt-1 flex flex-wrap items-center gap-1.5">
+                    <PhoneImageIcon size={12} className="text-indigo-600" /> {m.phone} · ✉ {m.email || "—"}
                   </div>
                   {m.subject && <div className="text-slate-400 text-[11px] mt-0.5 font-semibold">{m.subject}</div>}
                   <div className="text-slate-700 text-[12.5px] mt-2">{m.message}</div>

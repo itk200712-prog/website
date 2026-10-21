@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { MessageCircle } from "lucide-react";
+import { MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { authedClient } from "@/lib/supabase/client";
 
 export function AdminChatFab() {

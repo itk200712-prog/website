@@ -7,7 +7,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { SiteLogoBadge } from "@/components/site-logo";
-import { MapPin, Phone, Mail, Clock, Facebook, MessageCircle, ExternalLink, ShieldCheck } from "lucide-react";
+import { Mail, Clock, Facebook, ExternalLink, ShieldCheck } from "lucide-react";
+import { LocationImageIcon as MapPin, PhoneImageIcon as Phone, MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import { SITE } from "@/lib/seed";
 

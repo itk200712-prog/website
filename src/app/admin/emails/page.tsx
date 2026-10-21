@@ -7,11 +7,11 @@
 //  · Live Chat Requests        · Website Message Box · Business Unit Inquiries
 // ============================================================================
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import {
-  AlertTriangle, Briefcase, CheckCircle2, Inbox, Info, Mail, MessageCircle, Plus, RefreshCw,
-  Save, Send, Sparkles, Trash2, UserPlus, X,
+  AlertTriangle, Briefcase, CheckCircle2, Inbox, Info, Mail, Plus, RefreshCw, Save, Send, Sparkles, Trash2, UserPlus, X,
 } from "lucide-react";
+import { MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { AdminTopbar, useNotice } from "@/components/admin";
 import {
   DEFAULT_SLOTS, MAIL_ROUTES, MAIL_SLOTS, clearMailRouteCache, isEmail, mailKey, sendActivationMail,
@@ -21,7 +21,7 @@ import { authedClient } from "@/lib/supabase/client";
 
 type Draft = Record<MailRouteKey, string[]>;
 
-const ICONS: Record<MailRouteKey, typeof Mail> = {
+const ICONS: Record<MailRouteKey, ComponentType<{ size?: number | string; className?: string }>> = {
   membership: UserPlus,
   inquiry: Mail,
   livechat: MessageCircle,

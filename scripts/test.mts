@@ -188,7 +188,8 @@ ok("Site-wide professional animated contact cards",
   globalsCssSrc.includes("prefers-reduced-motion") &&
   siteSectionsSrc.includes("contact-pro-card contact-pro-indigo") &&
   siteSectionsSrc.includes("contact-pro-card contact-pro-slate") &&
-  businessDetailSrc.includes("contact-pro-card contact-pro-emerald") &&
+  businessDetailSrc.includes("contact-pro-card contact-pro-charm") &&
+  globalsCssSrc.includes(".contact-pro-charm .contact-pro-hotline") &&
   businessDetailSrc.includes("contact-pro-hotline") &&
   businessDetailSrc.includes("contact-pro-call") &&
   contactInfoSrc.includes("card contact-pro-card contact-pro-indigo"));
@@ -213,6 +214,37 @@ ok("Branch photo/Rural edit-delete settings + fast Admin business save",
   businessDetailSrc.includes("export function RuralBankNetwork({ b }") &&
   businessDetailSrc.includes("br.photo") &&
   businessPageSrc.includes("<RuralBankNetwork b={b} />"));
+const siteIconsSrc = readFileSync(join(root, "src/components/site-icons.tsx"), "utf8");
+const siteHeaderSrc = readFileSync(join(root, "src/components/site-header.tsx"), "utf8");
+const rootLayoutSrc = readFileSync(join(root, "src/app/layout.tsx"), "utf8");
+const cursorFollowerSrc = readFileSync(join(root, "src/components/cursor-follower.tsx"), "utf8");
+const typesSrc = readFileSync(join(root, "src/lib/types.ts"), "utf8");
+const uploadedIconFiles = readdirSync(join(root, "public/icons"));
+ok("Services edit/delete persist by id + uploaded site icons + mega/cursor professional polish",
+  adminBusinessesSrc.includes("const [editingService") &&
+  adminBusinessesSrc.includes("openEditService") &&
+  adminBusinessesSrc.includes('dbUpdate("business_services", serviceMatch') &&
+  adminBusinessesSrc.includes('dbDelete("business_services", serviceMatch') &&
+  !adminBusinessesSrc.includes('show("Edit service")') &&
+  !adminBusinessesSrc.includes('dbDelete("business_services", { business_slug: current.slug, order: s.order })') &&
+  typesSrc.includes("id?: string;") &&
+  ["phone-call.png", "location.png", "comment.png", "message.png"].every((f) => uploadedIconFiles.includes(f)) &&
+  siteIconsSrc.includes("PhoneImageIcon") &&
+  siteIconsSrc.includes("LocationImageIcon") &&
+  siteIconsSrc.includes("CommentImageIcon") &&
+  siteIconsSrc.includes("MessageImageIcon") &&
+  businessDetailSrc.includes("PhoneImageIcon as PhoneCall") &&
+  businessDetailSrc.includes("LocationImageIcon as MapPin") &&
+  adminShellEarlySrc.includes("MessageImageIcon as MessageCircle") &&
+  globalsCssSrc.includes("@keyframes siteIconRing") &&
+  globalsCssSrc.includes("@keyframes siteIconPin") &&
+  globalsCssSrc.includes("@keyframes megaItemIn") &&
+  globalsCssSrc.includes(".cursor-fx-ring") &&
+  siteHeaderSrc.includes("--mega-index") &&
+  siteHeaderSrc.includes("mega-item-current") &&
+  rootLayoutSrc.includes("<CursorFollower />") &&
+  cursorFollowerSrc.includes('(pointer: fine)') &&
+  cursorFollowerSrc.includes("prefers-reduced-motion: reduce"));
 ok("animation settings helpers: brightness clamp + unlimited products dedupe + constant marquee speed",
   animSettings.BUSINESS_ANIMATION_KEY === "business_animation_settings" &&
   animSettings.clampAnimationBrightness(5) === 10 &&

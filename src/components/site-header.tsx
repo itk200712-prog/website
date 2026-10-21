@@ -8,8 +8,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/auth";
 import { SiteLogoBadge } from "@/components/site-logo";
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Phone, Home, ShieldCheck, Lock, LogOut, ChevronDown as ChevDown } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { ChevronDown, Menu, X, UserRound, Building2, UsersRound, Newspaper, Images, Home, ShieldCheck, Lock, LogOut, ChevronDown as ChevDown } from "lucide-react";
+import { PhoneImageIcon as Phone } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import { LangSwitcher } from "@/components/lang-switcher";
 import { BUSINESSES } from "@/lib/seed";
@@ -135,7 +136,7 @@ export function SiteHeader() {
             {/* Businesses dropdown */}
             <div className="relative" onMouseEnter={() => openMenu("biz")} onMouseLeave={closeMenuSoon}>
               <button onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1">
-                <Building2 size={15} /> {t.nav.businesses} <ChevronDown size={14} />
+                <Building2 size={15} /> {t.nav.businesses} <ChevronDown size={14} className={`transition-transform duration-300 ${open === "biz" ? "rotate-180" : ""}`} />
               </button>
               {open === "biz" && (
                 <div className="mega">
@@ -144,13 +145,15 @@ export function SiteHeader() {
                     <span className="text-xs text-slate-400">{publicBusinesses.length} Divisions</span>
                   </div>
                   <div className="mega-scroll grid grid-cols-2 gap-1.5">
-                    {publicBusinesses.map((b) => (
+                    {publicBusinesses.map((b, i) => (
                       <Link
                         key={b.slug}
                         href={L(`/businesses/${b.slug}`)}
-                        className="flex items-start gap-2.5 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200"
+                        aria-current={pathname.endsWith(`/businesses/${b.slug}`) ? "page" : undefined}
+                        style={{ "--mega-index": i } as CSSProperties}
+                        className={`mega-item flex items-start gap-2.5 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200 ${pathname.endsWith(`/businesses/${b.slug}`) ? "mega-item-current" : ""}`}
                       >
-                        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500 shrink-0 overflow-hidden">
+                        <div className="mega-item-icon w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500 shrink-0 overflow-hidden">
                           {b.logo ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={b.logo} alt="" className="w-full h-full object-cover" />
@@ -158,7 +161,7 @@ export function SiteHeader() {
                             b.name_en.slice(0, 2).toUpperCase()
                           )}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <span className="text-[12.5px] font-bold text-slate-800 truncate">{lang === "si" ? b.name_si : b.name_en}</span>
                             {b.is_new && <span className="badge-new">NEW</span>}
@@ -167,6 +170,9 @@ export function SiteHeader() {
                             {(lang === "si" ? b.tagline_si || b.category_si : b.tagline_en || b.category_en) || b.category_en}
                           </div>
                         </div>
+                        <span aria-hidden="true" className="mega-item-arrow ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-black text-white shadow-md shadow-indigo-600/25">
+                          →
+                        </span>
                       </Link>
                     ))}
                   </div>
@@ -182,27 +188,27 @@ export function SiteHeader() {
             {/* Membership dropdown */}
             <div className="relative" onMouseEnter={() => openMenu("mem")} onMouseLeave={closeMenuSoon}>
               <button onMouseEnter={(e) => glideTo(e.currentTarget)} className="px-3 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-1">
-                <UsersRound size={15} /> {t.nav.membership} <ChevronDown size={14} />
+                <UsersRound size={15} /> {t.nav.membership} <ChevronDown size={14} className={`transition-transform duration-300 ${open === "mem" ? "rotate-180" : ""}`} />
               </button>
               {open === "mem" && (
                 <div className="mega" style={{ width: "min(92vw, 420px)" }}>
                   <div className="section-badge mb-2">Membership Portal — MPCS</div>
                   <div className="flex flex-col gap-1">
-                    <Link href={L("/membership/members")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
+                    <Link href={L("/membership/members")} className="mega-item flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                       <UsersRound size={18} className="text-indigo-700" />
                       <div>
                         <div className="text-[13px] font-bold text-slate-800">{t.nav.memberDetails}</div>
                         <div className="text-[11px] text-slate-500">Search full registered member registry</div>
                       </div>
                     </Link>
-                    <Link href={L("/membership/voters")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
+                    <Link href={L("/membership/voters")} className="mega-item flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                       <ShieldCheck size={18} className="text-indigo-700" />
                       <div>
                         <div className="text-[13px] font-bold text-slate-800">{t.nav.voters}</div>
                         <div className="text-[11px] text-slate-500">Cooperative electoral register</div>
                       </div>
                     </Link>
-                    <Link href={L("/membership/apply")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
+                    <Link href={L("/membership/apply")} className="mega-item flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                       <Newspaper size={18} className="text-indigo-700" />
                       <div>
                         <div className="flex items-center gap-2">
@@ -214,7 +220,7 @@ export function SiteHeader() {
                     </Link>
                     <div className="border-t border-slate-100 my-1" />
                     {me ? (
-                      <Link href={L("/dashboard")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
+                      <Link href={L("/dashboard")} className="mega-item flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                         <UserRound size={18} className="text-indigo-700" />
                         <div>
                           <div className="text-[13px] font-bold text-slate-800">{me.name} — Profile</div>
@@ -223,14 +229,14 @@ export function SiteHeader() {
                       </Link>
                     ) : (
                       <>
-                        <Link href={L("/register")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
+                        <Link href={L("/register")} className="mega-item flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                           <UserRound size={18} className="text-slate-500" />
                           <div>
                             <div className="text-[13px] font-bold text-slate-800">{t.nav.register}</div>
                             <div className="text-[11px] text-slate-500">Create a new cooperative account</div>
                           </div>
                         </Link>
-                        <Link href={L("/signin")} className="flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
+                        <Link href={L("/signin")} className="mega-item flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50 hover:to-fuchsia-50/70 hover:shadow-md transition-all duration-200">
                           <UserRound size={18} className="text-indigo-700" />
                           <div>
                             <div className="text-[13px] font-bold text-slate-800">{t.nav.signin}</div>

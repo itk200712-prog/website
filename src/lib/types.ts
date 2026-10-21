@@ -26,6 +26,8 @@ export interface BusinessBranch {
 }
 
 export interface BusinessService {
+  /** DB row id (seed data වල නෑ) — Admin edit/delete වලදී හරියටම row එක අඳුරගන්න */
+  id?: string;
   order: number;
   title_en: string;
   title_si: string;

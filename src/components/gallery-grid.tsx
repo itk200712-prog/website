@@ -6,7 +6,8 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Heart, ImageIcon, LogIn, MessageSquare, Send, X } from "lucide-react";
+import { Heart, ImageIcon, LogIn, Send, X } from "lucide-react";
+import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
 import type { GalleryComment, GalleryItem } from "@/lib/types";
 import { authedClient } from "@/lib/supabase/client";
