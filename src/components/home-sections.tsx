@@ -225,7 +225,7 @@ export function HomeSections({
         {/* ✅ hero stats bar — dark glass strip */}
         <div className="relative z-30 px-4 sm:px-6 pb-12 sm:pb-14">
           <div className="max-w-3xl mx-auto rounded-2xl border border-white/15 bg-slate-950/65 backdrop-blur-xl px-4 sm:px-8 py-4">
-            <div className="grid grid-cols-3 divide-x divide-white/12">
+            <div className="grid grid-cols-3 divide-x divide-white/15">
               <div className="flex items-center justify-center gap-2.5 px-2">
                 <Users size={18} className="text-amber-300" />
                 <div className="text-left">

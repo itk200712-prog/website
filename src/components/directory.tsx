@@ -306,14 +306,14 @@ export function DirectoryTable({
 
           {/* meta line */}
           <div className="mt-3 flex items-center gap-2 text-[11.5px] text-indigo-100/70 font-medium">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/8 border border-white/12 px-3 py-1">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 px-3 py-1">
               {loading
                 ? (lang === "si" ? "දත්ත ලැබෙමින්…" : "Loading data…")
                 : (lang === "si"
                     ? `පෙන්වන්නේ ${from.toLocaleString()}–${to.toLocaleString()} / ${(q.trim() ? filtered.length : displayTotal).toLocaleString()} පේළි`
                     : `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${(q.trim() ? filtered.length : displayTotal).toLocaleString()} entries`)}
             </span>
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 border ${allRows.length < filesTotal && filesTotal > 0 ? "bg-amber-400/15 border-amber-300/30 text-amber-200" : "bg-white/8 border-white/12 text-indigo-100/70"}`}>
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 border ${allRows.length < filesTotal && filesTotal > 0 ? "bg-amber-400/15 border-amber-300/30 text-amber-200" : "bg-white/10 border-white/15 text-indigo-100/70"}`}>
               {allRows.length < filesTotal && filesTotal > 0
                 ? `⏳ ${allRows.length.toLocaleString()} / ${filesTotal.toLocaleString()}`
                 : `✓ ${displayTotal.toLocaleString()}`}

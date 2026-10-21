@@ -137,7 +137,7 @@ export function AdminSidebar() {
               setNavQ(value);
             }}
             placeholder="Search panels…"
-            className="w-full rounded-lg bg-white/8 border border-white/10 text-white placeholder:text-slate-500 text-[10.5px] pl-7 pr-2 py-1.5 outline-none focus:border-indigo-400/60 focus:bg-white/12"
+            className="w-full rounded-lg bg-white/10 border border-white/10 text-white placeholder:text-slate-500 text-[10.5px] pl-7 pr-2 py-1.5 outline-none focus:border-indigo-400/60 focus:bg-white/15"
           />
           <svg className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
         </div>

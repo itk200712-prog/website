@@ -746,6 +746,11 @@ ok("admin sidebar: search cannot be credential-autofilled and clears on section 
   adminShellSrc.includes('value.trim().toLowerCase() === "superadmin"') &&
   adminShellSrc.includes("setNavQ(\"\")") &&
   adminShellSrc.includes("[path]"));
+ok("css: Tailwind opacity utilities use generated scale values (no dead /8 or /12 classes)",
+  [adminShellSrc, readFileSync(join(root, "src/components/directory.tsx"), "utf8"), readFileSync(join(root, "src/components/home-sections.tsx"), "utf8")]
+    .every((src) => !/(bg|border|divide)-white\/(8|12)\b/.test(src)) &&
+  adminShellSrc.includes("bg-white/10") &&
+  adminShellSrc.includes("focus:bg-white/15"));
 const applicationsSrc = readFileSync(join(root, "src/app/admin/applications/page.tsx"), "utf8");
 ok("applications: delete is superadmin-only in UI + RLS (section admins blocked)",
   applicationsSrc.includes('const canDeleteApplications = role === "superadmin"') &&
@@ -800,6 +805,19 @@ ok("backup history: auto-prune to 5 + manual delete controls + scheduled last-su
   scheduledBackupSrc.includes("async function pruneBackupHistory") &&
   scheduledBackupSrc.includes("storeLastScheduledSuccessDate") &&
   scheduledBackupSrc.includes("SCHEDULE_LAST_SUCCESS_KEY"));
+ok("backup: latest updates ride inside download/import (settings branches/photos + schedule memory + history prune)",
+  backupTables.includes("system_settings") &&
+  backupTables.includes("backup_history") &&
+  backupTables.includes("backup_secrets") &&
+  backupTables.includes("site_images_backup") &&
+  branchSettings.BUSINESS_BRANCH_PHOTOS_KEY === "business_branch_photos" &&
+  branchSettings.RURAL_BANK_BRANCHES_KEY === "rural_bank_branches" &&
+  readFileSync(join(root, "src/lib/scheduled-backup.ts"), "utf8").includes("backup_schedule_last_success_date") &&
+  backupSrc.includes("if (!opts?.client) await pruneBackupHistory(BACKUP_HISTORY_KEEP)") &&
+  backupSrc.includes("Import එකෙන් පස්සේ Backup History එකත් අලුත්ම 5") &&
+  backupSrc.includes("backup_history prune:") &&
+  scheduledBackupSrc.includes("await pruneBackupHistory();\n  let built") &&
+  backupSrc.includes("JSON.stringify"));
 
 console.log("\n── 21) Baymax professional upgrade (greeting · identity · complete answers · links) ──");
 ok("greeting name: guest → no name (Hi only); signed-in user/admin → own profile name",

@@ -598,6 +598,27 @@ export async function restoreBackup(
     }
   }
 
+  // 3b) Import එකෙන් පස්සේ Backup History එකත් අලුත්ම 5 ටම තබා ගනී
+  //     (backup_history restore එකේදී merge වන නිසා පරණ backup එකක වැඩි history තිබිය හැක)
+  if (ordered.some((t) => t.name === "backup_history")) {
+    try {
+      const { data, error } = await sb
+        .from("backup_history")
+        .select("id, created_at")
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(1000);
+      if (error) throw new Error(error.message);
+      const staleIds = backupHistoryIdsToPrune((data ?? []) as { id: string; created_at: string }[], BACKUP_HISTORY_KEEP);
+      if (staleIds.length) {
+        const { error: deleteError } = await sb.from("backup_history").delete().in("id", staleIds);
+        if (deleteError) throw new Error(deleteError.message);
+      }
+    } catch (e) {
+      errors.push(`backup_history prune: ${(e as Error).message}`);
+    }
+  }
+
   onProgress("Restore complete ✅", 100);
   return { restored, errors };
 }
@@ -790,6 +811,11 @@ export async function generateBackupZip(
   const XLSX = xlsxMod.default ?? xlsxMod;
   const zip = new JSZip();
   const generatedAt = new Date().toISOString();
+
+  // Download/Safety ZIP එක හදන්න කලින්ම Backup History එක අලුත්ම 5 ට clean කරයි,
+  // එවිට backup file එක ඇතුළේත් අලුත් retention update එකම තියේ.
+  // (Server scheduled backup එකේදී client එක inject වෙන නිසා එතැන route එකෙන්ම prune කරයි.)
+  if (!opts?.client) await pruneBackupHistory(BACKUP_HISTORY_KEEP);
 
   // manifest එකට — ZIP එකට දාන හැම file එකකම SHA-256 hash + size
   const files: Record<string, { sha256: string; size: number }> = {};

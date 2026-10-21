@@ -339,6 +339,9 @@ export async function POST(req: NextRequest) {
   const encPw = settings.encrypt ? secrets.encryptionPassword : "";
   const encrypted = Boolean(encPw);
   const encryptWarning = settings.encrypt && !encPw ? "⚠ Encryption Password එක save කරලා නැති නිසා encrypt නොවී ගියා" : "";
+  // Auto ZIP එක හදන්න කලින්ම පරණ History clean කරයි — එවිට MEGA/Supabase එකට යන
+  // backup file එක ඇතුළේත් තියෙන්නේ අලුත්ම history 5 විතරයි.
+  await pruneBackupHistory();
   let built: Awaited<ReturnType<typeof buildFullBackupZip>>;
   try {
     built = await buildFullBackupZip(encPw);
