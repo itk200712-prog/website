@@ -10,7 +10,7 @@ import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
 import { buildGalleryCommentTree, groupGalleryItems, normalizeGalleryCount } from "@/lib/gallery-social";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbInsertMany, dbUpdate, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
-import { uploadSiteImage } from "@/lib/supabase/storage";
+import { deleteSiteImage, uploadSiteImage } from "@/lib/supabase/storage";
 import { GALLERY } from "@/lib/seed";
 import type { GalleryComment, GalleryItem } from "@/lib/types";
 
@@ -24,35 +24,45 @@ export default function AdminGalleryPage() {
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [items, setItems] = useState<GalleryItem[]>([...GALLERY]);
+  const [deletingId, setDeletingId] = useState("");
+  const [items, setItems] = useState<GalleryItem[]>(() => (isSupabaseConfigured() ? [] : [...GALLERY]));
   const [loaded, setLoaded] = useState(false);
 
   // DB එකෙන් load — ✅ comments gallery_comments table එකෙන්
+  // ⚠ DB එක හිස් නම් හිස් ලැයිස්තුවම තබනවා. කලින් seed (default) photos 3
+  //    එහෙමම පෙනුණු නිසා ඒවා delete කරද්දී DB row එකක් නැතුව
+  //    "row එක හමු නොවුණා/permission නෑ" කියලා වැටුණා.
   async function load() {
     if (!isSupabaseConfigured()) { setLoaded(true); return; }
     try {
-      const { data } = await createClient().from("gallery_items").select("*");
-      const { data: cm } = await createClient().from("gallery_comments").select("*").order("created_at", { ascending: true });
-      if (data && data.length > 0) {
-        setItems(
-          (data as unknown as GalleryItem[]).map((g) => ({
-            ...g,
-            comments: (cm ?? [])
-              .filter((c: { item_id: string }) => c.item_id === g.id)
-              .map((c: { id: string; author: string; text: string; created_at: string; parent_id?: string | null; likes?: number }) => ({
-                id: String(c.id),
-                author: String(c.author ?? ""),
-                text: String(c.text ?? ""),
-                created_at: String(c.created_at ?? ""),
-                parent_id: c.parent_id ? String(c.parent_id) : null,
-                likes: normalizeGalleryCount(c.likes),
-              })),
-            likes: normalizeGalleryCount(g.likes),
-            views: normalizeGalleryCount(g.views),
-          }))
-        );
+      const { data, error } = await createClient().from("gallery_items").select("*");
+      if (error) {
+        setItems([]);
+        show(`⚠ Gallery load බැරි වුණා: ${error.message}`);
+        setLoaded(true);
+        return;
       }
-    } catch { /* ignore */ }
+      const { data: cm } = await createClient().from("gallery_comments").select("*").order("created_at", { ascending: true });
+      setItems(
+        ((data ?? []) as unknown as GalleryItem[]).map((g) => ({
+          ...g,
+          comments: (cm ?? [])
+            .filter((c: { item_id: string }) => c.item_id === g.id)
+            .map((c: { id: string; author: string; text: string; created_at: string; parent_id?: string | null; likes?: number }) => ({
+              id: String(c.id),
+              author: String(c.author ?? ""),
+              text: String(c.text ?? ""),
+              created_at: String(c.created_at ?? ""),
+              parent_id: c.parent_id ? String(c.parent_id) : null,
+              likes: normalizeGalleryCount(c.likes),
+            })),
+          likes: normalizeGalleryCount(g.likes),
+          views: normalizeGalleryCount(g.views),
+        }))
+      );
+    } catch {
+      setItems([]);
+    }
     setLoaded(true);
   }
   useEffect(() => { load(); }, []);
@@ -195,10 +205,43 @@ export default function AdminGalleryPage() {
   }
 
   async function removeItem(g: GalleryItem) {
-    setItems((xs) => xs.filter((x) => x.id !== g.id));
-    const err = await dbDelete("gallery_items", { id: g.id });
-    await load();
-    show(err ? `⚠ ${err}` : "✅ Deleted");
+    if (deletingId) return;
+    setDeletingId(g.id);
+    try {
+      if (!isSupabaseConfigured()) {
+        setItems((xs) => xs.filter((x) => x.id !== g.id));
+        show("✅ Deleted");
+        return;
+      }
+
+      // පරණ default/stale image එකක් DB එකේ row එකක් නැතුව ලැයිස්තුවේ
+      // ඉතිරි වෙලා තිබුණොත් ඒක delete error එකක් නොවේ — ලැයිස්තුවෙන් අයින් කරනවා.
+      // (row එක ඇත්තටම තියෙනවා නම් විතරක් DB delete එකට යනවා; එතකොට
+      //  permission ප්‍රශ්නයක් තිබුණොත් ඒක හරියටම error එකක් විදිහට පේනවා.)
+      const { data: existing, error: existingError } = await createClient()
+        .from("gallery_items")
+        .select("id")
+        .eq("id", g.id)
+        .maybeSingle();
+      if (!existingError && !existing) {
+        setItems((xs) => xs.filter((x) => x.id !== g.id));
+        show("✅ Deleted — පරණ default image එක අයින් කළා");
+        return;
+      }
+
+      const err = await dbDelete("gallery_items", { id: g.id });
+      if (!err) {
+        setItems((xs) => xs.filter((x) => x.id !== g.id));
+        // Upload කරපු file එක වෙන photo එකකටත් පාවිච්චි වෙන්නේ නැත්නම් storage එකෙනුත් අයින් කරනවා
+        if (g.image && !items.some((x) => x.id !== g.id && x.image === g.image)) {
+          await deleteSiteImage(g.image);
+        }
+      }
+      await load();
+      show(err ? `⚠ ${err}` : "✅ Deleted");
+    } finally {
+      setDeletingId("");
+    }
   }
 
   function renderAdminComment(c: GalleryComment, isReply: boolean) {
@@ -304,10 +347,11 @@ export default function AdminGalleryPage() {
                   <Pencil size={13} /> Edit
                 </button>
                 <button
-                  className="btn btn-outline !py-1.5 !px-3 !text-[11.5px] !text-red-600 !border-red-200"
-                  onClick={() => removeItem(g)}
+                  className="btn btn-outline !py-1.5 !px-3 !text-[11.5px] !text-red-600 !border-red-200 disabled:opacity-50"
+                  disabled={deletingId === g.id}
+                  onClick={() => void removeItem(g)}
                 >
-                  <Trash2 size={13} /> Delete
+                  <Trash2 size={13} /> {deletingId === g.id ? "Deleting…" : "Delete"}
                 </button>
               </div>
             </div>

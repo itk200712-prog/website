@@ -316,6 +316,15 @@ ok("gallery: upload ANY number of photos under one tagline (no 3-photo cap, prog
   adminGallerySrc.includes('dbInsertMany("gallery_items"') &&
   adminGallerySrc.includes("එකවර Photos ඕනෑම ගණනක්") &&
   adminGallerySrc.includes("Upload Photos (Any Number)"));
+ok("gallery admin delete: empty DB does not resurrect seed/default photos + stale default delete succeeds + storage cleanup",
+  adminGallerySrc.includes('isSupabaseConfigured() ? [] : [...GALLERY]') &&
+  adminGallerySrc.includes('((data ?? []) as unknown as GalleryItem[])') &&
+  !adminGallerySrc.includes('if (data && data.length > 0)') &&
+  adminGallerySrc.includes('.select("id")') &&
+  adminGallerySrc.includes('.maybeSingle()') &&
+  adminGallerySrc.includes("පරණ default image එක අයින් කළා") &&
+  adminGallerySrc.includes("deleteSiteImage") &&
+  adminGallerySrc.includes("deletingId"));
 
 console.log("\n── 8) Board categories (director board page) ──");
 ok("chairman=1, vice-chairman=1", seed.BOARD.filter((m) => m.category === "chairman").length === 1 && seed.BOARD.filter((m) => m.category === "vice-chairman").length === 1);
@@ -1229,7 +1238,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-21-gallery-albums-v6"));
+  genSiteSourceSrc.includes("2026-10-21-gallery-delete-fix-v7"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
