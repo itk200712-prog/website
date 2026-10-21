@@ -474,7 +474,9 @@ export default function AdminBusinessesPage() {
                   <div className="text-slate-500 text-[11px] leading-relaxed">
                     {editFor.slug === "coop-city"
                       ? "Add up to 5 branches. They appear as ordered cards above Department Contact & Inquiries on the Coop City page."
-                      : "Branches are saved separately and shown in the Regional Branches section where this business template uses it."}
+                      : editFor.special === "consumer"
+                        ? "Regional branches appear above the Sales Development Manager and Store Manager rows. To delete Mandapola or any other branch, click Delete on its row and then Save Changes."
+                        : "Branches are saved separately and shown in the Regional Branches section where this business template uses it."}
                   </div>
                 </div>
                 <button
@@ -497,13 +499,18 @@ export default function AdminBusinessesPage() {
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
                       {editFor.slug === "coop-city" ? "COOP CITY BRANCH" : "REGIONAL BRANCH"} #{i + 1}
                     </div>
-                    <button type="button" title="Remove branch" className="text-rose-500 hover:text-rose-700" onClick={() => setBranchRows((rs) => rs.filter((_, j) => j !== i))}>
-                      <Trash2 size={13} />
+                    <button
+                      type="button"
+                      title="Delete this branch"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-black text-rose-600 hover:bg-rose-100"
+                      onClick={() => setBranchRows((rs) => rs.filter((_, j) => j !== i))}
+                    >
+                      <Trash2 size={13} /> Delete
                     </button>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
                     <div>
-                      <label className="field-label !mb-1">{editFor.slug === "coop-city" ? "Coop City Type" : "Branch Name"}</label>
+                      <label className="field-label !mb-1">{editFor.slug === "coop-city" ? "Coop City Type" : editFor.special === "consumer" ? "Regional Name" : "Branch Name"}</label>
                       <input
                         className="field !py-2 !text-[11.5px]"
                         placeholder={editFor.slug === "coop-city" ? "e.g. Mini Coop City – Hettipola" : "e.g. Mandapola"}
@@ -541,7 +548,10 @@ export default function AdminBusinessesPage() {
                   </div>
                 </div>
               ))}
-              <p className="text-[10.5px] text-slate-400 mt-3">හිස් branch rows Save කිරීමේදී ඉවත් වේ. Type එක ශාඛාව අනුව වෙනස්ව ලියන්න (උදා: Coop City – Hettipola).</p>
+              <p className="text-[10.5px] text-slate-400 mt-3">
+                හිස් branch rows Save කිරීමේදී ඉවත් වේ. ශාඛාවක් මකන්න එහි <strong className="text-rose-500">Delete</strong> ඔබලා Save Changes කරන්න.
+                {editFor.slug === "coop-city" ? " Type එක ශාඛාව අනුව වෙනස්ව ලියන්න (උදා: Coop City – Hettipola)." : ""}
+              </p>
             </div>
 
             {/* logo + cover */}

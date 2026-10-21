@@ -155,6 +155,17 @@ ok("Coop City branches: five Admin-managed cards above Department Contact & Inqu
   adminBusinessesSrc.includes('dbDelete("business_branches"') &&
   adminBusinessesSrc.includes('dbInsert("business_branches"') &&
   !adminBusinessesSrc.includes('role_en: "Regional Branch"'));
+ok("Consumer page: long Regional rows above separate Sales/Store manager rows + branch Delete setting",
+  businessDetailSrc.includes("export function ConsumerManagerContacts") &&
+  businessDetailSrc.includes("Manager Type") &&
+  businessDetailSrc.includes("Regional Name") &&
+  businessDetailSrc.includes("Manager Name") &&
+  businessDetailSrc.includes('b.special === "consumer"') &&
+  businessPageSrc.indexOf("<RegionalBranches") > -1 &&
+  businessPageSrc.indexOf("<RegionalBranches") < businessPageSrc.indexOf("<BusinessContacts") &&
+  adminBusinessesSrc.includes("To delete Mandapola or any other branch") &&
+  adminBusinessesSrc.includes("Delete this branch") &&
+  adminBusinessesSrc.includes('"Regional Name"'));
 
 console.log("\n── 8) Board categories (director board page) ──");
 ok("chairman=1, vice-chairman=1", seed.BOARD.filter((m) => m.category === "chairman").length === 1 && seed.BOARD.filter((m) => m.category === "vice-chairman").length === 1);

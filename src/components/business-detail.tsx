@@ -11,7 +11,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/i18n";
 import { ContactCards, SectionHead, SendInquiryCard, ServiceCard } from "@/components/site-sections";
-import type { BusinessUnit, FuelPrice } from "@/lib/types";
+import type { BusinessContact, BusinessUnit, FuelPrice } from "@/lib/types";
 import { authedClient } from "@/lib/supabase/client";
 import { RURAL_BANK_BRANCHES } from "@/lib/seed";
 
@@ -238,29 +238,69 @@ export function RuralBankNetwork() {
 export function RegionalBranches({ b }: { b: BusinessUnit }) {
   const { lang, t } = useLang();
   if (b.branches.length === 0) return null;
+  const si = lang === "si";
+  const labels = {
+    name: si ? "කලාපීය ශාඛාවේ නම" : "Regional Name",
+    manager: si ? "කළමනාකරුගේ නම" : "Manager Name",
+    location: si ? "ස්ථානය" : "Location",
+    hotline: si ? "හොට්ලයින්" : "Hotline",
+    call: si ? "අමතන්න" : "Call",
+  };
+
   return (
     <section className="bg-white border-y border-slate-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
-        <SectionHead badge="Regional Branches" title={`${t.sections.branches} (කලාපීය)`} sub={t.sections.branchesSub} />
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {b.branches.map((br) => (
-            <div key={br.name} className="card p-6">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                  <MapPin size={19} />
+        <SectionHead
+          badge="Regional Branches"
+          title={si ? "කලාපීය ශාඛා" : "Regional Branches"}
+          sub={t.sections.branchesSub}
+        />
+        {/* දිග පේළි: Regional Name → Manager Name → Location → Hotline, ඊළඟ ශාඛාව ඊට යටින් */}
+        <div className="mx-auto max-w-6xl space-y-3">
+          {b.branches.map((br, i) => {
+            const phoneHref = br.phone ? `tel:${br.phone.replace(/\s/g, "")}` : undefined;
+            const fields = [
+              { label: labels.name, value: br.name, icon: <MapPin size={16} /> },
+              { label: labels.manager, value: br.manager, icon: <UserRound size={16} /> },
+              { label: labels.location, value: br.location, icon: <MapPin size={16} /> },
+            ];
+            return (
+              <article
+                key={`${br.name}-${i}`}
+                className="grid gap-4 rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_14px_35px_-28px_rgba(6,78,59,0.55)] sm:p-5 md:grid-cols-[1.1fr_1fr_1fr_auto] md:items-center"
+              >
+                {fields.map((field, fieldIndex) => (
+                  <div key={field.label} className="flex min-w-0 items-start gap-3">
+                    <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                      {field.icon}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                        {field.label}
+                      </span>
+                      <span className={`mt-1 block break-words text-[13.5px] font-bold leading-snug ${fieldIndex === 0 ? "text-[15px] font-black text-slate-900" : "text-slate-700"}`}>
+                        {field.value || "—"}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+                <div className="rounded-2xl bg-emerald-700 px-4 py-3 text-white md:min-w-44">
+                  <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-emerald-100">
+                    <PhoneCall size={14} /> {labels.hotline}
+                  </div>
+                  <div className="mt-1 text-[15px] font-black tabular-nums">{br.phone || "—"}</div>
+                  {phoneHref && (
+                    <a
+                      href={phoneHref}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-black text-emerald-800"
+                    >
+                      <Phone size={11} /> {labels.call}
+                    </a>
+                  )}
                 </div>
-                <div>
-                  <div className="font-extrabold text-slate-900">{br.name}</div>
-                  <div className="text-slate-500 text-[12px]">{lang === "si" ? "කලාපීය ශාඛාව" : "Regional Branch"}</div>
-                </div>
-              </div>
-              <div className="mt-4 space-y-1.5 text-[13px] text-slate-600">
-                <div className="flex items-center gap-2"><UserRound size={14} className="text-slate-400" /> {br.manager}</div>
-                <div className="flex items-center gap-2"><MapPin size={14} className="text-slate-400" /> {br.location}</div>
-                <div className="flex items-center gap-2"><Phone size={14} className="text-slate-400" /> {br.phone}</div>
-              </div>
-            </div>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -357,26 +397,115 @@ export function CoopCityBranches({ b }: { b: BusinessUnit }) {
   );
 }
 
+function BusinessHoursCard() {
+  return (
+    <div className="card p-5 text-[12.5px] text-slate-500 space-y-2">
+      <div className="flex items-center gap-2 text-slate-700 font-bold text-[13px]">
+        <Clock size={15} /> Business Hours
+      </div>
+      <div>Mon – Sat : 8.30 AM – 5.30 PM</div>
+      <div>Sunday &amp; Public Holidays : Closed</div>
+      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+        <Star size={14} className="text-amber-500" />
+        <span className="text-slate-600">Member privileges &amp; special offers available</span>
+      </div>
+    </div>
+  );
+}
+
+/** Consumer Section එකේ කළමනාකරුවන් දෙදෙනා වෙන වෙනම දිග පේළි දෙකකින් පෙන්වයි. */
+export function ConsumerManagerContacts({ contacts }: { contacts: BusinessContact[] }) {
+  const { lang } = useLang();
+  const si = lang === "si";
+  const managers = contacts.filter((c) => {
+    const role = `${c.role_en} ${c.role_si}`.toLowerCase();
+    return !role.includes("regional branch") && !role.includes("ප්‍රාදේශීය ශාඛාව") && !role.includes("කලාපීය ශාඛා");
+  });
+  if (managers.length === 0) return null;
+  const labels = {
+    type: si ? "කළමනාකරු වර්ගය" : "Manager Type",
+    name: si ? "නම" : "Name",
+    location: si ? "ස්ථානය" : "Location",
+    hotline: si ? "හොට්ලයින්" : "Hotline",
+    call: si ? "අමතන්න" : "Call",
+  };
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-3">
+      {managers.map((c, i) => {
+        const phoneHref = c.phone ? `tel:${c.phone.replace(/\s/g, "")}` : undefined;
+        const fields = [
+          { label: labels.type, value: si ? c.role_si || c.role_en : c.role_en || c.role_si, icon: <ShieldCheck size={16} /> },
+          { label: labels.name, value: c.name, icon: <UserRound size={16} /> },
+          { label: labels.location, value: c.location, icon: <MapPin size={16} /> },
+        ];
+        return (
+          <article
+            key={`${c.role_en}-${c.name}-${i}`}
+            className="grid gap-4 rounded-2xl border border-indigo-100 bg-white p-4 shadow-[0_14px_35px_-28px_rgba(49,46,129,0.55)] sm:p-5 md:grid-cols-[1.15fr_1fr_1fr_auto] md:items-center"
+          >
+            {fields.map((field, fieldIndex) => (
+              <div key={field.label} className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
+                  {field.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                    {field.label}
+                  </span>
+                  <span className={`mt-1 block break-words text-[13.5px] font-bold leading-snug ${fieldIndex === 1 ? "text-[15px] font-black text-slate-900" : "text-slate-700"}`}>
+                    {field.value || "—"}
+                  </span>
+                </span>
+              </div>
+            ))}
+            <div className="rounded-2xl bg-indigo-700 px-4 py-3 text-white md:min-w-44">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-indigo-100">
+                <PhoneCall size={14} /> {labels.hotline}
+              </div>
+              <div className="mt-1 text-[15px] font-black tabular-nums">{c.phone || "—"}</div>
+              {phoneHref && (
+                <a
+                  href={phoneHref}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-[11px] font-black text-indigo-800"
+                >
+                  <Phone size={11} /> {labels.call}
+                </a>
+              )}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------ contacts ---- */
 export function BusinessContacts({ b }: { b: BusinessUnit }) {
-  const { lang } = useLang();
+  const { t } = useLang();
+
+  // Consumer Section: Regional පේළිවලට යටින් කළමනාකරුවන් දෙදෙනාම
+  // Manager Type → Name → Location → Hotline ලෙස වෙන වෙනම පෙන්වයි.
+  if (b.special === "consumer") {
+    return (
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
+        <SectionHead badge="Contact & Information" title={t.sections.contacts || "දෙපාර්තමේන්තු සම්බන්ධතා සහ විමසීම්"} sub={t.sections.contactsSub} />
+        <ConsumerManagerContacts contacts={b.contacts} />
+        <div className="mx-auto mt-8 grid max-w-6xl gap-6 lg:grid-cols-[1.35fr_1fr]">
+          <SendInquiryCard department={b.name_en} />
+          <BusinessHoursCard />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
       <div className="grid gap-10 lg:grid-cols-[1.6fr_1fr]">
         <ContactCards contacts={b.contacts} />
         <div className="space-y-6">
           <SendInquiryCard department={b.name_en} />
-          <div className="card p-5 text-[12.5px] text-slate-500 space-y-2">
-            <div className="flex items-center gap-2 text-slate-700 font-bold text-[13px]">
-              <Clock size={15} /> Business Hours
-            </div>
-            <div>Mon – Sat : 8.30 AM – 5.30 PM</div>
-            <div>Sunday &amp; Public Holidays : Closed</div>
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-              <Star size={14} className="text-amber-500" />
-              <span className="text-slate-600">Member privileges &amp; special offers available</span>
-            </div>
-          </div>
+          <BusinessHoursCard />
         </div>
       </div>
     </section>
