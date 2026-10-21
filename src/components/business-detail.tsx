@@ -12,32 +12,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/i18n";
 import { ContactCards, SectionHead, SendInquiryCard, ServiceCard } from "@/components/site-sections";
 import type { BusinessContact, BusinessUnit, FuelPrice } from "@/lib/types";
+import { animationWatermarkOpacity } from "@/lib/animation-settings";
 import { authedClient } from "@/lib/supabase/client";
 import { RURAL_BANK_BRANCHES } from "@/lib/seed";
 
 /* ---------------------------------------------------------------- hero ---- */
 export function BusinessHero({ b }: { b: BusinessUnit }) {
   const { lang, t } = useLang();
-  const anim = b.animation;
-  const brightness = anim?.brightness ?? 55;
-  const products = anim?.products ?? [];
+  const products = b.animation?.products ?? [];
   return (
-    <section className="hero-dark relative overflow-hidden text-white">
-      {/* Admin → Animation: background / watermark image (brightness එක එතැනින් හදනවා) */}
-      {anim?.bgImage && (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={anim.bgImage}
-            alt=""
-            aria-hidden="true"
-            className="biz-anim-bg absolute inset-0 h-full w-full object-cover"
-            style={{ filter: `brightness(${brightness}%)` }}
-          />
-          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-b from-[#0b1230]/70 via-[#0b1230]/30 to-[#0b1230]/85" />
-        </>
-      )}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-14">
+    <section className="hero-dark text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-14">
         {/* breadcrumb */}
         <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[12px]">
           <Home size={13} /> Home <ChevronRight size={12} className="text-white/40" /> Businesses
@@ -110,30 +95,36 @@ export function BusinessHero({ b }: { b: BusinessUnit }) {
   );
 }
 
+/* ------------------------------------------------- page background image -- */
+// Admin → Animation එකෙන් දාන image එක මුළු business පිටුවේම පසුබිමට (watermark)
+// වැටෙනවා — logo එක පිටිපස්සේ නෙවෙයි. Brightness එකෙන් පේන තද බව හැදෙනවා.
+export function BusinessPageWatermark({ b }: { b: BusinessUnit }) {
+  const anim = b.animation;
+  if (!anim?.bgImage) return null;
+  const brightness = anim.brightness ?? 55;
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={anim.bgImage}
+        alt=""
+        className="biz-anim-bg h-full w-full object-cover"
+        style={{
+          opacity: animationWatermarkOpacity(brightness),
+          filter: `brightness(${brightness}%)`,
+        }}
+      />
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- services -- */
 export function BusinessServices({ b }: { b: BusinessUnit }) {
   const { lang, t } = useLang();
   const services = b.services.filter((s) => s.active);
   if (services.length === 0 && b.special !== "default") return null;
   return (
-    <section className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14">
-      {/* Admin → Animation background image එකම මෘදු watermark එකක් විදිහටත් පේනවා */}
-      {b.animation?.bgImage && (
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={b.animation.bgImage}
-            alt=""
-            className="h-full w-full object-cover"
-            style={{
-              opacity: Math.min(0.14, ((b.animation.brightness ?? 55) / 100) * 0.14),
-              filter: `brightness(${b.animation.brightness ?? 55}%)`,
-            }}
-            loading="lazy"
-          />
-        </div>
-      )}
-      <div className="relative">
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
       <SectionHead badge="Offered Services" title={t.sections.services} sub={t.sections.servicesSub} />
       {services.length === 0 ? (
         <div className="card p-10 text-center text-slate-500">
@@ -148,7 +139,6 @@ export function BusinessServices({ b }: { b: BusinessUnit }) {
           ))}
         </div>
       )}
-      </div>
     </section>
   );
 }

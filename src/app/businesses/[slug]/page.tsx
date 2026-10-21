@@ -8,6 +8,7 @@ import { SiteFooter } from "@/components/site-footer";
 import {
   BusinessContacts,
   BusinessHero,
+  BusinessPageWatermark,
   BusinessServices,
   CoopCityBranches,
   FuelPriceSection,
@@ -33,6 +34,8 @@ export default async function BusinessDetailPage({ params }: { params: Promise<{
   return (
     <>
       <SiteHeader />
+      {/* මුළු පිටුවේම පසුබිම් watermark එක (Admin → Animation) */}
+      <BusinessPageWatermark b={b} />
       <BusinessHero b={b} />
 
       {/* Fuel Station — daily prices */}

@@ -1,8 +1,8 @@
 // ============================================================================
 // Business page animation extras stored in system_settings (no new SQL needed)
 //   · business_animation_settings — slug එක අනුව: { bgImage, brightness, products[] }
-//     bgImage    = business පිටුවේ උඩ background / watermark image එක
-//     brightness = ඒ image එකේ brightness % (Admin → Animation slider එක)
+//     bgImage    = මුළු business පිටුවේම පසුබිමට වැටෙන watermark image එක
+//     brightness = watermark එක පේන තද බව % (Admin → Animation slider එක)
 //     products   = පිටුවේ උඩින් animate වෙලා පේන product images
 // system_settings + site-images දෙකම Backup එකේ තියෙන නිසා මේ settings ත්
 // Download/Import backup එකත් එක්කම යනවා.
@@ -23,6 +23,15 @@ export function clampAnimationBrightness(v: unknown): number {
   const n = typeof v === "number" ? v : parseFloat(clean(v));
   if (!Number.isFinite(n)) return DEFAULT_ANIMATION_BRIGHTNESS;
   return Math.min(MAX_ANIMATION_BRIGHTNESS, Math.max(MIN_ANIMATION_BRIGHTNESS, Math.round(n)));
+}
+
+/**
+ * පිටුවේ පසුබිම් watermark එක පේන තද බව (opacity) — brightness slider එක අනුව.
+ * අඩු brightness = ලාවට · වැඩි brightness = තදින් (අකුරු කියවන්න පුළුවන් ගානට උපරිම 0.35).
+ */
+export function animationWatermarkOpacity(brightness: unknown): number {
+  const b = clampAnimationBrightness(brightness);
+  return Math.round(Math.min(0.35, Math.max(0.03, (b / 100) * 0.3)) * 1000) / 1000;
 }
 
 export function emptyBusinessAnimation(): BusinessAnimation {

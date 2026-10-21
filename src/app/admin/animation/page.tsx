@@ -17,6 +17,7 @@ import {
   MAX_ANIMATION_BRIGHTNESS,
   MAX_ANIMATION_PRODUCTS,
   MIN_ANIMATION_BRIGHTNESS,
+  animationWatermarkOpacity,
   clampAnimationBrightness,
   emptyBusinessAnimation,
   normalizeBusinessAnimation,
@@ -166,9 +167,9 @@ export default function AdminAnimationPage() {
               <Sparkles size={17} className="text-indigo-600" /> Business Page Animation Settings
             </h3>
             <p className="mt-1 max-w-3xl text-[12px] leading-relaxed text-slate-500">
-              වම් පැත්තෙන් business එකක් තෝරන්න. ඒ business එකේ පිටුවේ උඩ පේන <b>background / watermark image</b> එක,
-              එහි <b>brightness</b> එක සහ උඩින් <b>animate වෙලා යන product images</b> මෙතැනින් වෙනස් කළ හැක. Save කළාම
-              අදාළ business පිටුවේම පේනවා. මේ settings සහ images දෙකම Backup එකටත් ඇතුළත් වෙනවා.
+              වම් පැත්තෙන් business එකක් තෝරන්න. දාන <b>image එක මුළු business පිටුවේම පසුබිමට (watermark)</b> වැටෙනවා —
+              logo එක පිටිපස්සේ නෙවෙයි. එහි <b>brightness</b> එක සහ පිටුවේ උඩින් <b>animate වෙලා යන product images</b>
+              මෙතැනින් වෙනස් කළ හැක. Save කළාම අදාළ business පිටුවේම පේනවා. මේ settings සහ images දෙකම Backup එකටත් ඇතුළත් වෙනවා.
             </p>
           </div>
           <button className="btn btn-primary" onClick={save} disabled={saving || uploadingBg || uploadingProducts}>
@@ -259,46 +260,68 @@ export default function AdminAnimationPage() {
             </div>
           </div>
 
-          {/* Live preview */}
-          <div className="hero-dark relative mt-4 overflow-hidden rounded-3xl text-white">
-            {draft.bgImage && (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+          {/* Live preview — උඩ hero එකයි, යට මුළු පිටුවේම watermark එකයි */}
+          <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200">
+            <div className="hero-dark relative text-white">
+              <div className="relative px-5 py-6">
+                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">Preview</div>
+                <div className="mt-1.5 text-xl font-black">{current?.name_en}</div>
+                {draft.products.length > 0 ? (
+                  <div className="biz-products-marquee mt-4">
+                    <div
+                      className="biz-products-track"
+                      style={{ animationDuration: `${Math.max(18, draft.products.length * 7)}s` }}
+                    >
+                      {[...draft.products, ...draft.products].map((src, i) => (
+                        <div
+                          key={`${src}-${i}`}
+                          aria-hidden={i >= draft.products.length}
+                          className="biz-product-float flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-1 shadow-xl ring-1 ring-white/40"
+                          style={{ animationDelay: `${(i % draft.products.length) * 0.45}s` }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt="" className="h-full w-full rounded-xl object-contain" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-[11.5px] text-slate-300">තවම product images නෑ — පහළින් එකතු කරන්න.</p>
+                )}
+              </div>
+            </div>
+            {/* පිටුවේ අනිත් කොටස — image එක මෙතැන watermark එකක් විදිහට පේනවා */}
+            <div className="relative overflow-hidden bg-slate-50 px-5 py-5">
+              {draft.bgImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={draft.bgImage}
                   alt=""
                   aria-hidden="true"
                   className="biz-anim-bg absolute inset-0 h-full w-full object-cover"
-                  style={{ filter: `brightness(${draft.brightness}%)` }}
+                  style={{
+                    opacity: animationWatermarkOpacity(draft.brightness),
+                    filter: `brightness(${draft.brightness}%)`,
+                  }}
                 />
-                <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-b from-[#0b1230]/70 via-[#0b1230]/30 to-[#0b1230]/85" />
-              </>
-            )}
-            <div className="relative px-5 py-6">
-              <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">Preview</div>
-              <div className="mt-1.5 text-xl font-black">{current?.name_en}</div>
-              {draft.products.length > 0 ? (
-                <div className="biz-products-marquee mt-4">
-                  <div
-                    className="biz-products-track"
-                    style={{ animationDuration: `${Math.max(18, draft.products.length * 7)}s` }}
-                  >
-                    {[...draft.products, ...draft.products].map((src, i) => (
-                      <div
-                        key={`${src}-${i}`}
-                        aria-hidden={i >= draft.products.length}
-                        className="biz-product-float flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 p-1 shadow-xl ring-1 ring-white/40"
-                        style={{ animationDelay: `${(i % draft.products.length) * 0.45}s` }}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt="" className="h-full w-full rounded-xl object-contain" />
-                      </div>
-                    ))}
-                  </div>
+              ) : null}
+              <div className="relative">
+                <div className="text-[13px] font-extrabold text-slate-900">Offered Services</div>
+                <div className="mt-2.5 grid gap-2.5 sm:grid-cols-3">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="rounded-2xl border border-slate-200/80 bg-white/85 p-3 shadow-sm">
+                      <div className="h-2 w-3/4 rounded bg-slate-200" />
+                      <div className="mt-2 h-2 w-full rounded bg-slate-100" />
+                      <div className="mt-1.5 h-2 w-2/3 rounded bg-slate-100" />
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <p className="mt-3 text-[11.5px] text-slate-300">තවම product images නෑ — පහළින් එකතු කරන්න.</p>
-              )}
+                <p className="mt-3 text-[10.5px] font-medium text-slate-500">
+                  {draft.bgImage
+                    ? "↑ Image එක මේ විදිහට මුළු පිටුවේම පිටිපස්සේ watermark එකක් වගේ පේනවා (logo එක පිටිපස්සේ නෙවෙයි)."
+                    : "Background image එකක් දැම්මම ඒක මේ කොටසේ — මුළු පිටුවේම — පිටිපස්සේ watermark එකක් වගේ පේනවා."}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -333,10 +356,10 @@ export default function AdminAnimationPage() {
           {/* Brightness */}
           <div className="mt-5">
             <label className="field-label flex items-center gap-1.5">
-              <SunMedium size={13} /> Background Brightness — {draft.brightness}%
+              <SunMedium size={13} /> Watermark Brightness — {draft.brightness}%
             </label>
             <div className="flex items-center gap-3">
-              <span className="text-[10.5px] font-bold text-slate-400">Dark</span>
+              <span className="text-[10.5px] font-bold text-slate-400">Faint</span>
               <input
                 type="range"
                 min={MIN_ANIMATION_BRIGHTNESS}
@@ -346,7 +369,7 @@ export default function AdminAnimationPage() {
                 onChange={(e) => patch({ brightness: clampAnimationBrightness(Number(e.target.value)) })}
                 className="w-full accent-indigo-700"
               />
-              <span className="text-[10.5px] font-bold text-slate-400">Bright</span>
+              <span className="text-[10.5px] font-bold text-slate-400">Strong</span>
               <input
                 type="number"
                 min={MIN_ANIMATION_BRIGHTNESS}
@@ -357,7 +380,7 @@ export default function AdminAnimationPage() {
               />
             </div>
             <p className="mt-1 text-[10.5px] text-slate-400">
-              අඩු අගයක් = අඳුරු, අකුරු පැහැදිලියි. වැඩි අගයක් = image එක හොඳට පේනවා (watermark එකත් තදින් පේනවා).
+              අඩු අගයක් = watermark එක ලාවට පේනවා. වැඩි අගයක් = තදින් පේනවා. අකුරු කියවන්න බැරි තරමට තද වෙන්නේ නැති වෙන්න උපරිමය සීමා කරලා තියෙනවා.
             </p>
           </div>
 

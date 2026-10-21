@@ -222,7 +222,10 @@ ok("animation settings helpers: brightness clamp + products dedupe/cap + empty e
   }))["coop-city"].products.join(",") === "a.jpg,b.jpg" &&
   animSettings.parseBusinessAnimations(JSON.stringify({ hemas: { products: [] } })).hemas === undefined &&
   animSettings.normalizeBusinessAnimation({ products: Array.from({ length: 12 }, (_, i) => `p${i}.jpg`) }).products.length === 8 &&
-  animSettings.getBusinessAnimation({}, "coop-city") === undefined);
+  animSettings.getBusinessAnimation({}, "coop-city") === undefined &&
+  animSettings.animationWatermarkOpacity(55) === 0.165 &&
+  animSettings.animationWatermarkOpacity(120) === 0.35 &&
+  animSettings.animationWatermarkOpacity(10) === 0.03);
 const adminAnimationSrc = readFileSync(join(root, "src/app/admin/animation/page.tsx"), "utf8");
 const siteDataSrc = readFileSync(join(root, "src/lib/data.ts"), "utf8");
 ok("animation: Admin section (bg+brightness+products per business) → settings → animated public hero",
@@ -231,7 +234,7 @@ ok("animation: Admin section (bg+brightness+products per business) → settings 
   adminAnimationSrc.includes("BUSINESS_ANIMATION_KEY") &&
   adminAnimationSrc.includes('dbUpsert("system_settings"') &&
   adminAnimationSrc.includes("Background / Watermark Image") &&
-  adminAnimationSrc.includes("Background Brightness") &&
+  adminAnimationSrc.includes("Watermark Brightness") &&
   adminAnimationSrc.includes("Animated Product Images") &&
   adminAnimationSrc.includes('uploadSiteImage(f, "animation-bg"') &&
   adminAnimationSrc.includes('uploadSiteImage(f, "animation-products"') &&
@@ -239,7 +242,16 @@ ok("animation: Admin section (bg+brightness+products per business) → settings 
   siteDataSrc.includes("getBusinessAnimation(animations, slug)") &&
   businessDetailSrc.includes("biz-anim-bg") &&
   businessDetailSrc.includes("biz-products-marquee") &&
+  businessDetailSrc.includes("export function BusinessPageWatermark") &&
+  businessDetailSrc.includes("fixed inset-0 -z-10") &&
   businessDetailSrc.includes("brightness(${brightness}%)") &&
+  !businessDetailSrc
+    .slice(
+      businessDetailSrc.indexOf("export function BusinessHero"),
+      businessDetailSrc.indexOf("export function BusinessPageWatermark")
+    )
+    .includes("bgImage") &&
+  businessPageSrc.includes("<BusinessPageWatermark b={b} />") &&
   globalsCssSrc.includes("@keyframes bizProductsScroll") &&
   globalsCssSrc.includes("@keyframes bizBgZoom"));
 const adminGallerySrc = readFileSync(join(root, "src/app/admin/gallery/page.tsx"), "utf8");

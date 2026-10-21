@@ -38,9 +38,9 @@ export interface BusinessService {
 
 /** Admin → Animation settings (system_settings එකේ save වේ; DB column එකක් නෑ) */
 export interface BusinessAnimation {
-  /** පිටුවේ උඩ background / watermark image එක */
+  /** මුළු පිටුවේම පසුබිමට වැටෙන watermark image එක (logo එක පිටිපස්සේ නෙවෙයි) */
   bgImage: string;
-  /** background image එකේ brightness % (10–120) */
+  /** watermark එක පේන තද බව % (10–120) */
   brightness: number;
   /** උඩින් animate වෙලා පේන product images */
   products: string[];
