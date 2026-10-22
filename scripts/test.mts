@@ -1239,7 +1239,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-22-news-gallery-animations-v13"));
+  genSiteSourceSrc.includes("2026-10-22-media-size-pro-v14"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1307,12 +1307,14 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-22-news-gallery-animations-v13"));
+  genSiteSourceSrc.includes("2026-10-22-media-size-pro-v14"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
 );
 const latestBackupUpdateFiles = [
+  "src/app/admin/gallery/page.tsx",
+  "src/app/admin/news/page.tsx",
   "src/app/gallery/page.tsx",
   "src/app/globals.css",
   "src/app/layout.tsx",
@@ -1323,15 +1325,17 @@ const latestBackupUpdateFiles = [
   "src/components/hero-slideshow.tsx",
   "src/components/home-sections.tsx",
   "src/components/lang-switcher.tsx",
+  "src/components/media-info.tsx",
   "src/components/news-client.tsx",
   "src/components/site-sections.tsx",
   "src/lib/i18n.tsx",
+  "src/lib/media-info.ts",
   "src/lib/motion-compat.ts",
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-22-news-gallery-animations-v13" &&
-  generatedSiteSource.SITE_SOURCE_FILES.length >= 34 &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-22-media-size-pro-v14" &&
+  generatedSiteSource.SITE_SOURCE_FILES.length >= 37 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
   ) &&
@@ -1358,7 +1362,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-10-22-news-gallery-animations-v13"));
+  genSiteSourceSrc.includes("2026-10-22-media-size-pro-v14"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1387,7 +1391,40 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-22-news-gallery-animations-v13"));
+  genSiteSourceSrc.includes("2026-10-22-media-size-pro-v14"));
+const mediaInfo = await import("../src/lib/media-info.ts");
+ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
+  mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
+  mediaInfo.aspectFromDimensions(1920, 1080) === "16:9" &&
+  mediaInfo.aspectFromDimensions(1366, 768) === "16:9" &&
+  mediaInfo.aspectFromDimensions(1080, 1350) === "4:5" &&
+  mediaInfo.formatDimensions(1920, 1080) === "1,920 × 1,080 px" &&
+  mediaInfo.formatMegapixels(1920, 1080) === "2.07 MP" &&
+  mediaInfo.imageFormatFromUrl("https://example.com/photo.jpeg?x=1") === "JPG" &&
+  mediaInfo.formatFileSize(1536) === "1.5 KB" &&
+  mediaInfo.buildImageMetaSummary({ width: 1920, height: 1080, format: "JPG", lang: "en" }).includes("Widescreen"));
+const mediaInfoComponentSrc = readFileSync(join(root, "src/components/media-info.tsx"), "utf8");
+const adminNewsSrc = readFileSync(join(root, "src/app/admin/news/page.tsx"), "utf8");
+ok("professional image size display: shared actual-size badge/details in Gallery + Home + News + Admin previews/aspect picker",
+  mediaInfoComponentSrc.includes("export function useImageMeta") &&
+  mediaInfoComponentSrc.includes('method: "HEAD"') &&
+  mediaInfoComponentSrc.includes("export function MediaSizeBadge") &&
+  mediaInfoComponentSrc.includes("export function MediaDetailsStrip") &&
+  mediaInfoComponentSrc.includes("export function AspectShape") &&
+  galleryGridSrc.includes("MediaSizeBadge") &&
+  galleryGridSrc.includes("MediaDetailsStrip") &&
+  homeSectionsSrc.includes("MediaSizeBadge") &&
+  homeSectionsSrc.includes("MediaDetailsStrip") &&
+  newsClientSrc.includes("MediaSizeBadge") &&
+  newsClientSrc.includes("MediaDetailsStrip") &&
+  adminGallerySrc.includes("GALLERY_ASPECT_OPTIONS") &&
+  adminGallerySrc.includes("AspectShape") &&
+  adminGallerySrc.includes("MediaSizeBadge") &&
+  adminNewsSrc.includes("MediaSizeBadge") &&
+  adminNewsSrc.includes("MediaDetailsStrip") &&
+  genSiteSourceSrc.includes('"src/components/media-info.tsx"') &&
+  genSiteSourceSrc.includes('"src/lib/media-info.ts"') &&
+  genSiteSourceSrc.includes('"src/app/admin/news/page.tsx"'));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

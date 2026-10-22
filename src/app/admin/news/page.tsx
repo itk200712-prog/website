@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { Eye, Pencil, Pin, Plus, Search, Trash2, Upload } from "lucide-react";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbUpdate, useNotice } from "@/components/admin";
+import { MediaDetailsStrip, MediaSizeBadge } from "@/components/media-info";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadSiteImage } from "@/lib/supabase/storage";
 import { NEWS } from "@/lib/seed";
@@ -122,6 +123,11 @@ export default function AdminNewsPage() {
                 </div>
                 <div className="font-extrabold text-slate-900 text-[14px] mt-1">{n.title_en}</div>
                 <div className="text-slate-500 text-[11.5px]">{n.title_si}</div>
+                {n.image && (
+                  <div className="mt-2">
+                    <MediaSizeBadge src={n.image} variant="light" showName />
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -148,11 +154,15 @@ export default function AdminNewsPage() {
       {preview && (
         <AdminModal title={preview.title_en} sub={preview.title_si} onClose={() => setPreview(null)}>
           {preview.image && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview.image} alt="" className="w-full rounded-xl object-cover max-h-64 mb-4" />
+            <div className="relative mb-4 overflow-hidden rounded-xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={preview.image} alt="" className="max-h-64 w-full object-cover" />
+              <MediaSizeBadge src={preview.image} showName className="absolute bottom-3 right-3" />
+            </div>
           )}
           <p className="text-slate-600 text-[13.5px] leading-relaxed">{preview.desc_en}</p>
           <p className="text-slate-500 text-[13px] leading-relaxed mt-3">{preview.desc_si}</p>
+          {preview.image && <MediaDetailsStrip src={preview.image} className="mt-4" />}
           <div className="flex justify-end pt-4">
             <button className="btn btn-outline" onClick={() => setPreview(null)}>Close</button>
           </div>
@@ -206,8 +216,11 @@ export default function AdminNewsPage() {
               <label className="field-label">Cover Photo</label>
               <div className="flex items-center gap-3">
                 {photo && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photo} alt="preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
+                  <span className="flex shrink-0 flex-col items-center gap-1.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo} alt="preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
+                    <MediaSizeBadge src={photo} variant="light" />
+                  </span>
                 )}
                 <label className="btn btn-outline cursor-pointer">
                   <Upload size={14} /> {uploading ? "Uploading…" : photo ? "Change Photo" : "Upload from Device"}

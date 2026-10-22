@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-22-news-gallery-animations-v13";
+const SITE_PACKAGE_VERSION = "2026-10-22-media-size-pro-v14";
 
 const FILES = [
   "src/app/globals.css",
@@ -28,6 +28,7 @@ const FILES = [
   "src/app/admin/businesses/page.tsx",
   "src/app/admin/animation/page.tsx",
   "src/app/admin/gallery/page.tsx",
+  "src/app/admin/news/page.tsx",
   "src/app/gallery/page.tsx",
   "src/middleware.ts",
   "src/components/cursor-follower.tsx",
@@ -39,6 +40,7 @@ const FILES = [
   "src/components/site-header.tsx",
   "src/components/business-detail.tsx",
   "src/components/gallery-grid.tsx",
+  "src/components/media-info.tsx",
   "src/components/news-client.tsx",
   "src/components/site-sections.tsx",
   "src/components/site-footer.tsx",
@@ -47,6 +49,7 @@ const FILES = [
   "src/lib/i18n.tsx",
   "src/lib/types.ts",
   "src/lib/gallery-social.ts",
+  "src/lib/media-info.ts",
   "src/lib/motion-compat.ts",
   "src/lib/animation-settings.ts",
   "src/lib/branch-settings.ts",

@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Eye, Heart, ImageIcon, Images, LogIn, Plus, Reply, Send, Shuffle, X } from "lucide-react";
 import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
+import { MediaDetailsStrip, MediaSizeBadge } from "@/components/media-info";
 import { useLang } from "@/lib/i18n";
 import type { GalleryComment, GalleryItem } from "@/lib/types";
 import {
@@ -874,9 +875,7 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                   <Images size={12} /> {album.photos.length} {si ? "Photos" : "Photos"}
                 </span>
               )}
-              <span className="absolute top-3 right-3 badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold">
-                {g.aspect}
-              </span>
+              <MediaSizeBadge src={g.image} aspect={g.aspect} className="absolute right-3 top-3 z-10" />
               <span className="media-shine" aria-hidden="true" />
               <span className="gallery-open-pill absolute left-1/2 top-1/2 z-10 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white/90 px-4 py-2 text-[11px] font-extrabold text-slate-900 shadow-xl backdrop-blur">
                 <Eye size={13} /> {multi ? (si ? "තව බලන්න" : "View More") : si ? "විශාලව බලන්න" : "View Photo"}
@@ -951,6 +950,15 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
               >
                 <X size={18} />
               </button>
+              {current.image && (
+                <MediaSizeBadge
+                  key={`stage-media-${current.id}`}
+                  src={current.image}
+                  aspect={current.aspect}
+                  showName
+                  className="absolute bottom-4 left-3 z-10"
+                />
+              )}
               {albumPhotos.length > 1 && (
                 <>
                   <span className="absolute left-3 top-3 z-10 rounded-full bg-black/55 px-3 py-1 text-[11px] font-extrabold text-white backdrop-blur">
@@ -1014,6 +1022,7 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                 </div>
                 <p className="text-slate-500 text-[13.5px] mt-2 leading-relaxed">{current.description}</p>
               </div>
+              <MediaDetailsStrip key={`media-${current.id}`} src={current.image} aspect={current.aspect} className="mt-4" />
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <GallerySocial
                   key={current.id}
@@ -1037,7 +1046,7 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                 />
               </div>
               <div className="flex items-center gap-4 mt-4 text-[12.5px] text-slate-500 border-t border-slate-100 pt-4">
-                <span className="badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold">{current.aspect}</span>
+                <MediaSizeBadge src={current.image} aspect={current.aspect} variant="light" showName />
                 <button onClick={closeViewer} className="btn btn-outline !py-1.5 !px-4 !text-[11.5px] ml-auto">
                   Close
                 </button>

@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, CalendarDays, Newspaper, Pin, X } from "lucide-react";
+import { MediaDetailsStrip, MediaSizeBadge } from "@/components/media-info";
 import { useLang } from "@/lib/i18n";
 import type { NewsItem } from "@/lib/types";
 
@@ -155,6 +156,7 @@ export function NewsList({ news }: { news: NewsItem[] }) {
                       </span>
                     )}
                   </span>
+                  {n.image && <MediaSizeBadge src={n.image} className="absolute bottom-3 right-3 z-10" />}
                   <span className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 translate-y-2 whitespace-nowrap rounded-full bg-white/90 px-4 py-2 text-[11px] font-extrabold text-slate-900 opacity-0 shadow-xl backdrop-blur transition duration-300 group-hover:translate-y-0 group-hover:opacity-100">
                     {si ? "විස්තර බලන්න" : "View Details"}
                   </span>
@@ -225,6 +227,9 @@ export function NewsList({ news }: { news: NewsItem[] }) {
                   </span>
                 )}
               </span>
+              {selected.image && (
+                <MediaSizeBadge src={selected.image} showName className="absolute bottom-4 right-4 z-10" />
+              )}
               <button
                 type="button"
                 autoFocus
@@ -249,6 +254,9 @@ export function NewsList({ news }: { news: NewsItem[] }) {
               <p className="mt-4 whitespace-pre-line text-[14.5px] leading-8 text-slate-600">
                 {descOf(selected)}
               </p>
+              {selected.image && (
+                <MediaDetailsStrip key={`news-media-${selected.id}`} src={selected.image} className="mt-6" />
+              )}
               <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-5">
                 <span className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-indigo-600">
                   {categoryOf(selected)}

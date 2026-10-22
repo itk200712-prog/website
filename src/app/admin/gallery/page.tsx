@@ -7,6 +7,8 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Heart, ImageIcon, Images, Pencil, Plus, Reply, Search, ThumbsUp, Trash2, Upload } from "lucide-react";
 import { CommentImageIcon as MessageSquare } from "@/components/site-icons";
+import { AspectShape, MediaSizeBadge } from "@/components/media-info";
+import { GALLERY_ASPECT_OPTIONS } from "@/lib/media-info";
 import { buildGalleryCommentTree, groupGalleryItems, normalizeGalleryCount, type GalleryAlbum } from "@/lib/gallery-social";
 import { AdminModal, AdminTopbar, dbDelete, dbInsert, dbInsertMany, dbUpdate, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -402,9 +404,7 @@ export default function AdminGalleryPage() {
                   <span className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-slate-950/75 px-3 py-1 text-[10.5px] font-extrabold text-white backdrop-blur-sm">
                     <Images size={12} /> {album.photos.length} {album.photos.length === 1 ? "Photo" : "Photos"}
                   </span>
-                  <span className="badge-amber absolute right-3 top-3 rounded-full px-2.5 py-0.5 text-[10px] font-bold">
-                    {cover.aspect}
-                  </span>
+                  <MediaSizeBadge src={cover.image} aspect={cover.aspect} showName className="absolute right-3 top-3" />
                   <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[10.5px] font-extrabold text-slate-800">
                     {isOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                     {isOpen ? "Close Album" : "Open Album"}
@@ -518,9 +518,7 @@ export default function AdminGalleryPage() {
                           <span className="absolute left-3 top-3 rounded-full bg-slate-950/75 px-2.5 py-1 text-[10px] font-extrabold text-white">
                             Photo {photoIdx + 1}{multi ? ` / ${album.photos.length}` : ""}
                           </span>
-                          <span className="badge-amber absolute right-3 top-3 rounded-full px-2.5 py-0.5 text-[10px] font-bold">
-                            {g.aspect}
-                          </span>
+                          <MediaSizeBadge src={g.image} aspect={g.aspect} className="absolute right-3 top-3" />
                         </div>
 
                         <div className="p-4">
@@ -627,23 +625,36 @@ export default function AdminGalleryPage() {
               </p>
             </div>
             <div>
-              <label className="field-label">Aspect Ratio</label>
-              <div className="flex flex-wrap gap-2">
-                {(["4:3", "16:9", "1:1", "3:2"] as const).map((a, i) => (
-                  <label key={a} className="cursor-pointer">
+              <label className="field-label">Aspect Ratio · පින්තූර හැඩය</label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {GALLERY_ASPECT_OPTIONS.map((option, i) => (
+                  <label key={option.value} className="cursor-pointer">
                     <input
                       type="radio"
                       name="aspect"
-                      value={a}
-                      defaultChecked={editAlbumFor ? editAlbumFor.cover.aspect === a : editFor ? editFor.aspect === a : i === 0}
+                      value={option.value}
+                      defaultChecked={
+                        editAlbumFor
+                          ? editAlbumFor.cover.aspect === option.value
+                          : editFor
+                            ? editFor.aspect === option.value
+                            : i === 0
+                      }
                       className="peer sr-only"
                     />
-                    <span className="inline-block rounded-xl border border-slate-200 px-5 py-2 text-[13px] font-bold text-slate-600 peer-checked:bg-indigo-700 peer-checked:text-white peer-checked:border-indigo-700">
-                      {a}
+                    <span className="flex h-full flex-col items-center justify-center gap-1 rounded-2xl border border-slate-200 bg-white px-2.5 py-3 text-center text-slate-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 peer-checked:border-indigo-700 peer-checked:bg-indigo-700 peer-checked:text-white peer-checked:shadow-lg peer-checked:shadow-indigo-600/20 peer-focus-visible:ring-4 peer-focus-visible:ring-indigo-200">
+                      <AspectShape aspect={option.value} />
+                      <span className="text-[12px] font-black leading-tight">
+                        {option.value} · {option.nameEn}
+                      </span>
+                      <span className="text-[9.5px] font-semibold leading-tight opacity-70">{option.hintSi}</span>
                     </span>
                   </label>
                 ))}
               </div>
+              <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-400">
+                Card එකේ පෙන්වන හැඩය මෙතනින් තෝරන්න. Photo එකේ ඇත්ත pixel size එක card එකෙයි View එකෙයි වෙනම professional විදිහට පේනවා.
+              </p>
             </div>
             <div>
               <label className="field-label">
@@ -676,6 +687,9 @@ export default function AdminGalleryPage() {
                     <div className="mt-0.5 text-[10.5px] leading-relaxed text-slate-500">
                       එක එක photo එක වෙනම වෙනස් කරන්න ඕන නම් album එක open කරලා ඒ photo එකේ Edit Photo ඔබන්න.
                     </div>
+                    <div className="mt-2">
+                      <MediaSizeBadge src={editAlbumFor.cover.image} aspect={editAlbumFor.cover.aspect} variant="light" showName />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -685,8 +699,11 @@ export default function AdminGalleryPage() {
               <label className="field-label">Gallery Photo *</label>
               <div className="flex items-center gap-3">
                 {photo && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photo} alt="preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
+                  <span className="flex shrink-0 flex-col items-center gap-1.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo} alt="preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
+                    <MediaSizeBadge src={photo} variant="light" />
+                  </span>
                 )}
                 <label className={`btn btn-outline ${uploading || saving ? "pointer-events-none opacity-60" : "cursor-pointer"}`}>
                   <Upload size={14} /> {uploading ? "Uploading…" : photo ? "Change Photo" : "Upload from Device"}
@@ -719,9 +736,13 @@ export default function AdminGalleryPage() {
                     <div className="mt-3">
                       <div className="flex max-h-56 flex-wrap gap-2.5 overflow-y-auto pr-1">
                         {batchPhotos.map((src, i) => (
-                          <span key={`${src}-${i}`} className="relative inline-block shrink-0">
+                          <span
+                            key={`${src}-${i}`}
+                            className="relative inline-flex w-[7.25rem] shrink-0 flex-col gap-1.5 rounded-2xl border border-white bg-white/85 p-1.5 shadow-sm"
+                          >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={src} alt={`batch ${i + 1}`} className="h-16 w-16 rounded-xl border border-slate-200 object-cover" />
+                            <img src={src} alt={`batch ${i + 1}`} className="h-20 w-full rounded-xl border border-slate-200 object-cover" />
+                            <MediaSizeBadge src={src} variant="light" className="self-center" />
                             <button
                               type="button"
                               title="Remove"

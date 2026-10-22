@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { PhoneImageIcon as Phone, LocationImageIcon as MapPin } from "@/components/site-icons";
 import { GallerySocial, useMe, updateItem, type Me } from "@/components/gallery-grid";
+import { MediaDetailsStrip, MediaSizeBadge } from "@/components/media-info";
 import { groupGalleryItems, updateGalleryCommentLikes } from "@/lib/gallery-social";
 import type { GalleryComment } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
@@ -382,6 +383,15 @@ export function HomeSections({
               >
                 ✕
               </button>
+              {galCurrent?.image && (
+                <MediaSizeBadge
+                  key={`home-stage-media-${galCurrent.id}`}
+                  src={galCurrent.image}
+                  aspect={galCurrent.aspect}
+                  showName
+                  className="absolute bottom-4 left-3 z-10"
+                />
+              )}
               {galList.length > 1 && (
                 <>
                   <button
@@ -412,6 +422,14 @@ export function HomeSections({
                 <h3 className="mt-1.5 text-xl font-extrabold text-slate-900">{gal.title}</h3>
                 {gal.description && <p className="mt-2 text-slate-600 text-[13.5px] leading-relaxed">{gal.description}</p>}
               </div>
+              {galCurrent && (
+                <MediaDetailsStrip
+                  key={`home-media-${galCurrent.id}`}
+                  src={galCurrent.image}
+                  aspect={galCurrent.aspect}
+                  className="mt-4"
+                />
+              )}
               {galList.length > 1 && (
                 <div className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Album photos">
                   {galList.map((p, i) => (
@@ -577,6 +595,7 @@ export function HomeSections({
                       <Images size={12} /> {album.photos.length} Photos
                     </span>
                   )}
+                  <MediaSizeBadge src={g.image} aspect={g.aspect} className="absolute right-3 top-3 z-10" />
                   <span className="media-shine" aria-hidden="true" />
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/80 to-transparent p-3">
                     <div className="flex items-center gap-1.5 text-white text-[11.5px] font-bold">
@@ -633,6 +652,7 @@ export function HomeSections({
                     <span className="badge-pinned rounded-full px-2.5 py-0.5 text-[10px] font-bold">📌 PINNED</span>
                   )}
                 </div>
+                {n.image && <MediaSizeBadge src={n.image} className="absolute bottom-3 right-3 z-10" />}
               </div>
               <div className="p-5">
                 <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
