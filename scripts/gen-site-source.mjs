@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-21-admin-gallery-albums-v8";
+const SITE_PACKAGE_VERSION = "2026-10-21-gallery-language-v9";
 
 const FILES = [
   "src/app/globals.css",
@@ -28,6 +28,7 @@ const FILES = [
   "src/app/admin/businesses/page.tsx",
   "src/app/admin/animation/page.tsx",
   "src/app/admin/gallery/page.tsx",
+  "src/app/gallery/page.tsx",
   "src/components/cursor-follower.tsx",
   "src/components/site-icons.tsx",
   "src/components/box-icon.tsx",

@@ -730,6 +730,21 @@ export function updateItem(items: GalleryItem[], id: string, patch: Partial<Gall
   return items.map((g) => (g.id === id ? { ...g, ...patch } : g));
 }
 
+// Gallery page header — තෝරලා තියෙන භාෂාවට (සිංහල / English) හරියටම මාරු වෙනවා
+export function GalleryHero() {
+  const { lang, t } = useLang();
+  const si = lang === "si";
+  return (
+    <section className="hero-dark text-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
+        <div className="section-badge !text-amber-300">{si ? "ඡායාරූප" : "Photo Gallery"}</div>
+        <h1 className="mt-3 text-3xl sm:text-5xl font-black">{t.galleryPage.title}</h1>
+        <p className="mt-3 text-slate-300 max-w-2xl">{t.galleryPage.sub}</p>
+      </div>
+    </section>
+  );
+}
+
 export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
   const [items, setItems] = useState<GalleryItem[]>(initial);
   const [open, setOpen] = useState<GalleryItem | null>(null);

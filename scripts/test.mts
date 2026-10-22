@@ -1238,7 +1238,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-21-admin-gallery-albums-v8"));
+  genSiteSourceSrc.includes("2026-10-21-gallery-language-v9"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1266,6 +1266,17 @@ ok("admin gallery albums: collapsed professional album cards -> open inside to e
   adminGallerySrc.includes("Album Description") &&
   adminGallerySrc.includes("for (const p of editAlbumFor.photos)") &&
   adminGallerySrc.includes("setQuery(e.target.value)"));
+const publicGalleryPageSrc = readFileSync(join(root, "src/app/gallery/page.tsx"), "utf8");
+const i18nSrc = readFileSync(join(root, "src/lib/i18n.tsx"), "utf8");
+ok("public gallery: page header follows selected language (Sinhala / English)",
+  galleryGridSrc.includes("export function GalleryHero()") &&
+  galleryGridSrc.includes("t.galleryPage.title") &&
+  galleryGridSrc.includes("t.galleryPage.sub") &&
+  i18nSrc.includes('title: "ඡායාරූප ගැලරිය"') &&
+  i18nSrc.includes('title: "Photo Gallery"') &&
+  publicGalleryPageSrc.includes("<GalleryHero />") &&
+  !publicGalleryPageSrc.includes(">ඡායාරූප ගැලරිය</h1>") &&
+  genSiteSourceSrc.includes('"src/app/gallery/page.tsx"'));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
