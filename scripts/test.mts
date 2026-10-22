@@ -1239,7 +1239,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-22-ubuntu-motion-v10"));
+  genSiteSourceSrc.includes("2026-10-22-backup-latest-updates-v11"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1307,7 +1307,37 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-22-ubuntu-motion-v10"));
+  genSiteSourceSrc.includes("2026-10-22-backup-latest-updates-v11"));
+const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
+const generatedSiteSourceByPath = new Map(
+  generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
+);
+const latestBackupUpdateFiles = [
+  "src/app/gallery/page.tsx",
+  "src/app/globals.css",
+  "src/app/layout.tsx",
+  "src/middleware.ts",
+  "src/components/cursor-follower.tsx",
+  "src/components/floating-lang.tsx",
+  "src/components/gallery-grid.tsx",
+  "src/components/hero-slideshow.tsx",
+  "src/components/home-sections.tsx",
+  "src/components/lang-switcher.tsx",
+  "src/components/site-sections.tsx",
+  "src/lib/i18n.tsx",
+  "src/lib/motion-compat.ts",
+  "src/lib/site-source-assets.ts",
+];
+ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files",
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-22-backup-latest-updates-v11" &&
+  generatedSiteSource.SITE_SOURCE_FILES.length >= 33 &&
+  generatedSiteSource.SITE_SOURCE_FILES.every(
+    (f) => readFileSync(join(root, f.path), "utf8") === f.content
+  ) &&
+  latestBackupUpdateFiles.every((p) => generatedSiteSourceByPath.has(p)) &&
+  backupSrc.includes('await import("./site-source-assets")') &&
+  backupSrc.includes("siteSourceFiles = mod.getSiteSourceFiles()") &&
+  backupSrc.includes("sitePackageVersion = mod.SITE_PACKAGE_VERSION"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

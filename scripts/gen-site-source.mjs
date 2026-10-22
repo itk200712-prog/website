@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-22-ubuntu-motion-v10";
+const SITE_PACKAGE_VERSION = "2026-10-22-backup-latest-updates-v11";
 
 const FILES = [
   "src/app/globals.css",
@@ -29,8 +29,11 @@ const FILES = [
   "src/app/admin/animation/page.tsx",
   "src/app/admin/gallery/page.tsx",
   "src/app/gallery/page.tsx",
+  "src/middleware.ts",
   "src/components/cursor-follower.tsx",
   "src/components/hero-slideshow.tsx",
+  "src/components/floating-lang.tsx",
+  "src/components/lang-switcher.tsx",
   "src/components/site-icons.tsx",
   "src/components/box-icon.tsx",
   "src/components/site-header.tsx",
@@ -40,11 +43,13 @@ const FILES = [
   "src/components/site-footer.tsx",
   "src/components/home-sections.tsx",
   "src/lib/data.ts",
+  "src/lib/i18n.tsx",
   "src/lib/types.ts",
   "src/lib/gallery-social.ts",
   "src/lib/motion-compat.ts",
   "src/lib/animation-settings.ts",
   "src/lib/branch-settings.ts",
+  "src/lib/site-source-assets.ts",
   "src/lib/supabase/storage.ts",
   "next.config.ts",
 ];
