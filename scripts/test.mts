@@ -19,6 +19,7 @@ const seed = await import("../src/lib/seed.ts");
 const auth = await import("../src/lib/auth.ts");
 const branchSettings = await import("../src/lib/branch-settings.ts");
 const animSettings = await import("../src/lib/animation-settings.ts");
+const motionCompat = await import("../src/lib/motion-compat.ts");
 
 console.log("\n── 1) Seed data (screenshots) ──");
 ok("14 business divisions", seed.BUSINESSES.length === 14, `got ${seed.BUSINESSES.length}`);
@@ -1238,7 +1239,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-21-gallery-language-v9"));
+  genSiteSourceSrc.includes("2026-10-22-ubuntu-motion-v10"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1277,6 +1278,36 @@ ok("public gallery: page header follows selected language (Sinhala / English)",
   publicGalleryPageSrc.includes("<GalleryHero />") &&
   !publicGalleryPageSrc.includes(">ඡායාරූප ගැලරිය</h1>") &&
   genSiteSourceSrc.includes('"src/app/gallery/page.tsx"'));
+const ubuntuDesktopEnv = {
+  userAgent: "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
+  anyFinePointer: true,
+  anyHover: true,
+  finePointer: false,
+  coarsePointer: true,
+  width: 1366,
+};
+ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even when GNOME reports reduced motion/coarse primary pointer",
+  motionCompat.isLinuxDesktopUserAgent(ubuntuDesktopEnv.userAgent) &&
+  motionCompat.isLinuxDesktopMotionEnv(ubuntuDesktopEnv) &&
+  motionCompat.shouldReduceMotionForEnv(true, ubuntuDesktopEnv) === false &&
+  motionCompat.shouldReduceMotionForEnv(true, { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", anyFinePointer: true, width: 1366 }) === true &&
+  motionCompat.isLinuxDesktopMotionEnv({ userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) Mobile", width: 390 }) === false &&
+  motionCompat.hasDesktopPointerEnv({ sawMouseOrPen: true }) &&
+  rootLayoutSrc.includes("isLinuxDesktopUserAgent") &&
+  rootLayoutSrc.includes('linuxDesktopMotion ? "motion-compat"') &&
+  globalsCssSrc.includes("html:not(.motion-compat) .hero-slide") &&
+  globalsCssSrc.includes("html:not(.motion-compat) .biz-products-track") &&
+  globalsCssSrc.includes("html:not(.motion-compat) .cursor-fx") &&
+  !globalsCssSrc.includes("@media (pointer: coarse), (prefers-reduced-motion: reduce)") &&
+  cursorFollowerSrc.includes('"(any-pointer: fine)"') &&
+  cursorFollowerSrc.includes('window.addEventListener("mousemove", onMove') &&
+  cursorFollowerSrc.includes('window.addEventListener("touchstart", markTouch') &&
+  cursorFollowerSrc.includes("readMotionEnvironment(window, sawMouseOrPen)") &&
+  siteSectionsSrc.includes("shouldReduceMotion(window)") &&
+  homeSectionsSrc.includes("shouldReduceMotion(window)") &&
+  genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
+  genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
+  genSiteSourceSrc.includes("2026-10-22-ubuntu-motion-v10"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

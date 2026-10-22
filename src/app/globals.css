@@ -136,10 +136,10 @@ body {
   width: 28px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .hero-slide {
+  html:not(.motion-compat) .hero-slide {
     transition: none;
   }
-  .hero-slide.is-active .hero-slide-img {
+  html:not(.motion-compat) .hero-slide.is-active .hero-slide-img {
     animation: none;
     transform: none;
   }
@@ -371,11 +371,11 @@ body {
   transform: translateX(0);
 }
 @media (prefers-reduced-motion: reduce) {
-  .mega, .mega-item { animation: none !important; }
-  .mega-item, .mega-item::before, .mega-item::after, .mega-item-icon, .mega-item-arrow { transition: none !important; }
-  .mega-item:hover, .mega-item:focus-visible, .mega-item-current,
-  .mega-item:hover .mega-item-icon, .mega-item:focus-visible .mega-item-icon, .mega-item-current .mega-item-icon,
-  .mega-item-arrow { transform: none !important; }
+  html:not(.motion-compat) .mega, html:not(.motion-compat) .mega-item { animation: none !important; }
+  html:not(.motion-compat) .mega-item, html:not(.motion-compat) .mega-item::before, html:not(.motion-compat) .mega-item::after, html:not(.motion-compat) .mega-item-icon, html:not(.motion-compat) .mega-item-arrow { transition: none !important; }
+  html:not(.motion-compat) .mega-item:hover, html:not(.motion-compat) .mega-item:focus-visible, html:not(.motion-compat) .mega-item-current,
+  html:not(.motion-compat) .mega-item:hover .mega-item-icon, html:not(.motion-compat) .mega-item:focus-visible .mega-item-icon, html:not(.motion-compat) .mega-item-current .mega-item-icon,
+  html:not(.motion-compat) .mega-item-arrow { transform: none !important; }
 }
 
 /* ---- Uploaded phone/location/message image icons (site-wide) ---- */
@@ -417,7 +417,7 @@ body {
   88% { transform: translateY(0) scale(1.03) rotate(1deg); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .site-img-icon { animation: none !important; }
+  html:not(.motion-compat) .site-img-icon { animation: none !important; }
 }
 
 /* ---- Desktop mouse cursor animation (laptop/PC pointer විතරයි) ---- */
@@ -452,8 +452,8 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
   background: radial-gradient(circle, rgba(99, 102, 241, 0.09), rgba(245, 158, 11, 0.05) 58%, transparent 70%);
   box-shadow: 0 0 24px rgba(79, 70, 229, 0.16), inset 0 0 14px rgba(245, 158, 11, 0.08);
 }
-@media (pointer: coarse), (prefers-reduced-motion: reduce) {
-  .cursor-fx { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  html:not(.motion-compat) .cursor-fx { display: none !important; }
 }
 
 /* person/service cards */
@@ -809,21 +809,21 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .contact-pro-card,
-  .contact-pro-card::after,
-  .contact-pro-icon,
-  .contact-pro-field,
-  .contact-pro-call {
+  html:not(.motion-compat) .contact-pro-card,
+  html:not(.motion-compat) .contact-pro-card::after,
+  html:not(.motion-compat) .contact-pro-icon,
+  html:not(.motion-compat) .contact-pro-field,
+  html:not(.motion-compat) .contact-pro-call {
     animation: none !important;
     transition: none !important;
   }
-  .contact-pro-card:hover,
-  .contact-pro-card:focus-within,
-  .contact-pro-card:hover .contact-pro-icon,
-  .contact-pro-card:focus-within .contact-pro-icon,
-  .contact-pro-card:hover .contact-pro-field,
-  .contact-pro-card:hover .contact-pro-call,
-  .contact-pro-call:hover {
+  html:not(.motion-compat) .contact-pro-card:hover,
+  html:not(.motion-compat) .contact-pro-card:focus-within,
+  html:not(.motion-compat) .contact-pro-card:hover .contact-pro-icon,
+  html:not(.motion-compat) .contact-pro-card:focus-within .contact-pro-icon,
+  html:not(.motion-compat) .contact-pro-card:hover .contact-pro-field,
+  html:not(.motion-compat) .contact-pro-card:hover .contact-pro-call,
+  html:not(.motion-compat) .contact-pro-call:hover {
     transform: none !important;
   }
 }
@@ -887,10 +887,10 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .biz-anim-bg,
-  .biz-products-marquee,
-  .biz-products-track,
-  .biz-product-float {
+  html:not(.motion-compat) .biz-anim-bg,
+  html:not(.motion-compat) .biz-products-marquee,
+  html:not(.motion-compat) .biz-products-track,
+  html:not(.motion-compat) .biz-product-float {
     animation: none !important;
   }
 }

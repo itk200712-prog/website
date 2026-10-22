@@ -22,6 +22,7 @@ import { SectionHead, StatCard, PersonCard } from "@/components/site-sections";
 import { BoxIcon } from "@/components/box-icon";
 import { HomeClientBits } from "@/components/home-client";
 import { useLang } from "@/lib/i18n";
+import { shouldReduceMotion } from "@/lib/motion-compat";
 import { SITE } from "@/lib/seed";
 import type { BusinessUnit, NewsItem, BoardMember, SiteSettings, GalleryItem } from "@/lib/types";
 
@@ -733,7 +734,7 @@ function MiniCounter({ value, suffix = "" }: { value: number; suffix?: string })
   const [n, setN] = useState(0); // මුල සිට count වෙන්න
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (shouldReduceMotion(window)) {
       setN(value);
       return;
     }

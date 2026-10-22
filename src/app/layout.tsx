@@ -8,6 +8,7 @@ import { CursorFollower } from "@/components/cursor-follower";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import { LanguageProvider } from "@/lib/i18n";
+import { isLinuxDesktopUserAgent } from "@/lib/motion-compat";
 import type { Lang } from "@/lib/types";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -36,8 +37,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const cookieStore = await cookies();
   const raw = h.get("x-locale") ?? cookieStore.get("lang")?.value;
   const lang: Lang = raw === "si" ? "si" : "en"; // default = English
+  const linuxDesktopMotion = isLinuxDesktopUserAgent(h.get("user-agent"));
   return (
-    <html lang={lang}>
+    <html lang={lang} className={linuxDesktopMotion ? "motion-compat" : undefined}>
       <body className={`${inter.variable} ${sinhala.variable} ${bookFont.variable}`}>
         <LanguageProvider initialLang={lang}>
           {children}

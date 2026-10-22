@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { shouldReduceMotion } from "@/lib/motion-compat";
 
 const INTERVAL_MS = 6000;
 
@@ -16,9 +17,7 @@ export function HeroSlideshow({ images }: { images: string[] }) {
   const reduced = useRef(false);
 
   useEffect(() => {
-    reduced.current =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    reduced.current = typeof window !== "undefined" && shouldReduceMotion(window);
   }, []);
 
   const next = useCallback(() => setIdx((i) => (i + 1) % slides.length), [slides.length]);

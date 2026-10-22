@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { LocationImageIcon as MapPin, PhoneImageIcon as Phone, CommentImageIcon as MessageSquare } from "@/components/site-icons";
 import { useLang } from "@/lib/i18n";
+import { shouldReduceMotion } from "@/lib/motion-compat";
 import type { BusinessContact, BusinessService, BoardMember } from "@/lib/types";
 
 export function SectionHead({
@@ -328,7 +329,7 @@ function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
   const [n, setN] = useState(0);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(value); return; }
+    if (shouldReduceMotion(window)) { setN(value); return; }
     const dur = 1500; const t0 = performance.now(); let raf = 0;
     const tick = (t: number) => {
       const p = Math.min(1, (t - t0) / dur);

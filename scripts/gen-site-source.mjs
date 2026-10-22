@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-21-gallery-language-v9";
+const SITE_PACKAGE_VERSION = "2026-10-22-ubuntu-motion-v10";
 
 const FILES = [
   "src/app/globals.css",
@@ -30,6 +30,7 @@ const FILES = [
   "src/app/admin/gallery/page.tsx",
   "src/app/gallery/page.tsx",
   "src/components/cursor-follower.tsx",
+  "src/components/hero-slideshow.tsx",
   "src/components/site-icons.tsx",
   "src/components/box-icon.tsx",
   "src/components/site-header.tsx",
@@ -41,6 +42,7 @@ const FILES = [
   "src/lib/data.ts",
   "src/lib/types.ts",
   "src/lib/gallery-social.ts",
+  "src/lib/motion-compat.ts",
   "src/lib/animation-settings.ts",
   "src/lib/branch-settings.ts",
   "src/lib/supabase/storage.ts",
