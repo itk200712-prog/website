@@ -7,16 +7,17 @@
 //     වල primary pointer එක coarse කියලා report වුණත්, any-pointer/any-hover
 //     සහ ඇත්ත mouse/pen movement එකෙන්ම activate වෙනවා
 //   · Pointer Events නැති පැරණි Linux browsers සඳහා MouseEvent fallback එකත්
-//   · touch-only devices වල පෙන්වන්නේ නෑ; Linux desktop එකේ GNOME එකෙන් එන
-//     `prefers-reduced-motion: reduce` එක නිසා cursor එක නැති වෙන්නේ නෑ
+//   · touch-only devices වල පෙන්වන්නේ නෑ; Windows Accessibility එකේ
+//     Animation effects off කළාම එන `prefers-reduced-motion: reduce` එක
+//     නිසාවත්, GNOME/Wayland නිසාවත් mouse/trackpad laptop එකේ cursor එක
+//     නැති වෙන්නේ නෑ — ඇත්ත desktop pointer එකක් තියෙනවා නම් පේනවා
 // ============================================================================
 
 import { useEffect, useRef, useState } from "react";
 import {
-  hasDesktopPointerEnv,
   isLinuxDesktopMotionEnv,
   readMotionEnvironment,
-  shouldReduceMotionForEnv,
+  shouldShowDesktopCursorEnv,
 } from "@/lib/motion-compat";
 
 const INTERACTIVE_SELECTOR =
@@ -68,9 +69,12 @@ export function CursorFollower() {
       if (isLinuxDesktopMotionEnv(env)) {
         document.documentElement.classList.add("motion-compat");
       }
-      const ok =
-        hasDesktopPointerEnv(env) &&
-        !shouldReduceMotionForEnv(reducedQuery?.matches ?? false, env);
+      // Cursor visibility is OS-agnostic. In particular, a Windows laptop
+      // with Settings → Accessibility → Visual effects → Animation effects
+      // turned off reports `prefers-reduced-motion: reduce`; that must not
+      // hide a cursor effect that only follows the user's own mouse/trackpad.
+      const ok = shouldShowDesktopCursorEnv(env);
+      document.documentElement.classList.toggle("cursor-motion", ok);
       setActive(ok);
       if (!ok) document.body.classList.remove("cursor-fx-on");
       return ok;
@@ -177,6 +181,7 @@ export function CursorFollower() {
       document.documentElement.removeEventListener("mouseleave", onLeave);
       mediaQueries.forEach((query) => query.removeEventListener?.("change", onMediaChange));
       document.body.classList.remove("cursor-fx-on");
+      document.documentElement.classList.remove("cursor-motion");
     };
   }, []);
 

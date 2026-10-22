@@ -1239,7 +1239,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-22-backup-latest-updates-v11"));
+  genSiteSourceSrc.includes("2026-10-22-windows-cursor-v12"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1297,7 +1297,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   rootLayoutSrc.includes('linuxDesktopMotion ? "motion-compat"') &&
   globalsCssSrc.includes("html:not(.motion-compat) .hero-slide") &&
   globalsCssSrc.includes("html:not(.motion-compat) .biz-products-track") &&
-  globalsCssSrc.includes("html:not(.motion-compat) .cursor-fx") &&
+  globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
   !globalsCssSrc.includes("@media (pointer: coarse), (prefers-reduced-motion: reduce)") &&
   cursorFollowerSrc.includes('"(any-pointer: fine)"') &&
   cursorFollowerSrc.includes('window.addEventListener("mousemove", onMove') &&
@@ -1307,7 +1307,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-22-backup-latest-updates-v11"));
+  genSiteSourceSrc.includes("2026-10-22-windows-cursor-v12"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1329,7 +1329,7 @@ const latestBackupUpdateFiles = [
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-22-backup-latest-updates-v11" &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-22-windows-cursor-v12" &&
   generatedSiteSource.SITE_SOURCE_FILES.length >= 33 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
@@ -1338,6 +1338,26 @@ ok("backup latest updates: generated site-source snapshot is current and include
   backupSrc.includes('await import("./site-source-assets")') &&
   backupSrc.includes("siteSourceFiles = mod.getSiteSourceFiles()") &&
   backupSrc.includes("sitePackageVersion = mod.SITE_PACKAGE_VERSION"));
+const windowsCursorEnv = {
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+  platform: "Win32",
+  anyFinePointer: false,
+  anyHover: false,
+  finePointer: false,
+  hover: false,
+  coarsePointer: true,
+  width: 1366,
+  sawMouseOrPen: true,
+};
+ok("Windows cursor: mouse ring works on Windows laptops even with Animation effects off/reduced motion + coarse primary pointer",
+  motionCompat.shouldShowDesktopCursorEnv(windowsCursorEnv) &&
+  motionCompat.shouldReduceMotionForEnv(true, windowsCursorEnv) === true &&
+  !motionCompat.shouldShowDesktopCursorEnv({ ...windowsCursorEnv, sawMouseOrPen: false }) &&
+  cursorFollowerSrc.includes("shouldShowDesktopCursorEnv(env)") &&
+  cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
+  !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
+  globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
+  genSiteSourceSrc.includes("2026-10-22-windows-cursor-v12"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

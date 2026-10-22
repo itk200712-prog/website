@@ -62,6 +62,16 @@ export function shouldReduceMotionForEnv(
   return prefersReducedMotion && !isLinuxDesktopMotionEnv(env);
 }
 
+export function shouldShowDesktopCursorEnv(env: MotionEnvironment = {}): boolean {
+  // The decorative cursor ring is user-driven: it only appears after/for a
+  // real desktop-class mouse, pen, trackpad or hover-capable pointer. Do not
+  // hide it just because Windows/macOS/Linux reports reduced motion or a
+  // coarse *primary* pointer on a touchscreen laptop — that was why it
+  // vanished on some Windows machines. Touch-only devices still stay clean
+  // because the follower waits for mouse/pen movement before becoming visible.
+  return hasDesktopPointerEnv(env);
+}
+
 function safeMatchMedia(win: Window, query: string): boolean {
   try {
     return typeof win.matchMedia === "function" && win.matchMedia(query).matches;
