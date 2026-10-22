@@ -536,6 +536,250 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
 .pop-in-delay { animation: popIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) 0.15s both; }
 .soft-out { animation: softOut 0.45s ease forwards; }
 
+/* ============================================================================
+   News + Gallery — professional open / view animations
+   Cards rise in with a soft stagger, covers zoom + shine on hover, and the
+   reader/lightbox opens with a blurred backdrop + spring panel + image
+   settle. Photo-to-photo navigation slides in the travel direction.
+   ============================================================================ */
+@keyframes mediaCardIn {
+  from { opacity: 0; transform: translateY(22px) scale(0.985); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes viewerBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes viewerBackdropOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes viewerPanelIn {
+  0% { opacity: 0; transform: translateY(26px) scale(0.965); filter: blur(5px); }
+  60% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes viewerPanelOut {
+  to { opacity: 0; transform: translateY(14px) scale(0.975); filter: blur(3px); }
+}
+@keyframes viewerImageIn {
+  from { opacity: 0; transform: scale(1.035); filter: blur(4px) saturate(1.06); }
+  to { opacity: 1; transform: scale(1); filter: blur(0) saturate(1); }
+}
+@keyframes viewerImageNext {
+  from { opacity: 0; transform: translateX(34px) scale(1.015); filter: blur(3px); }
+  to { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+}
+@keyframes viewerImagePrev {
+  from { opacity: 0; transform: translateX(-34px) scale(1.015); filter: blur(3px); }
+  to { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+}
+@keyframes viewerCopyIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes viewerThumbIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.media-card-in {
+  animation: mediaCardIn 0.65s cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  will-change: transform, opacity;
+}
+
+.news-card-pro,
+.gallery-card-pro {
+  position: relative;
+  transform-origin: center;
+}
+
+.news-card-pro::before,
+.gallery-card-pro::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(90deg, #f59e0b, #6366f1, #a855f7);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.5s cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+
+.news-card-pro:hover::before,
+.gallery-card-pro:hover::before,
+.news-card-pro:focus-within::before,
+.gallery-card-pro:focus-within::before {
+  transform: scaleX(1);
+}
+
+.media-zoom {
+  overflow: hidden;
+}
+
+.media-zoom img,
+.gallery-cover-img {
+  transition: transform 0.85s cubic-bezier(0.2, 0.85, 0.25, 1), filter 0.5s ease;
+  will-change: transform;
+}
+
+.news-card-pro:hover .media-zoom img,
+.gallery-card-pro:hover .gallery-cover-img,
+.gallery-home-card:hover .gallery-cover-img {
+  transform: scale(1.07);
+  filter: saturate(1.08);
+}
+
+.media-shine {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.28) 48%, transparent 62%);
+  transform: translateX(-125%);
+  transition: transform 0.95s ease;
+}
+
+.news-card-pro:hover .media-shine,
+.gallery-card-pro:hover .media-shine,
+.gallery-home-card:hover .media-shine {
+  transform: translateX(125%);
+}
+
+.gallery-open-pill {
+  opacity: 0;
+  transform: translate(-50%, -34%) scale(0.96);
+  transition: opacity 0.28s ease, transform 0.34s cubic-bezier(0.2, 0.85, 0.25, 1), background 0.28s ease;
+}
+
+.gallery-card-pro:hover .gallery-open-pill,
+.gallery-home-card:hover .gallery-open-pill,
+.gallery-card-pro:focus-within .gallery-open-pill,
+.gallery-home-card:focus-within .gallery-open-pill {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.viewer-backdrop {
+  animation: viewerBackdropIn 0.28s ease both;
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
+}
+
+.viewer-backdrop.is-closing {
+  animation: viewerBackdropOut 0.18s ease both;
+}
+
+.viewer-panel {
+  animation: viewerPanelIn 0.46s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  transform-origin: center 62%;
+  will-change: transform, opacity;
+}
+
+.viewer-backdrop.is-closing .viewer-panel {
+  animation: viewerPanelOut 0.18s ease both;
+}
+
+.viewer-image {
+  animation: viewerImageIn 0.55s cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  will-change: transform, opacity;
+}
+
+.viewer-image-next { animation-name: viewerImageNext; }
+.viewer-image-prev { animation-name: viewerImagePrev; }
+
+.viewer-copy-in {
+  animation: viewerCopyIn 0.42s cubic-bezier(0.2, 0.85, 0.25, 1) 0.07s both;
+}
+
+.viewer-thumb {
+  animation: viewerThumbIn 0.34s cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  transition: opacity 0.24s ease, transform 0.28s cubic-bezier(0.2, 0.85, 0.25, 1), box-shadow 0.28s ease;
+}
+
+.viewer-thumb img {
+  transition: transform 0.55s cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+
+.viewer-thumb:hover img { transform: scale(1.08); }
+
+.viewer-thumb.is-active {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 12px 24px -14px rgba(79, 70, 229, 0.65);
+}
+
+.gallery-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 -70px 90px -60px rgba(2, 6, 23, 0.75), inset 0 50px 70px -55px rgba(2, 6, 23, 0.65);
+}
+
+.gallery-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  z-index: 4;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.gallery-progress > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #6366f1, #a855f7);
+  transition: width 0.45s cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+
+.viewer-icon-btn {
+  transition: scale 0.22s cubic-bezier(0.2, 0.85, 0.25, 1), background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.viewer-icon-btn:hover {
+  scale: 1.07;
+  box-shadow: 0 14px 28px -16px rgba(2, 6, 23, 0.75);
+}
+
+.viewer-icon-btn:active { scale: 0.94; }
+
+.news-filter-tab {
+  transition: transform 0.22s cubic-bezier(0.2, 0.85, 0.25, 1), background 0.22s ease, color 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.news-filter-tab:hover { transform: translateY(-1px); }
+.news-filter-tab:active { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(.motion-compat) .media-card-in,
+  html:not(.motion-compat) .viewer-backdrop,
+  html:not(.motion-compat) .viewer-panel,
+  html:not(.motion-compat) .viewer-image,
+  html:not(.motion-compat) .viewer-copy-in,
+  html:not(.motion-compat) .viewer-thumb {
+    animation: none !important;
+  }
+  html:not(.motion-compat) .media-shine,
+  html:not(.motion-compat) .gallery-open-pill,
+  html:not(.motion-compat) .news-card-pro::before,
+  html:not(.motion-compat) .gallery-card-pro::before,
+  html:not(.motion-compat) .gallery-progress > span,
+  html:not(.motion-compat) .viewer-icon-btn,
+  html:not(.motion-compat) .news-filter-tab {
+    transition: none !important;
+  }
+  html:not(.motion-compat) .news-card-pro:hover .media-zoom img,
+  html:not(.motion-compat) .gallery-card-pro:hover .gallery-cover-img,
+  html:not(.motion-compat) .gallery-home-card:hover .gallery-cover-img,
+  html:not(.motion-compat) .viewer-thumb:hover img,
+  html:not(.motion-compat) .viewer-thumb.is-active {
+    transform: none !important;
+  }
+}
+
 /* glass / professional buttons */
 .btn-primary {
   background: linear-gradient(135deg, #4f46e5 0%, #6d28d9 55%, #7c3aed 100%);

@@ -157,18 +157,61 @@ export function HomeSections({
 
   const [person, setPerson] = useState<BoardMember | null>(null);
   const [gal, setGal] = useState<GalleryItem | null>(null);
+  const [galClosing, setGalClosing] = useState(false);
+  const [galDir, setGalDir] = useState<1 | -1 | 0>(0);
   const [galItems, setGalItems] = useState<GalleryItem[]>(gallery);
   const galTouchX = useRef<number | null>(null);
+  const galCloseTimer = useRef<number | null>(null);
   const me = useMe();
   const galAlbums = groupGalleryItems(galItems);
   const galAlbum = gal ? galAlbums.find((a) => a.photos.some((p) => p.id === gal.id)) ?? null : null;
   const galList = galAlbum?.photos ?? [];
   const galIdx = gal ? galList.findIndex((x) => x.id === gal.id) : -1;
   const galCurrent = gal ? galList.find((x) => x.id === gal.id) ?? gal : null;
+  function openGal(item: GalleryItem, dir: 1 | -1 | 0 = 0) {
+    if (galCloseTimer.current) window.clearTimeout(galCloseTimer.current);
+    galCloseTimer.current = null;
+    setGalClosing(false);
+    setGalDir(dir);
+    setGal(item);
+  }
+  function closeGal() {
+    if (!gal || galClosing) return;
+    setGalClosing(true);
+    if (galCloseTimer.current) window.clearTimeout(galCloseTimer.current);
+    galCloseTimer.current = window.setTimeout(() => {
+      setGal(null);
+      setGalClosing(false);
+      setGalDir(0);
+      galCloseTimer.current = null;
+    }, 180);
+  }
   function galGo(delta: number) {
     if (!galList.length || galIdx < 0) return;
-    setGal(galList[(galIdx + delta + galList.length) % galList.length]);
+    openGal(galList[(galIdx + delta + galList.length) % galList.length], delta > 0 ? 1 : -1);
   }
+  useEffect(() => {
+    if (!galCurrent) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeGal();
+      if (e.key === "ArrowLeft") galGo(-1);
+      if (e.key === "ArrowRight") galGo(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [galCurrent?.id, galIdx, galList.length, galClosing]);
+  useEffect(
+    () => () => {
+      if (galCloseTimer.current) window.clearTimeout(galCloseTimer.current);
+    },
+    []
+  );
   const live = useLiveStats({
     members: settings.members_total,
     voters: settings.voters_total,
@@ -302,15 +345,18 @@ export function HomeSections({
       {/* gallery lightbox — photo එක හෝ photo set එක විශාලව + tagline එක්ක */}
       {gal && (
         <div
-          className="fixed inset-0 z-[120] bg-slate-900/85 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setGal(null)}
+          className={`viewer-backdrop fixed inset-0 z-[120] bg-slate-950/85 flex items-center justify-center p-4 ${galClosing ? "is-closing" : ""}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={gal.title}
+          onClick={closeGal}
         >
           <div
-            className="w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl bg-white/90 backdrop-blur-xl border border-white/50 max-h-[92vh] overflow-y-auto"
+            className="viewer-panel w-full max-w-4xl rounded-3xl overflow-hidden shadow-[0_45px_100px_-25px_rgba(2,6,23,0.85)] bg-white/90 backdrop-blur-xl border border-white/50 max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div
-              className="relative bg-slate-900"
+              className="gallery-stage relative overflow-hidden bg-slate-900"
               onTouchStart={(e) => {
                 galTouchX.current = e.changedTouches[0]?.clientX ?? null;
               }}
@@ -323,45 +369,59 @@ export function HomeSections({
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img key={galCurrent?.id} src={galCurrent?.image} alt={gal.title} className="w-full max-h-[62vh] object-contain" />
+              <img
+                key={galCurrent?.id}
+                src={galCurrent?.image}
+                alt={gal.title}
+                className={`viewer-image ${galDir > 0 ? "viewer-image-next" : galDir < 0 ? "viewer-image-prev" : ""} w-full max-h-[62vh] object-contain`}
+              />
               <button
-                onClick={() => setGal(null)}
-                className="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center transition"
+                onClick={closeGal}
+                className="viewer-icon-btn absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur hover:bg-black/80"
+                aria-label={lang === "si" ? "වසන්න" : "Close"}
               >
                 ✕
               </button>
               {galList.length > 1 && (
                 <>
                   <button
-                    onClick={() => setGal(galList[(galIdx - 1 + galList.length) % galList.length])}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
+                    onClick={() => galGo(-1)}
+                    className="viewer-icon-btn absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/25 text-xl font-black text-white backdrop-blur hover:bg-white/45"
+                    aria-label="Previous Photo"
                   >
                     ‹
                   </button>
                   <button
-                    onClick={() => setGal(galList[(galIdx + 1) % galList.length])}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/25 hover:bg-white/45 text-white flex items-center justify-center text-xl font-black transition"
+                    onClick={() => galGo(1)}
+                    className="viewer-icon-btn absolute right-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/25 text-xl font-black text-white backdrop-blur hover:bg-white/45"
+                    aria-label="Next Photo"
                   >
                     ›
                   </button>
+                  <span className="gallery-progress" aria-hidden="true">
+                    <span style={{ width: `${((galIdx + 1) / galList.length) * 100}%` }} />
+                  </span>
                 </>
               )}
             </div>
             <div className="p-6">
-              <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.18em] uppercase text-indigo-600">
-                <Images size={13} /> {lang === "si" ? "ඡායාරූප ගැලරිය" : "Photo Gallery"} · {galIdx + 1}/{galList.length}
+              <div key={galCurrent?.id ?? gal.id} className="viewer-copy-in">
+                <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.18em] uppercase text-indigo-600">
+                  <Images size={13} /> {lang === "si" ? "ඡායාරූප ගැලරිය" : "Photo Gallery"} · {galIdx + 1}/{galList.length}
+                </div>
+                <h3 className="mt-1.5 text-xl font-extrabold text-slate-900">{gal.title}</h3>
+                {gal.description && <p className="mt-2 text-slate-600 text-[13.5px] leading-relaxed">{gal.description}</p>}
               </div>
-              <h3 className="mt-1.5 text-xl font-extrabold text-slate-900">{gal.title}</h3>
-              {gal.description && <p className="mt-2 text-slate-600 text-[13.5px] leading-relaxed">{gal.description}</p>}
               {galList.length > 1 && (
                 <div className="mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Album photos">
                   {galList.map((p, i) => (
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setGal(p)}
-                      className={`relative h-16 w-20 shrink-0 overflow-hidden rounded-xl ring-2 transition ${
-                        p.id === galCurrent?.id ? "ring-indigo-600" : "opacity-65 ring-transparent hover:opacity-100"
+                      onClick={() => openGal(p, i > galIdx ? 1 : i < galIdx ? -1 : 0)}
+                      style={{ animationDelay: `${Math.min(i, 10) * 35}ms` }}
+                      className={`viewer-thumb relative h-16 w-20 shrink-0 overflow-hidden rounded-xl ring-2 ${
+                        p.id === galCurrent?.id ? "is-active ring-indigo-600" : "opacity-65 ring-transparent hover:opacity-100"
                       }`}
                       aria-label={`Photo ${i + 1}`}
                     >
@@ -394,7 +454,7 @@ export function HomeSections({
                   />
                 </div>
               )}
-              <button onClick={() => setGal(null)} className="btn btn-primary mt-5 w-full">
+              <button onClick={closeGal} className="btn btn-primary mt-5 w-full">
                 {lang === "si" ? "වසන්න" : "Close"}
               </button>
             </div>
@@ -492,15 +552,16 @@ export function HomeSections({
             }
           />
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-            {galAlbums.slice(0, 4).map((album) => {
+            {galAlbums.slice(0, 4).map((album, albumIndex) => {
               const g = album.cover;
               const multi = album.photos.length > 1;
               return (
               <button
                 key={album.key}
                 type="button"
-                onClick={() => setGal(g)}
-                className="group relative rounded-2xl overflow-hidden card card-hover text-left w-full"
+                onClick={() => openGal(g)}
+                style={{ animationDelay: `${Math.min(albumIndex, 8) * 70}ms` }}
+                className="gallery-home-card gallery-card-pro media-card-in group relative rounded-2xl overflow-hidden card card-hover text-left w-full"
               >
                 <div className="aspect-[4/3] bg-gradient-to-br from-slate-200 to-slate-100 relative">
                   {g.image && (
@@ -508,7 +569,7 @@ export function HomeSections({
                     <img
                       src={g.image}
                       alt={g.title || "Gallery"}
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="gallery-cover-img absolute inset-0 w-full h-full object-cover"
                     />
                   )}
                   {multi && (
@@ -516,16 +577,16 @@ export function HomeSections({
                       <Images size={12} /> {album.photos.length} Photos
                     </span>
                   )}
+                  <span className="media-shine" aria-hidden="true" />
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/80 to-transparent p-3">
                     <div className="flex items-center gap-1.5 text-white text-[11.5px] font-bold">
                       <Images size={12} /> {g.title || "Photo"}
                     </div>
                   </div>
-                  <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors flex items-center justify-center">
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity rounded-full bg-white/90 text-slate-900 px-4 py-2 text-[11.5px] font-bold">
-                      {multi ? (lang === "si" ? "🔍 තව බලන්න" : "🔍 View More") : lang === "si" ? "🔍 විශාලව බලන්න" : "🔍 View Enlarged"}
-                    </span>
-                  </div>
+                  <div className="absolute inset-0 bg-slate-900/0 transition-colors duration-300 group-hover:bg-slate-900/25" aria-hidden="true" />
+                  <span className="gallery-open-pill absolute left-1/2 top-1/2 z-10 whitespace-nowrap rounded-full bg-white/90 px-4 py-2 text-[11.5px] font-extrabold text-slate-900 shadow-xl backdrop-blur">
+                    {multi ? (lang === "si" ? "🔍 තව බලන්න" : "🔍 View More") : lang === "si" ? "🔍 විශාලව බලන්න" : "🔍 View Enlarged"}
+                  </span>
                 </div>
               </button>
               );
@@ -547,9 +608,14 @@ export function HomeSections({
           }
         />
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {newsList.map((n) => (
-            <Link key={n.id} href={L("/news")} className="card card-hover overflow-hidden">
-              <div className="h-44 bg-gradient-to-br from-indigo-900 to-slate-800 relative overflow-hidden">
+          {newsList.map((n, newsIndex) => (
+            <Link
+              key={n.id}
+              href={`${L("/news")}?item=${encodeURIComponent(String(n.id))}`}
+              style={{ animationDelay: `${Math.min(newsIndex, 8) * 70}ms` }}
+              className="card card-hover news-card-pro media-card-in group overflow-hidden"
+            >
+              <div className="media-zoom h-44 bg-gradient-to-br from-indigo-900 to-slate-800 relative overflow-hidden">
                 {n.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={n.image} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -558,7 +624,8 @@ export function HomeSections({
                     <Newspaper size={44} />
                   </div>
                 )}
-                <div className="absolute top-3 left-3 flex gap-2">
+                <span className="media-shine" aria-hidden="true" />
+                <div className="absolute top-3 left-3 z-10 flex gap-2">
                   <span className="badge-blue rounded-full px-2.5 py-0.5 text-[10px] font-bold">
                     {n.category === "vacancy" ? "VACANCY" : "NOTICE"}
                   </span>
@@ -577,6 +644,10 @@ export function HomeSections({
                 <p className="mt-2 text-[12.5px] text-slate-500 leading-relaxed line-clamp-3">
                   {(lang === "si" ? n.desc_si : n.desc_en || n.desc_si).slice(0, 140)}…
                 </p>
+                <span className="mt-4 inline-flex items-center gap-1.5 text-[11.5px] font-extrabold text-indigo-700">
+                  {lang === "si" ? "විස්තර බලන්න" : "View Details"}
+                  <ArrowRight size={13} className="transition-transform duration-300 group-hover:translate-x-1" />
+                </span>
               </div>
             </Link>
           ))}

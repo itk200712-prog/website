@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-22-windows-cursor-v12";
+const SITE_PACKAGE_VERSION = "2026-10-22-news-gallery-animations-v13";
 
 const FILES = [
   "src/app/globals.css",
@@ -39,6 +39,7 @@ const FILES = [
   "src/components/site-header.tsx",
   "src/components/business-detail.tsx",
   "src/components/gallery-grid.tsx",
+  "src/components/news-client.tsx",
   "src/components/site-sections.tsx",
   "src/components/site-footer.tsx",
   "src/components/home-sections.tsx",

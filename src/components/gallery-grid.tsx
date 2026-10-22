@@ -748,7 +748,10 @@ export function GalleryHero() {
 export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
   const [items, setItems] = useState<GalleryItem[]>(initial);
   const [open, setOpen] = useState<GalleryItem | null>(null);
+  const [closing, setClosing] = useState(false);
+  const [slideDir, setSlideDir] = useState<1 | -1 | 0>(0);
   const touchStartX = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
   const me = useMe();
   const { lang } = useLang();
   const si = lang === "si";
@@ -764,23 +767,62 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
   const idx = open ? albumPhotos.findIndex((x) => x.id === open.id) : -1;
   const current = open ? albumPhotos.find((x) => x.id === open.id) ?? open : null;
 
+  function openViewer(item: GalleryItem, dir: 1 | -1 | 0 = 0) {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    setClosing(false);
+    setSlideDir(dir);
+    setOpen(item);
+  }
+
+  function closeViewer() {
+    if (!open || closing) return;
+    setClosing(true);
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => {
+      setOpen(null);
+      setClosing(false);
+      setSlideDir(0);
+      closeTimer.current = null;
+    }, 180);
+  }
+
   function goTo(delta: number) {
     if (!albumPhotos.length || idx < 0) return;
-    setOpen(albumPhotos[(idx + delta + albumPhotos.length) % albumPhotos.length]);
+    openViewer(
+      albumPhotos[(idx + delta + albumPhotos.length) % albumPhotos.length],
+      delta > 0 ? 1 : -1
+    );
   }
 
   // ⌨ keyboard: Esc වසන්න · ←/→ album එක ඇතුළෙ යන්න
   useEffect(() => {
     if (!current) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(null);
+      if (e.key === "Escape") closeViewer();
       if (e.key === "ArrowLeft") goTo(-1);
       if (e.key === "ArrowRight") goTo(1);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, idx, albumPhotos.length]);
+  }, [current?.id, idx, albumPhotos.length, closing]);
+
+  useEffect(() => {
+    if (!current) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [current?.id]);
+
+  useEffect(
+    () => () => {
+      if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    },
+    []
+  );
 
   function onTouchStart(e: React.TouchEvent) {
     touchStartX.current = e.changedTouches[0]?.clientX ?? null;
@@ -804,20 +846,24 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
         </div>
       ) : (
       <div className="columns-1 sm:columns-2 lg:columns-3 gap-6">
-        {albums.map((album) => {
+        {albums.map((album, albumIndex) => {
           const g = album.cover;
           const multi = album.photos.length > 1;
           return (
-          <figure key={album.key} className="card card-hover overflow-hidden mb-6 break-inside-avoid inline-block w-full">
+          <figure
+            key={album.key}
+            className="card card-hover gallery-card-pro media-card-in overflow-hidden mb-6 break-inside-avoid inline-block w-full"
+            style={{ animationDelay: `${Math.min(albumIndex, 8) * 70}ms` }}
+          >
             <button
-              className="w-full block relative bg-slate-800"
+              className="group w-full block relative overflow-hidden bg-slate-800"
               style={{ aspectRatio: ASPECT[g.aspect] ?? "4 / 3" }}
-              onClick={() => setOpen(g)}
+              onClick={() => openViewer(g)}
               aria-label={multi ? "View More" : g.title}
             >
               {g.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={g.image} alt={g.title} className="absolute inset-0 w-full h-full object-cover" />
+                <img src={g.image} alt={g.title} className="gallery-cover-img absolute inset-0 w-full h-full object-cover" />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-white/25">
                   <ImageIcon size={44} />
@@ -830,6 +876,10 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
               )}
               <span className="absolute top-3 right-3 badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold">
                 {g.aspect}
+              </span>
+              <span className="media-shine" aria-hidden="true" />
+              <span className="gallery-open-pill absolute left-1/2 top-1/2 z-10 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-white/90 px-4 py-2 text-[11px] font-extrabold text-slate-900 shadow-xl backdrop-blur">
+                <Eye size={13} /> {multi ? (si ? "තව බලන්න" : "View More") : si ? "විශාලව බලන්න" : "View Photo"}
               </span>
               {multi && (
                 <span className="absolute inset-x-3 bottom-3 flex gap-1.5">
@@ -859,9 +909,9 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                   <MessageSquare size={14} className="text-emerald-500" /> {album.totalComments.toLocaleString()} Comments
                 </span>
               </div>
-              <button type="button" className="btn btn-primary mt-4 w-full" onClick={() => setOpen(g)}>
+              <button type="button" className="btn btn-primary group mt-4 w-full" onClick={() => openViewer(g)}>
                 {multi ? (si ? "තව බලන්න" : "View More") : si ? "විශාලව බලන්න" : "View Photo"}
-                <ChevronRight size={16} />
+                <ChevronRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
               </button>
             </figcaption>
           </figure>
@@ -873,33 +923,41 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
       {/* lightbox — title + description + like/comment */}
       {current && (
         <div
-          className="fixed inset-0 z-[90] bg-slate-900/80 flex items-center justify-center p-4 no-print"
-          onClick={() => setOpen(null)}
+          className={`viewer-backdrop fixed inset-0 z-[90] bg-slate-950/80 flex items-center justify-center p-4 no-print ${closing ? "is-closing" : ""}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={current.title}
+          onClick={closeViewer}
         >
-          <div className="card max-w-4xl w-full p-0 overflow-hidden max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="relative bg-slate-950" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <div className="viewer-panel card max-w-4xl w-full p-0 overflow-hidden max-h-[92vh] overflow-y-auto shadow-[0_45px_100px_-25px_rgba(2,6,23,0.85)]" onClick={(e) => e.stopPropagation()}>
+            <div className="gallery-stage relative overflow-hidden bg-slate-950" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
               {current.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={current.id} src={current.image} alt={current.title} className="mx-auto max-h-[68vh] w-full object-contain" />
+                <img
+                  key={current.id}
+                  src={current.image}
+                  alt={current.title}
+                  className={`viewer-image ${slideDir > 0 ? "viewer-image-next" : slideDir < 0 ? "viewer-image-prev" : ""} mx-auto max-h-[68vh] w-full object-contain`}
+                />
               ) : (
                 <div className="flex aspect-[4/3] items-center justify-center text-white/25">
                   <ImageIcon size={64} />
                 </div>
               )}
               <button
-                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center transition"
-                onClick={() => setOpen(null)}
+                className="viewer-icon-btn absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur hover:bg-black/75"
+                onClick={closeViewer}
                 aria-label="Close"
               >
                 <X size={18} />
               </button>
               {albumPhotos.length > 1 && (
                 <>
-                  <span className="absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-[11px] font-extrabold text-white">
+                  <span className="absolute left-3 top-3 z-10 rounded-full bg-black/55 px-3 py-1 text-[11px] font-extrabold text-white backdrop-blur">
                     {idx + 1} / {albumPhotos.length}
                   </span>
                   <button
-                    className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/25 text-white transition hover:bg-white/45"
+                    className="viewer-icon-btn absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/25 text-white backdrop-blur hover:bg-white/45"
                     onClick={(e) => {
                       e.stopPropagation();
                       goTo(-1);
@@ -909,7 +967,7 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                     <ChevronLeft size={24} />
                   </button>
                   <button
-                    className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/25 text-white transition hover:bg-white/45"
+                    className="viewer-icon-btn absolute right-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/25 text-white backdrop-blur hover:bg-white/45"
                     onClick={(e) => {
                       e.stopPropagation();
                       goTo(1);
@@ -918,6 +976,9 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                   >
                     <ChevronRight size={24} />
                   </button>
+                  <span className="gallery-progress" aria-hidden="true">
+                    <span style={{ width: `${((idx + 1) / albumPhotos.length) * 100}%` }} />
+                  </span>
                 </>
               )}
             </div>
@@ -928,9 +989,10 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => setOpen(p)}
-                      className={`relative h-16 w-20 shrink-0 overflow-hidden rounded-xl ring-2 transition ${
-                        p.id === current.id ? "ring-indigo-600" : "opacity-65 ring-transparent hover:opacity-100"
+                      onClick={() => openViewer(p, i > idx ? 1 : i < idx ? -1 : 0)}
+                      style={{ animationDelay: `${Math.min(i, 10) * 35}ms` }}
+                      className={`viewer-thumb relative h-16 w-20 shrink-0 overflow-hidden rounded-xl ring-2 ${
+                        p.id === current.id ? "is-active ring-indigo-600" : "opacity-65 ring-transparent hover:opacity-100"
                       }`}
                       aria-label={`Photo ${i + 1}`}
                     >
@@ -941,15 +1003,17 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
                   ))}
                 </div>
               )}
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <h3 className="text-xl font-extrabold text-slate-900">{current.title}</h3>
-                {albumPhotos.length > 1 && (
-                  <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-extrabold text-indigo-700">
-                    {si ? `Photo ${idx + 1} / ${albumPhotos.length}` : `Photo ${idx + 1} of ${albumPhotos.length}`}
-                  </span>
-                )}
+              <div key={current.id} className="viewer-copy-in">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h3 className="text-xl font-extrabold text-slate-900">{current.title}</h3>
+                  {albumPhotos.length > 1 && (
+                    <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-extrabold text-indigo-700">
+                      {si ? `Photo ${idx + 1} / ${albumPhotos.length}` : `Photo ${idx + 1} of ${albumPhotos.length}`}
+                    </span>
+                  )}
+                </div>
+                <p className="text-slate-500 text-[13.5px] mt-2 leading-relaxed">{current.description}</p>
               </div>
-              <p className="text-slate-500 text-[13.5px] mt-2 leading-relaxed">{current.description}</p>
               <div className="mt-4 border-t border-slate-100 pt-4">
                 <GallerySocial
                   key={current.id}
@@ -974,7 +1038,7 @@ export function GalleryGrid({ items: initial }: { items: GalleryItem[] }) {
               </div>
               <div className="flex items-center gap-4 mt-4 text-[12.5px] text-slate-500 border-t border-slate-100 pt-4">
                 <span className="badge-amber rounded-full px-2.5 py-0.5 text-[10px] font-bold">{current.aspect}</span>
-                <button onClick={() => setOpen(null)} className="btn btn-outline !py-1.5 !px-4 !text-[11.5px] ml-auto">
+                <button onClick={closeViewer} className="btn btn-outline !py-1.5 !px-4 !text-[11.5px] ml-auto">
                   Close
                 </button>
               </div>
