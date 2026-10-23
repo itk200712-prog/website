@@ -1239,7 +1239,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-22-media-size-pro-v14"));
+  genSiteSourceSrc.includes("2026-10-23-searchable-register-pdf-v15"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1307,12 +1307,13 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-22-media-size-pro-v14"));
+  genSiteSourceSrc.includes("2026-10-23-searchable-register-pdf-v15"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
 );
 const latestBackupUpdateFiles = [
+  "src/app/admin/data/page.tsx",
   "src/app/admin/gallery/page.tsx",
   "src/app/admin/news/page.tsx",
   "src/app/gallery/page.tsx",
@@ -1320,6 +1321,7 @@ const latestBackupUpdateFiles = [
   "src/app/layout.tsx",
   "src/middleware.ts",
   "src/components/cursor-follower.tsx",
+  "src/components/directory.tsx",
   "src/components/floating-lang.tsx",
   "src/components/gallery-grid.tsx",
   "src/components/hero-slideshow.tsx",
@@ -1330,12 +1332,13 @@ const latestBackupUpdateFiles = [
   "src/components/site-sections.tsx",
   "src/lib/i18n.tsx",
   "src/lib/media-info.ts",
+  "src/lib/pdf-register.ts",
   "src/lib/motion-compat.ts",
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-22-media-size-pro-v14" &&
-  generatedSiteSource.SITE_SOURCE_FILES.length >= 37 &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-23-searchable-register-pdf-v15" &&
+  generatedSiteSource.SITE_SOURCE_FILES.length >= 40 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
   ) &&
@@ -1362,7 +1365,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-10-22-media-size-pro-v14"));
+  genSiteSourceSrc.includes("2026-10-23-searchable-register-pdf-v15"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1391,7 +1394,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-22-media-size-pro-v14"));
+  genSiteSourceSrc.includes("2026-10-23-searchable-register-pdf-v15"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1425,6 +1428,30 @@ ok("professional image size display: shared actual-size badge/details in Gallery
   genSiteSourceSrc.includes('"src/components/media-info.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/media-info.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/news/page.tsx"'));
+const pdfRegisterSrc = readFileSync(join(root, "src/lib/pdf-register.ts"), "utf8");
+const directorySrc = readFileSync(join(root, "src/components/directory.tsx"), "utf8");
+const adminDataSrc = readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8");
+const searchFontBytes = readFileSync(join(root, "public/fonts/AbhayaLibre-Regular.ttf"));
+ok("member/voter register PDF: visual page keeps a real invisible Unicode text layer so NIC/name/address are searchable",
+  pdfRegisterSrc.includes("html2canvas") &&
+  pdfRegisterSrc.includes("doc.addImage") &&
+  pdfRegisterSrc.includes("data-pdf-text") &&
+  pdfRegisterSrc.includes("collectSearchTextBoxes") &&
+  pdfRegisterSrc.includes("addInvisibleTextLayer") &&
+  pdfRegisterSrc.includes('renderingMode: "invisible"') &&
+  pdfRegisterSrc.includes("doc.addFileToVFS") &&
+  pdfRegisterSrc.includes("doc.addFont") &&
+  pdfRegisterSrc.includes('"/fonts/AbhayaLibre-Regular.ttf"') &&
+  pdfRegisterSrc.includes('escapeHtml(r.nic || "")') &&
+  directorySrc.includes('await import("@/lib/pdf-register")') &&
+  adminDataSrc.includes('await import("@/lib/pdf-register")') &&
+  searchFontBytes.length > 500_000 &&
+  searchFontBytes.subarray(0, 4).equals(Buffer.from([0, 1, 0, 0])) &&
+  backupSrc.includes('"fonts/AbhayaLibre-Regular.ttf"') &&
+  genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
+  genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
+  genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
+  genSiteSourceSrc.includes("2026-10-23-searchable-register-pdf-v15"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

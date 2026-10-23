@@ -278,6 +278,7 @@ async function fetchBase64(url: string): Promise<{ b64: string; type: string } |
  * ⚠ public/ එකට අලුත් file එකක් දැම්මොත් මේ list එකටත් දාන්න.
  */
 export const PUBLIC_ASSET_PATHS = [
+  "fonts/AbhayaLibre-Regular.ttf",
   "icons/phone-call.png",
   "icons/location.png",
   "icons/comment.png",
@@ -362,6 +363,7 @@ function contentTypeForPath(path: string): string {
   if (ext === "webp") return "image/webp";
   if (ext === "svg") return "image/svg+xml";
   if (ext === "gif") return "image/gif";
+  if (ext === "ttf") return "font/ttf";
   return "application/octet-stream";
 }
 
