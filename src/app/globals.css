@@ -1183,26 +1183,13 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
     linear-gradient(145deg, #e0e7ff 0%, #f8fafc 46%, #ecfdf5 100%);
 }
 
-.auth-bg-photo {
-  position: absolute;
-  inset: 0;
-  z-index: -4;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.34;
-  filter: saturate(1.12) blur(1px);
-  transform: scale(1.035);
-}
-
 .auth-bg-wash {
   position: absolute;
   inset: 0;
   z-index: -3;
   background:
-    linear-gradient(120deg, rgba(30, 27, 75, 0.2), rgba(255, 255, 255, 0.42) 42%, rgba(6, 78, 59, 0.16)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.48));
-  backdrop-filter: blur(2px);
+    linear-gradient(120deg, rgba(30, 27, 75, 0.16), rgba(255, 255, 255, 0.42) 42%, rgba(6, 78, 59, 0.13)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.52));
 }
 
 .auth-bg-grid {
@@ -1304,31 +1291,42 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
   padding: clamp(24px, 3.4vw, 42px);
   color: #fff;
   isolation: isolate;
+  background:
+    radial-gradient(circle at 84% 8%, rgba(255, 255, 255, 0.22), transparent 22rem),
+    linear-gradient(155deg, #1e1b4b 0%, #312e81 34%, #4f46e5 62%, #7c3aed 82%, #0e7490 100%);
 }
 
-.auth-brand-photo {
+.auth-glass-shell.is-register .auth-brand-panel {
+  background:
+    radial-gradient(circle at 84% 8%, rgba(255, 255, 255, 0.22), transparent 22rem),
+    linear-gradient(155deg, #022c22 0%, #065f46 32%, #047857 58%, #0f766e 80%, #0c4a6e 100%);
+}
+
+.auth-brand-aura {
   position: absolute;
   inset: 0;
   z-index: -2;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  animation: authPhotoDrift 20s ease-in-out infinite alternate;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 78%, rgba(56, 189, 248, 0.34), transparent 17rem),
+    radial-gradient(circle at 92% 24%, rgba(251, 191, 36, 0.18), transparent 15rem);
+  animation: authAuraDrift 14s ease-in-out infinite alternate;
+}
+
+.auth-glass-shell.is-register .auth-brand-aura {
+  background:
+    radial-gradient(circle at 18% 78%, rgba(125, 211, 252, 0.3), transparent 17rem),
+    radial-gradient(circle at 92% 24%, rgba(190, 242, 100, 0.16), transparent 15rem);
 }
 
 .auth-brand-shade {
   position: absolute;
   inset: 0;
   z-index: -1;
+  pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.08) 0%, rgba(30, 27, 75, 0.24) 42%, rgba(15, 23, 42, 0.88) 100%),
-    linear-gradient(135deg, rgba(49, 46, 129, 0.58), rgba(14, 116, 144, 0.22));
-}
-
-.auth-glass-shell.is-register .auth-brand-shade {
-  background:
-    linear-gradient(180deg, rgba(2, 44, 34, 0.05) 0%, rgba(6, 78, 59, 0.2) 42%, rgba(2, 32, 42, 0.9) 100%),
-    linear-gradient(135deg, rgba(4, 120, 87, 0.46), rgba(2, 132, 199, 0.28));
+    linear-gradient(180deg, rgba(15, 23, 42, 0) 38%, rgba(15, 23, 42, 0.34) 74%, rgba(15, 23, 42, 0.56) 100%),
+    linear-gradient(115deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 46%);
 }
 
 .auth-brand-top {
@@ -2019,9 +2017,9 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
   to { transform: translate3d(34px, 24px, 0) scale(1.08); }
 }
 
-@keyframes authPhotoDrift {
-  from { transform: scale(1.02) translateX(0); }
-  to { transform: scale(1.09) translateX(-1.4%); }
+@keyframes authAuraDrift {
+  from { transform: translate3d(0, 0, 0) scale(1); opacity: 0.9; }
+  to { transform: translate3d(-18px, -14px, 0) scale(1.06); opacity: 1; }
 }
 
 @keyframes authArtworkFloat {
@@ -2159,7 +2157,7 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
   html:not(.motion-compat) .auth-glass-shell,
   html:not(.motion-compat) .auth-form-inner,
   html:not(.motion-compat) .auth-bg-orb,
-  html:not(.motion-compat) .auth-brand-photo,
+  html:not(.motion-compat) .auth-brand-aura,
   html:not(.motion-compat) .auth-artwork-tile,
   html:not(.motion-compat) .auth-eye-pop,
   html:not(.motion-compat) .auth-error,

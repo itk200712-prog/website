@@ -46,8 +46,6 @@ export function AuthShell({
 }: AuthShellProps) {
   return (
     <div className="auth-page">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/images/gallery/headquarters.jpg" alt="" aria-hidden="true" className="auth-bg-photo" />
       <div className="auth-bg-wash" aria-hidden="true" />
       <div className="auth-bg-orb auth-bg-orb-one" aria-hidden="true" />
       <div className="auth-bg-orb auth-bg-orb-two" aria-hidden="true" />
@@ -56,8 +54,7 @@ export function AuthShell({
       <main className="auth-shell-wrap">
         <section className={`auth-glass-shell is-${mode}`} aria-label={title}>
           <aside className="auth-brand-panel">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/gallery/headquarters.jpg" alt="" aria-hidden="true" className="auth-brand-photo" />
+            <div className="auth-brand-aura" aria-hidden="true" />
             <div className="auth-brand-shade" aria-hidden="true" />
 
             <div className="auth-brand-top">
