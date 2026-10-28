@@ -1499,39 +1499,8 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
 }
 
 .auth-heading {
-  display: flex;
-  align-items: center;
-  gap: 17px;
-  margin-top: 26px;
-}
-
-.auth-artwork-tile {
-  position: relative;
-  flex: 0 0 auto;
-  width: 84px;
-  height: 84px;
-  padding: 6px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  border-radius: 27px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.42));
-  box-shadow: 0 18px 34px -18px rgba(15, 23, 42, 0.42), inset 0 1px 0 #fff;
-  animation: authArtworkFloat 5.2s ease-in-out infinite alternate;
-}
-
-.auth-artwork-tile img {
-  width: 100%;
-  height: 100%;
   display: block;
-  border-radius: 21px;
-}
-
-.auth-artwork-glow {
-  position: absolute;
-  inset: 6px;
-  border-radius: 21px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
-  pointer-events: none;
+  margin-top: 26px;
 }
 
 .auth-form-kicker { color: var(--auth-accent); }
@@ -2022,11 +1991,6 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
   to { transform: translate3d(-18px, -14px, 0) scale(1.06); opacity: 1; }
 }
 
-@keyframes authArtworkFloat {
-  from { transform: translateY(1px) rotate(-0.4deg); }
-  to { transform: translateY(-4px) rotate(0.6deg); }
-}
-
 @keyframes authEyePop {
   0% { transform: scale(0.72) rotate(-7deg); opacity: 0.35; }
   58% { transform: scale(1.14) rotate(2deg); opacity: 1; }
@@ -2137,16 +2101,7 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
 
   .auth-hero-card p { display: none; }
   .auth-form-panel { padding: 23px 18px 25px; }
-  .auth-heading { gap: 13px; margin-top: 21px; }
-
-  .auth-artwork-tile {
-    width: 68px;
-    height: 68px;
-    border-radius: 22px;
-  }
-
-  .auth-artwork-tile img,
-  .auth-artwork-glow { border-radius: 17px; }
+  .auth-heading { margin-top: 21px; }
 
   .auth-heading h1 { font-size: 1.48rem; }
   .auth-heading p { font-size: 11.5px; }
@@ -2158,7 +2113,6 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
   html:not(.motion-compat) .auth-form-inner,
   html:not(.motion-compat) .auth-bg-orb,
   html:not(.motion-compat) .auth-brand-aura,
-  html:not(.motion-compat) .auth-artwork-tile,
   html:not(.motion-compat) .auth-eye-pop,
   html:not(.motion-compat) .auth-error,
   html:not(.motion-compat) .auth-spinner,

@@ -3,7 +3,7 @@
 //  ක්‍රියා කරවන්න: npm test   (npx tsx scripts/test.ts)
 // ============================================================================
 
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
@@ -1239,7 +1239,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v17"));
+  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1307,7 +1307,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v17"));
+  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1340,7 +1340,7 @@ const latestBackupUpdateFiles = [
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files + professional glass auth pages",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-28-auth-glass-v17" &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-28-auth-glass-v18" &&
   generatedSiteSource.SITE_SOURCE_FILES.length >= 43 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
@@ -1368,7 +1368,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v17"));
+  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1397,7 +1397,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v17"));
+  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1454,15 +1454,18 @@ ok("member/voter register PDF: visual page keeps a real invisible Unicode text l
   genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
   genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
   genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v17"));
+  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
 const signinPageSrc = readFileSync(join(root, "src/app/signin/page.tsx"), "utf8");
 const registerPageSrc = readFileSync(join(root, "src/app/register/page.tsx"), "utf8");
 const authShellSrc = readFileSync(join(root, "src/components/auth-shell.tsx"), "utf8");
-const signinArtworkSvg = readFileSync(join(root, "public/images/auth/sign-in-secure.svg"), "utf8");
-const registerArtworkSvg = readFileSync(join(root, "public/images/auth/register-member.svg"), "utf8");
-ok("Sign In + Register professional glass experience: gradient glass shell (no photo background) + premium artwork + animated password eyes + successful-login check animation + backup coverage",
-  signinPageSrc.includes('artworkSrc="/images/auth/sign-in-secure.svg"') &&
-  registerPageSrc.includes('artworkSrc="/images/auth/register-member.svg"') &&
+const authArtworkRemoved = !existsSync(join(root, "public/images/auth")) &&
+  !signinPageSrc.includes("artworkSrc") &&
+  !registerPageSrc.includes("artworkSrc") &&
+  !authShellSrc.includes("auth-artwork-tile") &&
+  !globalsCssSrc.includes(".auth-artwork-tile") &&
+  !backupSrc.includes("images/auth/");
+ok("Sign In + Register professional glass experience: gradient glass shell (no photo background, no heading artwork tile) + animated password eyes + successful-login check animation + backup coverage",
+  authArtworkRemoved &&
   signinPageSrc.includes("AuthSuccessOverlay") &&
   signinPageSrc.includes("setSuccess(true)") &&
   signinPageSrc.includes("window.setTimeout") &&
@@ -1480,14 +1483,10 @@ ok("Sign In + Register professional glass experience: gradient glass shell (no p
   globalsCssSrc.includes("@keyframes authCircleDraw") &&
   globalsCssSrc.includes("@keyframes authCheckDraw") &&
   globalsCssSrc.includes(".auth-eye-toggle") &&
-  signinArtworkSvg.includes("Secure sign in") &&
-  registerArtworkSvg.includes("MPCS MEMBER") &&
-  backupSrc.includes('"images/auth/sign-in-secure.svg"') &&
-  backupSrc.includes('"images/auth/register-member.svg"') &&
   genSiteSourceSrc.includes('"src/app/signin/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/register/page.tsx"') &&
   genSiteSourceSrc.includes('"src/components/auth-shell.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v17"));
+  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

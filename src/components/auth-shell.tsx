@@ -2,8 +2,8 @@
 
 // ============================================================================
 // Auth shell — Sign In + Register professional glass experience
-// Shared layout, premium artwork, animated password visibility and success
-// animation. The actual auth calls stay in each page.
+// Shared layout, animated password visibility and success animation.
+// The actual auth calls stay in each page.
 // ============================================================================
 
 import Link from "next/link";
@@ -23,8 +23,6 @@ type AuthShellProps = {
   heroTitle: string;
   heroText: string;
   features: AuthFeature[];
-  artworkSrc: string;
-  artworkAlt: string;
   title: string;
   subtitle: string;
   children: ReactNode;
@@ -38,8 +36,6 @@ export function AuthShell({
   heroTitle,
   heroText,
   features,
-  artworkSrc,
-  artworkAlt,
   title,
   subtitle,
   children,
@@ -99,16 +95,10 @@ export function AuthShell({
               </Link>
 
               <div className="auth-heading">
-                <div className="auth-artwork-tile" aria-hidden="true">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={artworkSrc} alt="" />
-                  <span className="auth-artwork-glow" />
-                </div>
                 <div className="min-w-0">
                   <div className="auth-form-kicker">Official Member Portal</div>
                   <h1>{title}</h1>
                   <p>{subtitle}</p>
-                  <span className="sr-only">{artworkAlt}</span>
                 </div>
               </div>
 

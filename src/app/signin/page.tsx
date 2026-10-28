@@ -2,7 +2,7 @@
 
 // ============================================================================
 // Sign In — NIC + password login + WhatsApp password recovery
-// Professional glass layout with premium artwork and success animation.
+// Professional glass layout with animated password visibility and success animation.
 // ============================================================================
 
 import Link from "next/link";
@@ -133,8 +133,6 @@ export default function SignInPage() {
             label: si ? "නිල සමිති portal එක · ලියාපදිංචි: කුරු/186" : "Official society portal · Reg: කුරු/186",
           },
         ]}
-        artworkSrc="/images/auth/sign-in-secure.svg"
-        artworkAlt={si ? "ආරක්ෂිත sign in artwork" : "Secure sign-in artwork"}
         title={t.auth.signinTitle}
         subtitle={t.auth.signinSub}
       >

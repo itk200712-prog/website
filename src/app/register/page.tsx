@@ -2,8 +2,7 @@
 
 // ============================================================================
 // Register — member registration
-// Professional glass layout with premium member-card artwork and animated
-// password visibility + success state.
+// Professional glass layout with animated password visibility + success state.
 // ============================================================================
 
 import Link from "next/link";
@@ -90,8 +89,6 @@ export default function RegisterPage() {
           label: si ? "F28 ඉන්ධන portal එක සහ සාමාජික දීමනා" : "F28 fuel portal & member offers",
         },
       ]}
-      artworkSrc="/images/auth/register-member.svg"
-      artworkAlt={si ? "සාමාජික ගිණුමක් හදන artwork" : "Create member account artwork"}
       title={t.auth.registerTitle}
       subtitle={t.auth.registerSub}
     >
