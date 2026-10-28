@@ -1,29 +1,35 @@
 "use client";
 
 // ============================================================================
-// Register — member registration (professional split layout)
+// Register — member registration
+// Professional glass layout with premium member-card artwork and animated
+// password visibility + success state.
 // ============================================================================
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowLeft, BadgeCheck, Eye, EyeOff, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Lock, ShieldCheck, Sparkles, UserPlus, UserRound, UsersRound } from "lucide-react";
+import { PhoneImageIcon as Phone } from "@/components/site-icons";
+import { AuthShell, AuthSuccessMark, PasswordVisibilityButton } from "@/components/auth-shell";
 import { useLang } from "@/lib/i18n";
 import { registerMember, validateNic, validatePassword, validatePhone } from "@/lib/auth";
 
-const SITE_REG = "කුරු/186";
-
 export default function RegisterPage() {
   const { t, lang } = useLang();
-  const [show, setShow] = useState(false);
+  const si = lang === "si";
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (busy) return;
     setError("");
     const fd = new FormData(e.currentTarget);
-    const password = String(fd.get("password"));
+    const password = String(fd.get("password") || "");
+    const confirm = String(fd.get("confirm") || "");
     const nicErr = validateNic(String(fd.get("nic") || ""));
     if (nicErr) {
       setError(nicErr);
@@ -39,11 +45,15 @@ export default function RegisterPage() {
       setError(pwErr);
       return;
     }
+    if (password !== confirm) {
+      setError(si ? "මුරපද දෙක එක සමාන නොවේ — නැවත පරීක්ෂා කරන්න" : "Passwords do not match — please check again");
+      return;
+    }
     setBusy(true);
     const { error: err } = await registerMember({
-      full_name: String(fd.get("full_name")),
-      nic: String(fd.get("nic")),
-      phone: String(fd.get("phone")),
+      full_name: String(fd.get("full_name") || ""),
+      nic: String(fd.get("nic") || ""),
+      phone: String(fd.get("phone") || ""),
       password,
     });
     setBusy(false);
@@ -55,140 +65,210 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr]">
-      {/* ================= branding panel ================= */}
-      <div className="relative hidden lg:flex flex-col justify-between p-12 text-white overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/hero/hero-1.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(160deg, rgba(11,18,48,0.94) 0%, rgba(23,37,84,0.86) 55%, rgba(30,42,120,0.72) 100%)",
-          }}
-        />
-        <div className="relative flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white flex items-center justify-center text-[11px] font-black tracking-wide shadow">
-            coop
+    <AuthShell
+      mode="register"
+      brand={t.brand}
+      backLabel={t.auth.backHome}
+      heroKicker={si ? "නිල සාමාජික ලියාපදිංචිය" : "Official Member Registration"}
+      heroTitle={si ? "සාමාජිකයෙකු වන්න" : "Become a Member"}
+      heroText={
+        si
+          ? "නිල සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිති සාමාජික ගිණුම නිර්මාණය කර සියලු සේවාවන්ට ප්‍රවේශ වන්න."
+          : "Create your official Panduwasnuwara New MPCS member account and get access to every society service."
+      }
+      features={[
+        {
+          icon: <Sparkles size={15} />,
+          label: si ? "නොමිලේ නිල සාමාජික ගිණුමක්" : "Free official member account",
+        },
+        {
+          icon: <UsersRound size={15} />,
+          label: si ? "සාමාජික ලේඛනය සහ ඡන්ද සුදුසුකම්" : "Member directory & voter eligibility",
+        },
+        {
+          icon: <BadgeCheck size={15} />,
+          label: si ? "F28 ඉන්ධන portal එක සහ සාමාජික දීමනා" : "F28 fuel portal & member offers",
+        },
+      ]}
+      artworkSrc="/images/auth/register-member.svg"
+      artworkAlt={si ? "සාමාජික ගිණුමක් හදන artwork" : "Create member account artwork"}
+      title={t.auth.registerTitle}
+      subtitle={t.auth.registerSub}
+    >
+      {done ? (
+        <div className="auth-success-panel" role="status" aria-live="polite">
+          <AuthSuccessMark compact />
+          <div className="text-[17px] font-extrabold text-emerald-900">
+            {si ? "ලියාපදිංචිය සාර්ථකයි!" : "Registration successful!"}
           </div>
-          <div className="leading-tight">
-            <div className="font-extrabold text-white text-[14px]">{t.brand}</div>
-            <div className="text-[9.5px] text-white/60 tracking-wide uppercase">Panduwasnuwara New MPCS</div>
-          </div>
-        </div>
-
-        <div className="relative max-w-md">
-          <h2 className="text-4xl font-black leading-tight">
-            {lang === "si" ? "සාමාජිකයෙකු වන්න" : "Become a Member"}
-          </h2>
-          <p className="mt-4 text-white/75 text-[14px] leading-relaxed">
-            {lang === "si"
-              ? "නිල සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිති සාමාජික ගිණුම නිර්මාණය කර සියලු සේවාවන්ට ප්‍රවේශ වන්න."
-              : "Create your official Panduwasnuwara New MPCS member account and get access to every society service."}
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-emerald-800/75">
+            {si ? "දැන් ඔබට sign in කර ඔබේ ගිණුමට ප්‍රවේශ විය හැක." : "You can now sign in and access your account."}
           </p>
-          <div className="mt-8 space-y-3">
-            {[
-              { icon: <Sparkles size={16} />, en: "Free official member account", si: "නොමිලේ නිල සාමාජික ගිණුමක්" },
-              { icon: <UsersRound size={16} />, en: "Member directory & voter eligibility", si: "සාමාජික ලේඛනය සහ ඡන්ද සුදුසුකම්" },
-              { icon: <BadgeCheck size={16} />, en: "F28 fuel portal & member offers", si: "F28 ඉන්ධන portal එක සහ සාමාජික දීමනා" },
-            ].map((f) => (
-              <div key={f.en} className="flex items-center gap-3 text-white/85 text-[13px]">
-                <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-amber-300 shrink-0">
-                  {f.icon}
-                </div>
-                {lang === "si" ? f.si : f.en}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="relative text-[11px] text-white/50">
-          © {new Date().getFullYear()} Panduwasnuwara New Multi Purpose Co-Operative Society LTD · {SITE_REG}
-        </div>
-      </div>
-
-      {/* ================= form panel ================= */}
-      <div className="relative flex items-center justify-center p-5 sm:p-10 bg-slate-50 overflow-hidden">
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-indigo-200/40 blur-3xl" />
-        <div className="absolute bottom-[-6rem] -left-24 w-96 h-96 rounded-full bg-fuchsia-200/35 blur-3xl" />
-        <div className="relative w-full max-w-[430px]">
-          <Link href="/" className="inline-flex items-center gap-2 text-slate-500 text-[12.5px] font-semibold hover:text-slate-800 transition-colors">
-            <ArrowLeft size={15} /> {t.auth.backHome}
+          <Link href="/signin" className="btn btn-primary auth-submit-btn mt-5 w-full">
+            {t.auth.signinBtn}
           </Link>
-
-          <div className="mt-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-white flex items-center justify-center shadow-lg shadow-emerald-200">
-                <UserPlus size={21} />
-              </div>
-              <div>
-                <h1 className="text-[26px] font-extrabold text-slate-900 leading-tight">{t.auth.registerTitle}</h1>
-                <p className="text-slate-500 text-[12.5px]">{t.auth.registerSub}</p>
-              </div>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="auth-form space-y-4" aria-busy={busy}>
+          <div className="auth-field-block">
+            <div className="auth-label-row">
+              <label htmlFor="register-full-name" className="auth-label">
+                {t.auth.fullname} *
+              </label>
+            </div>
+            <div className="auth-control">
+              <span className="auth-control-icon" aria-hidden="true">
+                <UserRound size={18} />
+              </span>
+              <input
+                id="register-full-name"
+                name="full_name"
+                required
+                autoComplete="name"
+                className="field auth-input has-leading-icon"
+                placeholder="e.g. Maduranga"
+              />
             </div>
           </div>
 
-          {done ? (
-            <div className="mt-8 rounded-2xl bg-emerald-50 border border-emerald-200 p-7 text-center">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-                <BadgeCheck size={28} />
-              </div>
-              <div className="font-extrabold text-emerald-800 text-[16px] mt-3">Registration successful! / ලියාපදිංචිය සාර්ථකයි!</div>
-              <p className="text-emerald-700/80 text-[12.5px] mt-1.5">
-                {lang === "si" ? "දැන් ඔබට sign in කර ඔබේ ගිණුමට ප්‍රවේශ විය හැක." : "You can now sign in and access your account."}
-              </p>
-              <Link href="/signin" className="btn btn-primary mt-5 w-full !py-3">
-                {t.auth.signinBtn}
-              </Link>
+          <div className="auth-field-block">
+            <div className="auth-label-row">
+              <label htmlFor="register-nic" className="auth-label">
+                {t.auth.nic} *
+              </label>
             </div>
-          ) : (
-            <form onSubmit={submit} className="mt-7 space-y-4">
-              <div>
-                <label className="field-label">{t.auth.fullname} *</label>
-                <input name="full_name" required className="field !py-3 !text-[14px]" placeholder="e.g. Maduranga" />
-              </div>
-              <div>
-                <label className="field-label">{t.auth.nic} *</label>
-                <input name="nic" required className="field !py-3 !text-[14px]" placeholder="E.G. 123456789V OR 123456789012" />
-              </div>
-              <div>
-                <label className="field-label">{t.auth.phone} *</label>
-                <input name="phone" required className="field !py-3 !text-[14px]" placeholder="07X XXXXXXX" />
-              </div>
-              <div>
-                <label className="field-label">{t.auth.password} *</label>
-                <div className="relative">
-                  <input name="password" required type={show ? "text" : "password"} className="field !pr-11 !py-3 !text-[14px]" placeholder="••••••••" />
-                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" onClick={() => setShow(!show)}>
-                    {show ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="field-label">{t.auth.confirm} *</label>
-                <input name="confirm" required type={show ? "text" : "password"} className="field !py-3 !text-[14px]" placeholder="••••••••" />
-              </div>
-              {error && <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 text-[12.5px] px-4 py-2.5">{error}</div>}
-              <button type="submit" disabled={busy} className="btn btn-primary w-full !py-3 !text-[14px]">
-                {busy ? "..." : t.auth.registerBtn}
-              </button>
-              <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 pt-1">
-                <ShieldCheck size={13} className="text-emerald-500" />
-                {lang === "si" ? "ඔබේ දත්ත ආරක්ෂිතව ගබඩා වේ" : "Your data is stored securely"}
-              </div>
-            </form>
+            <div className="auth-control">
+              <span className="auth-control-icon" aria-hidden="true">
+                <BadgeCheck size={18} />
+              </span>
+              <input
+                id="register-nic"
+                name="nic"
+                required
+                autoComplete="username"
+                autoCapitalize="characters"
+                spellCheck={false}
+                className="field auth-input has-leading-icon"
+                placeholder="E.G. 123456789V OR 123456789012"
+              />
+            </div>
+          </div>
+
+          <div className="auth-field-block">
+            <div className="auth-label-row">
+              <label htmlFor="register-phone" className="auth-label">
+                {t.auth.phone} *
+              </label>
+            </div>
+            <div className="auth-control">
+              <span className="auth-control-icon" aria-hidden="true">
+                <Phone size={18} />
+              </span>
+              <input
+                id="register-phone"
+                name="phone"
+                required
+                autoComplete="tel"
+                inputMode="tel"
+                className="field auth-input has-leading-icon"
+                placeholder="07X XXXXXXX"
+              />
+            </div>
+          </div>
+
+          <div className="auth-field-block">
+            <div className="auth-label-row">
+              <label htmlFor="register-password" className="auth-label">
+                {t.auth.password} *
+              </label>
+            </div>
+            <div className={`auth-control${showPassword ? " is-password-visible" : ""}`}>
+              <span className="auth-control-icon" aria-hidden="true">
+                <Lock size={18} />
+              </span>
+              <input
+                id="register-password"
+                name="password"
+                required
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                className="field auth-input has-leading-icon has-trailing-action"
+                placeholder="••••••••"
+              />
+              <PasswordVisibilityButton
+                visible={showPassword}
+                onToggle={() => setShowPassword((value) => !value)}
+                showLabel={si ? "මුරපදය පෙන්වන්න" : "Show password"}
+                hideLabel={si ? "මුරපදය සඟවන්න" : "Hide password"}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
+              {si ? "අවම අකුරු 6ක් සහිත, පහසුවෙන් අනුමාන කළ නොහැකි මුරපදයක් තෝරන්න." : "Use at least 6 characters and avoid an easy-to-guess password."}
+            </p>
+          </div>
+
+          <div className="auth-field-block">
+            <div className="auth-label-row">
+              <label htmlFor="register-confirm-password" className="auth-label">
+                {t.auth.confirm} *
+              </label>
+            </div>
+            <div className={`auth-control${showConfirm ? " is-password-visible" : ""}`}>
+              <span className="auth-control-icon" aria-hidden="true">
+                <Lock size={18} />
+              </span>
+              <input
+                id="register-confirm-password"
+                name="confirm"
+                required
+                type={showConfirm ? "text" : "password"}
+                autoComplete="new-password"
+                className="field auth-input has-leading-icon has-trailing-action"
+                placeholder="••••••••"
+              />
+              <PasswordVisibilityButton
+                visible={showConfirm}
+                onToggle={() => setShowConfirm((value) => !value)}
+                showLabel={si ? "තහවුරු කිරීමේ මුරපදය පෙන්වන්න" : "Show confirmation password"}
+                hideLabel={si ? "තහවුරු කිරීමේ මුරපදය සඟවන්න" : "Hide confirmation password"}
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="auth-error" role="alert">
+              <AlertTriangle size={16} />
+              <span>{error}</span>
+            </div>
           )}
 
-          <div className="mt-7 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center">
-            <div className="text-[13px] text-slate-500">
-              {t.auth.haveAccount}{" "}
-              <Link href="/signin" className="text-indigo-700 font-bold hover:underline">
-                {t.auth.signinHere}
-              </Link>
-            </div>
+          <button type="submit" disabled={busy} className="btn btn-primary auth-submit-btn w-full !text-[14px]">
+            {busy ? (
+              <>
+                <span className="auth-spinner" aria-hidden="true" />
+                <span>{si ? "ගිණුම හදමින්…" : "Creating account…"}</span>
+              </>
+            ) : (
+              <>
+                <UserPlus size={17} />
+                <span>{t.auth.registerBtn}</span>
+              </>
+            )}
+          </button>
+
+          <div className="auth-trust-row !mt-1">
+            <ShieldCheck size={13} />
+            {si ? "ඔබේ දත්ත ආරක්ෂිතව ගබඩා වේ" : "Your data is stored securely"}
           </div>
+        </form>
+      )}
+
+      {!done && (
+        <div className="auth-switch-card">
+          {t.auth.haveAccount}{" "}
+          <Link href="/signin">{t.auth.signinHere}</Link>
         </div>
-      </div>
-    </div>
+      )}
+    </AuthShell>
   );
 }

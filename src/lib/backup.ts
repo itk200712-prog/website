@@ -279,6 +279,8 @@ async function fetchBase64(url: string): Promise<{ b64: string; type: string } |
  */
 export const PUBLIC_ASSET_PATHS = [
   "fonts/AbhayaLibre-Regular.ttf",
+  "images/auth/sign-in-secure.svg",
+  "images/auth/register-member.svg",
   "icons/phone-call.png",
   "icons/location.png",
   "icons/comment.png",

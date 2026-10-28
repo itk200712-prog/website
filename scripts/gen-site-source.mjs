@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-23-searchable-register-pdf-v15";
+const SITE_PACKAGE_VERSION = "2026-10-28-auth-glass-v16";
 
 const FILES = [
   "src/app/globals.css",
@@ -31,6 +31,8 @@ const FILES = [
   "src/app/admin/gallery/page.tsx",
   "src/app/admin/news/page.tsx",
   "src/app/gallery/page.tsx",
+  "src/app/signin/page.tsx",
+  "src/app/register/page.tsx",
   "src/middleware.ts",
   "src/components/cursor-follower.tsx",
   "src/components/hero-slideshow.tsx",
@@ -41,6 +43,7 @@ const FILES = [
   "src/components/site-header.tsx",
   "src/components/business-detail.tsx",
   "src/components/directory.tsx",
+  "src/components/auth-shell.tsx",
   "src/components/gallery-grid.tsx",
   "src/components/media-info.tsx",
   "src/components/news-client.tsx",

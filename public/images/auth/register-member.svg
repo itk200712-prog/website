@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
+  <title id="title">Create member account</title>
+  <desc id="desc">A premium member identity card with an amber add-member badge.</desc>
+  <defs>
+    <linearGradient id="bg" x1="10" y1="8" x2="150" y2="154" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#022c22"/>
+      <stop offset="0.48" stop-color="#047857"/>
+      <stop offset="1" stop-color="#0369a1"/>
+    </linearGradient>
+    <linearGradient id="card" x1="28" y1="42" x2="132" y2="118" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#ecfdf5"/>
+      <stop offset="1" stop-color="#dbeafe"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="101" y1="27" x2="137" y2="63" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <radialGradient id="gloss" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(45 25) rotate(40) scale(95 46)">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.5"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.1"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="8" y="8" width="144" height="144" rx="38" fill="url(#bg)"/>
+  <circle cx="128" cy="28" r="34" fill="#ffffff" opacity="0.12"/>
+  <circle cx="20" cy="134" r="29" fill="#34d399" opacity="0.16"/>
+  <path d="M18 36C43 17 78 11 114 18l28 6v38c-31-17-66-20-97-8-14 5-24-3-27-18Z" fill="url(#gloss)"/>
+
+  <ellipse cx="80" cy="132" rx="43" ry="7" fill="#020617" opacity="0.18"/>
+  <g transform="rotate(-4 80 82)">
+    <rect x="27" y="43" width="106" height="77" rx="18" fill="url(#card)"/>
+    <rect x="27" y="43" width="106" height="18" rx="9" fill="#059669"/>
+    <rect x="27" y="55" width="106" height="7" fill="#059669"/>
+    <text x="39" y="56" font-family="Arial, Helvetica, sans-serif" font-size="8.5" font-weight="800" letter-spacing="1.8" fill="#ffffff">MPCS MEMBER</text>
+    <circle cx="118" cy="52" r="4" fill="#fde68a"/>
+
+    <circle cx="54" cy="88" r="17" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+    <circle cx="54" cy="82" r="6.5" fill="#047857"/>
+    <path d="M42.5 101c2.8-8 20.2-8 23 0" fill="#047857"/>
+
+    <rect x="79" y="72" width="38" height="7" rx="3.5" fill="#0f766e"/>
+    <rect x="79" y="86" width="45" height="5.5" rx="2.75" fill="#94a3b8"/>
+    <rect x="79" y="97" width="31" height="5.5" rx="2.75" fill="#cbd5e1"/>
+    <rect x="39" y="108" width="22" height="5" rx="2.5" fill="#a7f3d0"/>
+    <path d="M112 104l3.2 3.2 6.3-6.8" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <circle cx="119" cy="45" r="19" fill="url(#badge)" stroke="#ffffff" stroke-width="5"/>
+  <path d="M119 36v18M110 45h18" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+
+  <path d="M34 42l2 5.5L41.5 49.5 36 51.5 34 57l-2-5.5L26.5 49.5 32 47.5 34 42Z" fill="#fde68a"/>
+  <path d="M128 105l1.6 4.4 4.4 1.6-4.4 1.6L128 117l-1.6-4.4L122 111l4.4-1.6L128 105Z" fill="#a7f3d0"/>
+  <circle cx="39" cy="124" r="3" fill="#ffffff" opacity="0.85"/>
+  <circle cx="132" cy="82" r="2.4" fill="#ffffff" opacity="0.75"/>
+</svg>
