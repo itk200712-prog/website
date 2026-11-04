@@ -13,6 +13,7 @@ import { AdminTopbar, dbInsert, useNotice } from "@/components/admin";
 import { logActivity } from "@/lib/activity";
 import { authedClient } from "@/lib/supabase/client";
 import { MEMBER_FILES, SETTINGS, VOTER_FILES } from "@/lib/seed";
+import { isCompleteRegisterRow } from "@/lib/register-rows";
 
 const MODES = [
   { key: "append", label: "Append to existing list" },
@@ -45,15 +46,14 @@ const HINTS: Record<keyof ParsedRow, string[]> = {
 };
 const NIC_LIKE = /^(\d{9}[vVxX]|\d{12}|\d{10}|0+)$/;
 
-// ✅ ඔයාගේ excel වල title/notes පේළි (උදා: "කාරක සභා 41 සාමාජික ලේඛනය") ඉවත් — ඇත්ත member පේළි විතරයි
+// ✅ ඔයාගේ excel වල title/notes පේළි (උදා: "කාරක සභා 41 සාමාජික ලේඛනය") ඉවත් —
+//    ඇත්ත member පේළියක් වෙන්න නම් තීරු 6ම (අංකය · NIC · නම · ලිපිනය · තැපැල් · ස්ත්‍රී/පුරුෂ)
+//    පිරී තිබිය යුතුයි. එක තීරුවක් හිස් නම් ඒ පේළිය කියවන්නේ නෑ.
 function isRealMemberRow(r: ParsedRow): boolean {
   const no = r.member_no.trim();
-  const nic = r.nic.trim();
   const name = r.full_name.trim();
   if (no.length > 25 || name.length > 100) return false; // title/note පේළි
-  if (NIC_LIKE.test(nic)) return true; // NIC තියෙනවා → ඇත්ත පේළියක්
-  if (name.length >= 2 && name.length <= 60) return true; // නම තියෙනවා → ඇත්ත පේළියක්
-  return false;
+  return isCompleteRegisterRow(r);
 }
 
 function parseRows(grid: unknown[][]): ParsedRow[] {

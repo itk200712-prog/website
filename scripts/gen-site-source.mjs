@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-11-04-pdf-readable-type-v21";
+const SITE_PACKAGE_VERSION = "2026-11-04-complete-rows-14px-v22";
 
 const FILES = [
   "src/app/globals.css",
@@ -60,6 +60,7 @@ const FILES = [
   "src/lib/gallery-social.ts",
   "src/lib/media-info.ts",
   "src/lib/pdf-register.ts",
+  "src/lib/register-rows.ts",
   "src/lib/register-notice.ts",
   "src/lib/motion-compat.ts",
   "src/lib/animation-settings.ts",

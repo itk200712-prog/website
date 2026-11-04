@@ -12,6 +12,7 @@ import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Fil
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { RegisterNotice } from "@/components/register-notice";
+import { filterCompleteRegisterRows, isCompleteRegisterRow } from "@/lib/register-rows";
 import type { DataFile, MemberRow, RegisterNoticeSetting, VoterRow } from "@/lib/types";
 
 type AnyRow = (MemberRow | VoterRow) & { member_no?: string; voter_no?: string; postal_address?: string; file_name?: string };
@@ -50,7 +51,7 @@ async function fetchAllRows(table: "member_rows" | "voter_rows"): Promise<AnyRow
     const { data, error } = await sb.from(table).select("*").range(from, from + BATCH - 1);
     if (error) break;
     const got = (data ?? []) as unknown as AnyRow[];
-    out.push(...got);
+    out.push(...filterCompleteRegisterRows(got));
     if (got.length < BATCH) break;
   }
   return out;
@@ -136,7 +137,8 @@ export function DirectoryTable({
         const { data, error } = await sb.from(table).select("*").range(from, from + BATCH - 1);
         if (error || !alive) break;
         const got = (data ?? []) as unknown as AnyRow[];
-        acc.push(...got);
+        // ✅ Excel එකේ තීරු 6ම පිරුණු පේළි පමණයි — හිස්/අඩවගු පේළි පෙන්වන්නේ නෑ
+        acc.push(...got.filter(isCompleteRegisterRow));
         acc.sort(cmp);
         setAllRows([...acc]);
         if (acc.length) setLoading(false); // ✅ පළමු පේළි ආපු ගමන් ම පෙන්වනවා

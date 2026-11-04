@@ -8,6 +8,8 @@
 //    එකකින් NIC / සාමාජික අංකය / නම / ලිපිනය search කළාම results පේනවා.
 // ============================================================================
 
+import { filterCompleteRegisterRows } from "@/lib/register-rows";
+
 export type RegisterRow = {
   member_no?: string;
   voter_no?: string;
@@ -212,7 +214,9 @@ export async function buildRegisterPdf(opts: {
   rows: RegisterRow[];
   onProgress?: (pct: number) => void;
 }): Promise<void> {
-  const { kind, label, rows, onProgress } = opts;
+  const { kind, label, onProgress } = opts;
+  // ✅ Excel එකේ තීරු 6ම පිරුණු පේළි පමණයි PDF එකටත් යන්නේ (පිළිවෙල එහෙමම)
+  const rows = filterCompleteRegisterRows(opts.rows);
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
   // ✅ "ඉස්කෝල පොත" font එක load වනතුරු ඉන්නවා (නැත්නම් fallback වේ)
   try {
@@ -224,9 +228,10 @@ export async function buildRegisterPdf(opts: {
     /* ignore */
   }
 
-  // ✅ Letterhead + directory bar පළවෙනි පිටුවේ විතරයි. ඉතුරු පිටු වල ඉඩ වැඩි නිසා
-  //    ඒවාට පේළි වැඩියෙන් (26) දාලා කඩදාසිය හොඳින් පිරෙනවා.
-  const FIRST_PAGE_ROWS = 22;
+  // ✅ අකුරු 14px (ලොකුවට කියවන්න පුළුවන්). ඒ නිසා පිටුවකට පේළි අඩුයි.
+  //    Letterhead + directory bar පළවෙනි පිටුවේ විතරයි — ඉතුරු පිටු වලට පේළි වැඩියෙන්.
+  //    (මේවා උපරිම ගණන්; පහළ fit-to-page එකෙන් හැම පිටුවකුත් A4 ට හරියටම හැඩ ගැසෙනවා.)
+  const FIRST_PAGE_ROWS = 20;
   const CONTINUATION_ROWS = 26;
   // පිටු බෙදීම පසුව "fit to page" ක්‍රමයෙන් සිදු වේ (දිගු නම්/ලිපින wrap වුණත්
   // පිටුව කවදාවත් overflow වී squashed නොවේ).
@@ -265,13 +270,13 @@ export async function buildRegisterPdf(opts: {
         const no = String(rowStart + i + 1);
         const mno = r.member_no ?? r.voter_no ?? "";
         return `<tr style="background:${i % 2 ? "#f4f6fb" : "#fff"};">
-            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:11.5px;white-space:nowrap;">${escapeHtml(no)}</td>
-            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#312e81;font-size:12px;white-space:nowrap;">${escapeHtml(mno)}</td>
-            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;white-space:nowrap;">${escapeHtml(r.nic || "")}</td>
-            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-weight:600;font-size:12px;">${escapeHtml(r.full_name || "")}</td>
-            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;">${escapeHtml(r.address || "")}</td>
-            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;">${escapeHtml(r.postal_address || "")}</td>
-            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;white-space:nowrap;">${escapeHtml(r.gender || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:13.5px;white-space:nowrap;">${escapeHtml(no)}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#312e81;font-size:14px;white-space:nowrap;">${escapeHtml(mno)}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:14px;white-space:nowrap;">${escapeHtml(r.nic || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-weight:600;font-size:14px;">${escapeHtml(r.full_name || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:14px;">${escapeHtml(r.address || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:14px;">${escapeHtml(r.postal_address || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:14px;white-space:nowrap;">${escapeHtml(r.gender || "")}</td>
           </tr>`;
       })
       .join("");
@@ -313,17 +318,17 @@ export async function buildRegisterPdf(opts: {
       ${letterheadHtml}
 
       <!-- table -->
-      <table style="width:100%;border-collapse:collapse;margin-top:${isFirstPage ? 14 : 0}px;font-size:12px;">
+      <table style="width:100%;border-collapse:collapse;margin-top:${isFirstPage ? 14 : 0}px;font-size:14px;">
         <thead>
           <tr style="background:#1e2f6b;color:#fff;">
-            ${head.map((h, hi) => `<th data-pdf-text style="padding:10px 8px;text-align:${hi === 0 ? "center" : "left"};font-weight:700;font-size:11px;letter-spacing:0.2px;">${escapeHtml(h)}</th>`).join("")}
+            ${head.map((h, hi) => `<th data-pdf-text style="padding:10px 8px;text-align:${hi === 0 ? "center" : "left"};font-weight:700;font-size:12.5px;letter-spacing:0.2px;">${escapeHtml(h)}</th>`).join("")}
           </tr>
         </thead>
         <tbody>${bodyRows}</tbody>
       </table>
 
       <!-- footer -->
-      <div style="margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;">
+      <div style="margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;">
         <span data-pdf-text>සි/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය · Reg. No කුරු/186</span>
         <span data-pdf-text>Page ${idx + 1} / ${total} · Generated ${escapeHtml(dateStr)}</span>
       </div>`;
@@ -344,30 +349,44 @@ export async function buildRegisterPdf(opts: {
    * ඉවත් වන rows ඊළඟ පිටුවට යන නිසා කිසිම දත්තයක් නැති වෙන්නේ නෑ.
    */
   const pageSplits: { start: number; count: number }[] = [];
+  /** පිටුව A4 උස ඇතුළතට වැටෙනවද? */
+  const fitsPage = (start: number, count: number, pageIndex: number) => {
+    const probe = makePage(rows.slice(start, start + count), pageIndex, 1, start);
+    host.appendChild(probe);
+    void probe.offsetHeight;
+    const ok = probe.scrollHeight <= HTML_PAGE_HEIGHT;
+    host.removeChild(probe);
+    return ok;
+  };
   {
     let cursor = 0;
     let pageIndex = 0;
-    while (cursor < rows.length || (pageIndex === 0 && rows.length === 0)) {
-      const isFirst = pageIndex === 0;
-      let take = Math.min(rows.length - cursor, isFirst ? FIRST_PAGE_ROWS : CONTINUATION_ROWS);
-      if (pageIndex === 0 && rows.length === 0) take = 0;
-      const probeRows = rows.slice(cursor, cursor + take);
-      const probe = makePage(probeRows, pageIndex, 1, cursor);
-      host.appendChild(probe);
-      void probe.offsetHeight;
-      const tbody = probe.querySelector("tbody");
-      // උස වැඩි නම් අන්තිම පේළි ඉවත් කර නැවත මනිනවා
-      let guard = take + 1;
-      while (probe.scrollHeight > HTML_PAGE_HEIGHT && tbody && tbody.children.length > 1 && guard-- > 0) {
-        tbody.removeChild(tbody.lastElementChild as Element);
+    while (rows.length ? cursor < rows.length : pageIndex === 0) {
+      const cap = pageIndex === 0 ? FIRST_PAGE_ROWS : CONTINUATION_ROWS;
+      const remaining = rows.length - cursor;
+      let best = 0;
+      if (remaining > 0) {
+        const hi = Math.min(cap, remaining);
+        if (fitsPage(cursor, hi, pageIndex)) best = hi;
+        // පිටුව පිරෙන්න පුළුවන් උපරිම පේළි ගණන දෙකඩව මනිනවා (binary search)
+        else {
+          let lo = 1;
+          let top = hi;
+          while (lo <= top) {
+            const mid = (lo + top) >> 1;
+            if (fitsPage(cursor, mid, pageIndex)) {
+              best = mid;
+              lo = mid + 1;
+            } else top = mid - 1;
+          }
+          if (best === 0) best = 1; // අඩුම තරමේ එක පේළියක්වත් යවනවා — දත්ත මගහැරෙන්නේ නෑ
+        }
       }
-      const fitted = tbody ? tbody.children.length : take;
-      host.removeChild(probe);
-      pageSplits.push({ start: cursor, count: fitted });
-      cursor += fitted;
+      pageSplits.push({ start: cursor, count: best });
+      cursor += best;
       pageIndex++;
-      if (fitted === 0) break;
-      if (cursor >= rows.length) break;
+      if (!rows.length) break;
+      if (best === 0) break;
     }
     if (!pageSplits.length) pageSplits.push({ start: 0, count: 0 });
   }
