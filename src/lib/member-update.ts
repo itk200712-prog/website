@@ -75,20 +75,29 @@ export function voterSyncPatch(member: RegisterFields) {
 
 /**
  * මේ voter පේළිය අර සාමාජිකයාමද?
- * 1) NIC එකෙන් (අලුත් NIC එක හෝ edit කරන්න කලින් තිබූ NIC එක)
- * 2) නැත්නම් නම + ලිපිනය එකම නම් (අලුත් අගයන් හෝ පරණ අගයන්)
- * voter_no වෙනස් අංකනයක් නිසා ඒකෙන් match කරන්නේ නෑ.
+ * 1) සාමාජික අංකය = ඡන්ද අංකය (62/01 = 62/01)
+ * 2) ඇත්ත NIC එකක් නම් ඒකෙන් (අලුත් හෝ edit කරන්න කලින් තිබූ)
+ * 3) නැත්නම් නම + ලිපිනය එකම නම් (අලුත් අගයන් හෝ පරණ අගයන්)
+ * ⚠️ 0000000000 වගේ placeholder NIC එකකින් කවදාවත් match කරන්නේ නෑ.
  */
 export function voterMatchesMember(
   voter: RegisterFields,
   member: RegisterFields,
   original: RegisterFields = {}
 ): boolean {
+  // 1️⃣ අංකය — ලේඛන දෙකේ එකම අංකය තියෙනවා නම් ඒක තමයි හොඳම සාක්ෂිය (62/01 = 62/01)
+  const vNo = cleanText(voter.voter_no);
+  if (vNo) {
+    if (vNo === cleanText(member.member_no)) return true;
+    if (vNo === cleanText(original.member_no)) return true;
+  }
+  // 2️⃣ NIC — ⚠️ 0000000000 වගේ placeholder අංකයක් නම් match කරන්නේ නෑ
   const vNic = sanitizeNic(voter.nic);
-  if (vNic) {
+  if (isRealNic(vNic)) {
     if (vNic === sanitizeNic(member.nic)) return true;
     if (vNic === sanitizeNic(original.nic)) return true;
   }
+  // 3️⃣ නම + ලිපිනය එකම නම්
   const vName = norm(voter.full_name);
   const vAddr = norm(voter.address);
   if (!vName) return false;
@@ -96,4 +105,10 @@ export function voterMatchesMember(
     const name = norm(m.full_name);
     return Boolean(name) && name === vName && norm(m.address) === vAddr;
   });
+}
+
+/** ඇත්ත NIC එකක්ද? (හිස් හෝ 0000000000 / 000000000V වගේ placeholder නොවේ) */
+export function isRealNic(nic: string | null | undefined): boolean {
+  const v = sanitizeNic(nic);
+  return Boolean(v) && !/^0+[VX]?$/.test(v);
 }

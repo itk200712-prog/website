@@ -3,19 +3,21 @@
 // ============================================================================
 // Member Update — වෙබ් අඩවියේ පෙන්වන සාමාජික / චන්ද හිමි විස්තර edit කරන section එක
 //  · සයිට් එකේ පෙන්වන විදිහටම වගුව (අංකය · NIC · නම · ලිපිනය · තැපැල් · ස්ත්‍රී/පුරුෂ)
-//  · නම / NIC / ලිපිනය / සාමාජික අංකයෙන් search
+//  · නම / NIC / ලිපිනය / සාමාජික අංකයෙන් search — 52,000+ පේළි වුණත් server-side search
+//    + pagination නිසා පිටුව ඉක්මනට load වෙනවා (සියලු rows browser එකට ගන්නේ නෑ)
 //  · තෝරාගත් සාමාජිකයා edit → save → සයිට් එකේත් PDF එකේත් ඒ විදිහටම
 //  · සාමාජිකයෙක් update වුණාම ඒ පුද්ගලයාගේ චන්ද හිමි පේළිය ඉබේම update වෙනවා
 //  · ⛔ DELETE නෑ — edit පමණයි
 // ============================================================================
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Pencil, RefreshCw, Save, Search, UserRound, Vote } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, Pencil, RefreshCw, Save, Search, ShieldAlert, UserRound, Vote } from "lucide-react";
 import { AdminModal, AdminTopbar, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
+import { createAnonClient } from "@/lib/supabase/anon";
 import { logActivity } from "@/lib/activity";
 import {
-  cleanText, missingColumns, sanitizeNic, validateRegisterEdit, voterMatchesMember, voterSyncPatch,
+  cleanText, isRealNic, missingColumns, sanitizeNic, validateRegisterEdit, voterMatchesMember, voterSyncPatch,
   type RegisterFields,
 } from "@/lib/member-update";
 
@@ -24,10 +26,21 @@ type Row = RegisterFields & { id: string; file_name?: string };
 type Edit = { member_no: string; nic: string; full_name: string; address: string; postal_address: string; gender: string };
 
 const TABLE: Record<Kind, string> = { member: "member_rows", voter: "voter_rows" };
+const NO_COL: Record<Kind, string> = { member: "member_no", voter: "voter_no" };
 const PER_PAGE = 25;
+// ⚠️ member_rows එකේ voter_no නෑ, voter_rows එකේ member_no නෑ — වගුවට අදාළ columns විතරයි
+const FIELDS: Record<Kind, string> = {
+  member: "id,member_no,nic,full_name,address,postal_address,gender,file_name",
+  voter: "id,voter_no,nic,full_name,address,postal_address,gender,file_name",
+};
 
-function natKey(s: string): (string | number)[] {
-  return String(s || "").split(/(\d+)/).filter(Boolean).map((p) => (/^\d+$/.test(p) ? Number(p) : p.toLowerCase()));
+function rowNo(r: Row): string {
+  return cleanText(r.member_no ?? r.voter_no);
+}
+
+/** ස්වාභාවික අනුපිළිවෙල — 41/2 < 41/10 */
+function natKey(v: string): (string | number)[] {
+  return String(v || "").split(/(\d+)/).filter(Boolean).map((x) => (/^\d+$/.test(x) ? Number(x) : x.toLowerCase()));
 }
 function cmpNat(a: string, b: string): number {
   const ka = natKey(a), kb = natKey(b);
@@ -41,8 +54,9 @@ function cmpNat(a: string, b: string): number {
   return 0;
 }
 
-function rowNo(r: Row): string {
-  return cleanText(r.member_no ?? r.voter_no);
+/** search text එක PostgREST or() syntax එකට ආරක්ෂිත කරනවා (`,` `(` `)` `*` `\` ඉවත්) */
+function safeSearch(v: string): string {
+  return v.replace(/[(),%*\\"']/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /** චන්ද හිමි ලැයිස්තුවෙන් මේ පුද්ගලයා හොයනවා — NIC එකෙන් (පරණ + අලුත්) සහ නම+ලිපිනයෙන් */
@@ -51,71 +65,108 @@ async function findMatchingVoters(
   next: RegisterFields,
   prev: RegisterFields
 ): Promise<Row[]> {
-  const nics = Array.from(new Set([sanitizeNic(next.nic), sanitizeNic(prev.nic)].filter(Boolean)));
-  const found = new Map<string, Row>();
-  for (const nic of nics) {
-    const { data } = await sb.from("voter_rows").select("*").eq("nic", nic).limit(50);
-    for (const r of ((data ?? []) as unknown as Row[])) found.set(r.id, r);
+  const collect = async (build: () => PromiseLike<{ data: unknown }>) => {
+    const { data } = await build();
+    return ((data ?? []) as unknown as Row[]).filter((v) => voterMatchesMember(v, next, prev));
+  };
+  const pick = (rows: Row[]) => (rows.length ? rows : null);
+
+  // 1️⃣ සාමාජික අංකය = ඡන්ද අංකය (වඩාත්ම නිවැරදි — ලේඛන දෙකේ එකම අංකය)
+  for (const no of Array.from(new Set([cleanText(next.member_no), cleanText(prev.member_no)].filter(Boolean)))) {
+    const hit = pick(await collect(() => sb.from("voter_rows").select(FIELDS.voter).eq("voter_no", no).limit(50)));
+    if (hit) return hit;
   }
+  // 2️⃣ ඇත්ත NIC එකක් නම් (0000000000 placeholder නොවේ) — ඒකෙන්
+  for (const nic of Array.from(new Set([sanitizeNic(next.nic), sanitizeNic(prev.nic)])).filter(isRealNic)) {
+    const hit = pick(await collect(() => sb.from("voter_rows").select(FIELDS.voter).eq("nic", nic).limit(50)));
+    if (hit) return hit;
+  }
+  // 3️⃣ අන්තිමට — නම + ලිපිනය එකම නම්
   for (const src of [next, prev]) {
     const name = cleanText(src.full_name);
     if (!name) continue;
-    const { data } = await sb.from("voter_rows").select("*").eq("full_name", name).limit(50);
-    for (const r of ((data ?? []) as unknown as Row[])) {
-      if (voterMatchesMember(r, next, prev)) found.set(r.id, r);
-    }
+    const hit = pick(await collect(() => sb.from("voter_rows").select(FIELDS.voter).eq("full_name", name).limit(50)));
+    if (hit) return hit;
   }
-  return [...found.values()].filter((v) => voterMatchesMember(v, next, prev));
+  return [];
 }
 
 export default function MemberUpdatePage() {
   const { show, node } = useNotice();
   const [kind, setKind] = useState<Kind>("member");
   const [rows, setRows] = useState<Row[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [q, setQ] = useState("");
+  const [debounced, setDebounced] = useState("");
   const [page, setPage] = useState(1);
   const [editFor, setEditFor] = useState<Row | null>(null);
   const [form, setForm] = useState<Edit>({ member_no: "", nic: "", full_name: "", address: "", postal_address: "", gender: "" });
   const [saving, setSaving] = useState(false);
   const [syncInfo, setSyncInfo] = useState("");
+  const reqId = useRef(0);
 
-  /** ඇත්ත rows — batches වශයෙන් (52,000+ පේළි වුණත් වැඩ කරයි) */
-  const load = useCallback(async (k: Kind) => {
+  // search box එකේ ටයිප් කරන ගමන් හැම අකුරකටම query එකක් නොයවන්න (300ms debounce)
+  useEffect(() => {
+    const t = setTimeout(() => { setDebounced(q); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  /** එක පිටුවක් පමණයි ගන්නේ — server-side search + range */
+  const fetchPage = useCallback(async (k: Kind, search: string, pageNo: number) => {
+    const id = ++reqId.current;
     setLoading(true);
+    setLoadError("");
+    const from = (pageNo - 1) * PER_PAGE;
+    const table = TABLE[k];
+    const needle = safeSearch(search);
+    const build = (sb: { from: (t: string) => any }, orderCol: string) => {
+      let query = sb.from(table).select(FIELDS[k], { count: "exact" });
+      if (needle) {
+        const like = `*${needle}*`;
+        const cols = [NO_COL[k], "nic", "full_name", "address", "postal_address", "file_name"];
+        query = query.or(cols.map((c) => `${c}.ilike.${like}`).join(","));
+      }
+      // ⚡ සෙවුමක් නැති විට id (primary key) අනුව — 52,000+ පේළි වලට ඉක්මන්.
+      //    සෙවුමක් තිබේ නම් සාමාජික අංකය අනුව පිළිවෙල කරනවා (result ටික නිසා ඉක්මන්).
+      return query.order(orderCol, { ascending: true }).range(from, from + PER_PAGE - 1);
+    };
     try {
       const sb = await authedClient();
-      const acc: Row[] = [];
-      const BATCH = 1000;
-      for (let from = 0; from < 60000; from += BATCH) {
-        const { data, error } = await sb.from(TABLE[k]).select("*").range(from, from + BATCH - 1);
-        if (error) break;
-        const got = (data ?? []) as unknown as Row[];
-        acc.push(...got);
-        if (got.length < BATCH) break;
+      let res = await build(sb as unknown as { from: (t: string) => any }, needle ? NO_COL[k] : "id");
+      // 🔁 authenticated role එකට SELECT අවසර නැත්නම් public (anon) client එකෙන් කියවනවා
+      if (res.error && /permission|policy|denied|jwt/i.test(res.error.message)) {
+        res = await build(createAnonClient() as unknown as { from: (t: string) => any }, needle ? NO_COL[k] : "id");
       }
-      acc.sort((a, b) => cmpNat(rowNo(a), rowNo(b)) || String(a.file_name || "").localeCompare(String(b.file_name || "")));
-      setRows(acc);
-    } catch {
-      setRows([]);
+      // 🔁 වේගය අඩු index එකක් නිසා statement timeout වුණොත් id අනුව නැවත උත්සාහ
+      if (res.error && /57014|timeout/i.test(res.error.message)) {
+        res = await build(sb as unknown as { from: (t: string) => any }, "id");
+      }
+      if (id !== reqId.current) return;
+      if (res.error) {
+        setRows([]);
+        setTotal(0);
+        setLoadError(res.error.message);
+      } else {
+        const list = ((res.data ?? []) as unknown as Row[]);
+        if (!needle) list.sort((a, b) => cmpNat(rowNo(a), rowNo(b)));
+        setRows(list);
+        setTotal(Number(res.count ?? 0));
+      }
+    } catch (e) {
+      if (id === reqId.current) {
+        setRows([]);
+        setTotal(0);
+        setLoadError((e as Error).message);
+      }
     }
-    setLoading(false);
+    if (id === reqId.current) setLoading(false);
   }, []);
 
-  useEffect(() => { void load(kind); setQ(""); setPage(1); }, [kind, load]);
+  useEffect(() => { void fetchPage(kind, debounced, page); }, [kind, debounced, page, fetchPage]);
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((r) =>
-      [rowNo(r), r.nic, r.full_name, r.address, r.postal_address, r.gender, r.file_name]
-        .some((v) => String(v ?? "").toLowerCase().includes(needle))
-    );
-  }, [rows, q]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
-  const view = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-  const incomplete = useMemo(() => rows.filter((r) => missingColumns(r).length > 0).length, [rows]);
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
   const isMember = kind === "member";
 
   function openEdit(r: Row) {
@@ -179,10 +230,8 @@ export default function MemberUpdatePage() {
       const label = isMember ? "සාමාජික" : "චන්ද හිමි";
       void logActivity("MEMBER_UPDATE", `${label} ${cleanText(form.member_no)} updated${synced ? ` · voter rows synced: ${synced}` : ""}`);
       show(`✅ ${label} ${cleanText(form.member_no)} update වුණා${synced ? ` — චන්ද හිමි ${synced}ක් ත් sync` : ""}`);
-
-      // local list එකත් එහෙමම යාවත්කාලීන
-      setRows((prev) => prev.map((r) => (r.id === editFor.id ? ({ ...r, ...patch } as Row) : r)));
       setEditFor(null);
+      await fetchPage(kind, debounced, page);
     } catch (e) {
       show(`⚠ ${(e as Error).message}`);
     }
@@ -203,7 +252,7 @@ export default function MemberUpdatePage() {
         {([["member", "සියලුම සාමාජිකයින්", UserRound], ["voter", "චන්ද හිමියන්", Vote]] as const).map(([k, label, Icon]) => (
           <button
             key={k}
-            onClick={() => setKind(k as Kind)}
+            onClick={() => { setKind(k as Kind); setPage(1); }}
             className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-[12.5px] font-bold transition-colors ${
               kind === k ? "bg-indigo-700 text-white shadow-md shadow-indigo-700/20" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
             }`}
@@ -212,13 +261,8 @@ export default function MemberUpdatePage() {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          <span className="badge-blue rounded-full px-2.5 py-1 text-[11px] font-bold">{rows.length.toLocaleString()} rows</span>
-          {incomplete > 0 && (
-            <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-[11px] font-bold border border-amber-200">
-              තීරු 6 අසම්පූර්ණ: {incomplete.toLocaleString()}
-            </span>
-          )}
-          <button onClick={() => void load(kind)} className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-slate-200 px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-50">
+          <span className="badge-blue rounded-full px-2.5 py-1 text-[11px] font-bold">{total.toLocaleString()} rows</span>
+          <button onClick={() => void fetchPage(kind, debounced, page)} className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-slate-200 px-3 py-2 text-[12px] font-semibold text-slate-600 hover:bg-slate-50">
             <RefreshCw size={14} /> Refresh
           </button>
         </div>
@@ -231,14 +275,24 @@ export default function MemberUpdatePage() {
           <input
             className="field !pl-10"
             value={q}
-            onChange={(e) => { setQ(e.target.value); setPage(1); }}
+            onChange={(e) => setQ(e.target.value)}
             placeholder="නම, NIC, ලිපිනය, සාමාජික අංකය හෝ file නමින් සොයන්න…"
           />
         </div>
-        {q.trim() && (
-          <div className="mt-2 text-[11.5px] text-slate-500">{filtered.length.toLocaleString()} result(s) — “{q.trim()}”</div>
+        {debounced.trim() && !loading && (
+          <div className="mt-2 text-[11.5px] text-slate-500">{total.toLocaleString()} result(s) — “{debounced.trim()}”</div>
         )}
       </div>
+
+      {loadError && (
+        <div className="card p-4 mb-4 border-l-4 border-rose-500 text-[12px] text-rose-700 flex items-start gap-2">
+          <ShieldAlert size={15} className="mt-0.5" />
+          <div>
+            <b>දත්ත ගන්න බැරි වුණා:</b> {loadError}
+            <div className="text-slate-500 mt-1">Supabase login/permission හෝ internet connection පරීක්ෂා කරන්න.</div>
+          </div>
+        </div>
+      )}
 
       {/* table */}
       <div className="card overflow-hidden">
@@ -255,10 +309,12 @@ export default function MemberUpdatePage() {
               {loading && (
                 <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-500">Loading…</td></tr>
               )}
-              {!loading && view.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-500">දත්ත නෑ — Excel එකක් upload කරලා තියෙනවද පරීක්ෂා කරන්න</td></tr>
+              {!loading && rows.length === 0 && (
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-500">
+                  {debounced.trim() ? "මේ සෙවුමට පේළි නෑ" : "දත්ත නෑ — Data & Live Metrics වලින් Excel එකක් upload කරලා තියෙනවද පරීක්ෂා කරන්න"}
+                </td></tr>
               )}
-              {view.map((r, i) => {
+              {!loading && rows.map((r, i) => {
                 const miss = missingColumns(r);
                 return (
                   <tr key={r.id} className={i % 2 ? "bg-slate-50/60" : "bg-white"}>
@@ -291,7 +347,7 @@ export default function MemberUpdatePage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-100 text-[12px] text-slate-600">
-          <span>{filtered.length === 0 ? 0 : (page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, filtered.length)} / {filtered.length.toLocaleString()}</span>
+          <span>{total === 0 ? 0 : (page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, total)} / {total.toLocaleString()}</span>
           <div className="flex items-center gap-1.5">
             <button disabled={page <= 1} onClick={() => setPage(1)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold disabled:opacity-40">«</button>
             <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold disabled:opacity-40">‹</button>

@@ -1551,20 +1551,30 @@ ok("Member Update admin section exists in the sidebar with its own permission ke
   genSiteSourceSrc.includes('"src/app/admin/member-update/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/member-update.ts"'));
 
-ok("Member Update: search by name / NIC / address / member number and edit (no delete control at all)",
+ok("Member Update: server-side search by name / NIC / address / member number + edit, no delete control at all",
   muSrc.includes("නම, NIC, ලිපිනය, සාමාජික අංකය හෝ file නමින් සොයන්න") &&
-  muSrc.includes("[rowNo(r), r.nic, r.full_name, r.address, r.postal_address, r.gender, r.file_name]") &&
+  muSrc.includes("c}.ilike.${like}") &&
+  muSrc.includes("const cols = [NO_COL[k], \"nic\", \"full_name\", \"address\", \"postal_address\", \"file_name\"]") &&
+  muSrc.includes('select(FIELDS[k], { count: "exact" })') &&
   muSrc.includes(".update(patch).eq(\"id\", editFor.id)") &&
+  muSrc.includes('FIELDS: Record<Kind, string>') &&
+  muSrc.includes("voter: \"id,voter_no,nic,full_name,address,postal_address,gender,file_name\"") &&
   !muSrc.includes("dbDelete") &&
   !muSrc.includes(".delete(") &&
-  !muSrc.includes("Trash2") &&
-  !muSrc.includes("Delete"));
+  !muSrc.includes("Trash2"));
 
 ok("Member Update: editing a member auto-updates the matching voter row (NIC first, then name + address)",
   muSrc.includes("findMatchingVoters") &&
-  muSrc.includes('eq("nic", nic)') &&
+  muSrc.includes('eq("voter_no", no)') &&
+  muSrc.includes(".filter(isRealNic)") &&
   muSrc.includes('from("voter_rows").update(voterSyncPatch(candidate))') &&
   memberUpdate.voterMatchesMember({ nic: "123456789V" }, { nic: "123456789v" }) &&
+  memberUpdate.voterMatchesMember({ voter_no: "62/01", nic: "550660636v" }, { member_no: "62/01", nic: "550660636v" }) &&
+  !memberUpdate.voterMatchesMember({ voter_no: "62/02", nic: "0000000000" }, { member_no: "62/01", nic: "0000000000" }) &&
+  !memberUpdate.voterMatchesMember({ nic: "0000000000", full_name: "වෙන නම", address: "x" }, { nic: "0000000000", full_name: "නම", address: "y" }) &&
+  !memberUpdate.isRealNic("0000000000") &&
+  !memberUpdate.isRealNic("") &&
+  memberUpdate.isRealNic("550660636v") &&
   memberUpdate.voterMatchesMember({ nic: "", full_name: "කේ. එම්. පෙරේරා", address: "හෙට්ටිපොල" }, { full_name: "කේ. එම්. පෙරේරා", address: "හෙට්ටිපොල" }) &&
   !memberUpdate.voterMatchesMember({ nic: "111111111V" }, { nic: "222222222V" }) &&
   !memberUpdate.voterMatchesMember({ nic: "", full_name: "අමුතු නම", address: "කුරුණෑගල" }, { full_name: "වෙන නම", address: "හෙට්ටිපොල" }) &&
