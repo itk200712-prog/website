@@ -225,21 +225,11 @@ export async function buildRegisterPdf(opts: {
   }
 
   // ✅ Letterhead + directory bar පළවෙනි පිටුවේ විතරයි. ඉතුරු පිටු වල ඉඩ වැඩි නිසා
-  //    ඒවාට පේළි වැඩියෙන් (34) දාලා කඩදාසිය හොඳින් පිරෙනවා.
-  const FIRST_PAGE_ROWS = 30;
-  const CONTINUATION_ROWS = 34;
-  const pages: RegisterRow[][] = [];
-  const pageStartIndex: number[] = [];
-  for (let i = 0; i < rows.length; ) {
-    const take = pages.length === 0 ? FIRST_PAGE_ROWS : CONTINUATION_ROWS;
-    pageStartIndex.push(i);
-    pages.push(rows.slice(i, i + take));
-    i += take;
-  }
-  if (!pages.length) {
-    pages.push([]);
-    pageStartIndex.push(0);
-  }
+  //    ඒවාට පේළි වැඩියෙන් (26) දාලා කඩදාසිය හොඳින් පිරෙනවා.
+  const FIRST_PAGE_ROWS = 22;
+  const CONTINUATION_ROWS = 26;
+  // පිටු බෙදීම පසුව "fit to page" ක්‍රමයෙන් සිදු වේ (දිගු නම්/ලිපින wrap වුණත්
+  // පිටුව කවදාවත් overflow වී squashed නොවේ).
 
   const isMember = kind === "member";
   const head = [
@@ -264,25 +254,24 @@ export async function buildRegisterPdf(opts: {
   host.style.cssText = `position:fixed;left:-10000px;top:0;width:${HTML_PAGE_WIDTH}px;background:#fff;z-index:-1;`;
   document.body.appendChild(host);
 
-  const makePage = (pageRows: RegisterRow[], idx: number, total: number) => {
+  const makePage = (pageRows: RegisterRow[], idx: number, total: number, rowStart: number) => {
     const el = document.createElement("div");
     // ✅ පළවෙනි පිටුවට විතරයි උඩින් letterhead එකේ ඉඩ; ඉතුරු පිටු කෙලින්ම වගුවෙන් පටන් ගන්නවා.
     const isFirstPage = idx === 0;
     el.style.cssText =
       `width:${HTML_PAGE_WIDTH}px;min-height:${HTML_PAGE_HEIGHT}px;padding:${isFirstPage ? "36px 38px" : "30px 38px 36px"};box-sizing:border-box;background:#fff;font-family:'Iskoola Pota','Iskoola-Pota','Abhaya Libre','Noto Sans Sinhala',Arial,sans-serif;color:#1e293b;`;
-    const rowStart = pageStartIndex[idx] ?? idx * FIRST_PAGE_ROWS;
     const bodyRows = pageRows
       .map((r, i) => {
         const no = String(rowStart + i + 1);
         const mno = r.member_no ?? r.voter_no ?? "";
         return `<tr style="background:${i % 2 ? "#f4f6fb" : "#fff"};">
-            <td data-pdf-text style="padding:6px 7px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:10.5px;">${escapeHtml(no)}</td>
-            <td data-pdf-text style="padding:6px 7px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#312e81;font-size:11px;">${escapeHtml(mno)}</td>
-            <td data-pdf-text style="padding:6px 7px;border-bottom:1px solid #e2e8f0;font-size:10.5px;">${escapeHtml(r.nic || "")}</td>
-            <td data-pdf-text style="padding:6px 7px;border-bottom:1px solid #e2e8f0;font-weight:600;font-size:11px;">${escapeHtml(r.full_name || "")}</td>
-            <td data-pdf-text style="padding:6px 7px;border-bottom:1px solid #e2e8f0;font-size:10.5px;">${escapeHtml(r.address || "")}</td>
-            <td data-pdf-text style="padding:6px 7px;border-bottom:1px solid #e2e8f0;font-size:10.5px;">${escapeHtml(r.postal_address || "")}</td>
-            <td data-pdf-text style="padding:6px 7px;border-bottom:1px solid #e2e8f0;font-size:10.5px;">${escapeHtml(r.gender || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:11.5px;white-space:nowrap;">${escapeHtml(no)}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#312e81;font-size:12px;white-space:nowrap;">${escapeHtml(mno)}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;white-space:nowrap;">${escapeHtml(r.nic || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-weight:600;font-size:12px;">${escapeHtml(r.full_name || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;">${escapeHtml(r.address || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;">${escapeHtml(r.postal_address || "")}</td>
+            <td data-pdf-text style="padding:7px 8px;border-bottom:1px solid #e2e8f0;font-size:12px;white-space:nowrap;">${escapeHtml(r.gender || "")}</td>
           </tr>`;
       })
       .join("");
@@ -298,7 +287,7 @@ export async function buildRegisterPdf(opts: {
             <div data-pdf-text style="font-size:11px;font-weight:700;color:#334155;letter-spacing:0.6px;margin-top:3px;">PANDUWASNUWARA NEW MULTI-PURPOSE CO-OPERATIVE SOCIETY LTD</div>
           </div>
         </div>
-        <div style="text-align:right;font-size:10px;color:#475569;line-height:1.85;white-space:nowrap;">
+        <div style="text-align:right;font-size:11px;color:#475569;line-height:1.8;white-space:nowrap;">
           <div data-pdf-text>ලියාපදිංචි අංකය කුරු/186</div>
           <div data-pdf-text>දුරකථන අංකය 037-2291012</div>
           <div data-pdf-text>දිනය: ${escapeHtml(dateStr)}</div>
@@ -309,12 +298,12 @@ export async function buildRegisterPdf(opts: {
       <!-- directory info bar -->
       <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;background:#eef2ff;border:1px solid #c7d2fe;border-left:5px solid #4338ca;border-radius:10px;padding:11px 16px;">
         <div>
-          <div data-pdf-text style="font-size:13.5px;font-weight:800;color:#1e3a8a;">${escapeHtml(dirTitle)}</div>
-          <div data-pdf-text style="font-size:9.5px;color:#64748b;margin-top:3px;">${escapeHtml(dirSub)}</div>
+          <div data-pdf-text style="font-size:14.5px;font-weight:800;color:#1e3a8a;">${escapeHtml(dirTitle)}</div>
+          <div data-pdf-text style="font-size:10.5px;color:#64748b;margin-top:4px;">${escapeHtml(dirSub)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;white-space:nowrap;">
-          <div data-pdf-text style="font-size:10.5px;color:#475569;">ගොනුව තෝරන්න / ගොනුව: <span style="display:inline-block;background:#fff;border:1px solid #a5b4fc;border-radius:7px;padding:3px 10px;font-weight:800;color:#312e81;">${escapeHtml(label)}</span></div>
-          <div data-pdf-text style="font-size:10.5px;color:#475569;">${escapeHtml(totalLabel)}: <span style="display:inline-block;background:#fff;border:1px solid #a5b4fc;border-radius:7px;padding:3px 10px;font-weight:800;color:#312e81;">${escapeHtml(rows.length.toLocaleString())}</span></div>
+          <div data-pdf-text style="font-size:11px;color:#475569;">ගොනුව තෝරන්න / ගොනුව: <span style="display:inline-block;background:#fff;border:1px solid #a5b4fc;border-radius:7px;padding:3px 10px;font-weight:800;color:#312e81;">${escapeHtml(label)}</span></div>
+          <div data-pdf-text style="font-size:11px;color:#475569;">${escapeHtml(totalLabel)}: <span style="display:inline-block;background:#fff;border:1px solid #a5b4fc;border-radius:7px;padding:3px 10px;font-weight:800;color:#312e81;">${escapeHtml(rows.length.toLocaleString())}</span></div>
         </div>
       </div>
       `
@@ -324,17 +313,17 @@ export async function buildRegisterPdf(opts: {
       ${letterheadHtml}
 
       <!-- table -->
-      <table style="width:100%;border-collapse:collapse;margin-top:${isFirstPage ? 14 : 0}px;font-size:10.5px;">
+      <table style="width:100%;border-collapse:collapse;margin-top:${isFirstPage ? 14 : 0}px;font-size:12px;">
         <thead>
           <tr style="background:#1e2f6b;color:#fff;">
-            ${head.map((h, hi) => `<th data-pdf-text style="padding:9px 7px;text-align:${hi === 0 ? "center" : "left"};font-weight:700;font-size:10px;">${escapeHtml(h)}</th>`).join("")}
+            ${head.map((h, hi) => `<th data-pdf-text style="padding:10px 8px;text-align:${hi === 0 ? "center" : "left"};font-weight:700;font-size:11px;letter-spacing:0.2px;">${escapeHtml(h)}</th>`).join("")}
           </tr>
         </thead>
         <tbody>${bodyRows}</tbody>
       </table>
 
       <!-- footer -->
-      <div style="margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;">
+      <div style="margin-top:16px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;">
         <span data-pdf-text>සි/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතිය · Reg. No කුරු/186</span>
         <span data-pdf-text>Page ${idx + 1} / ${total} · Generated ${escapeHtml(dateStr)}</span>
       </div>`;
@@ -349,8 +338,43 @@ export async function buildRegisterPdf(opts: {
   });
   const hasSearchFont = await registerSearchFont(doc as unknown as JsPdfDoc);
 
-  for (let i = 0; i < pages.length; i++) {
-    const el = makePage(pages[i], i, pages.length);
+  /**
+   * ✅ Fit to page — පිටුවක උස A4 උස (1123px) නොඉක්මවන තරමට rows ගණන අඩු කරයි.
+   * දිගු නම්/ලිපින wrap වී පේළි දෙකක් වුණත් PDF එකේ අකුරු සිර නොවී හරියට පේනවා.
+   * ඉවත් වන rows ඊළඟ පිටුවට යන නිසා කිසිම දත්තයක් නැති වෙන්නේ නෑ.
+   */
+  const pageSplits: { start: number; count: number }[] = [];
+  {
+    let cursor = 0;
+    let pageIndex = 0;
+    while (cursor < rows.length || (pageIndex === 0 && rows.length === 0)) {
+      const isFirst = pageIndex === 0;
+      let take = Math.min(rows.length - cursor, isFirst ? FIRST_PAGE_ROWS : CONTINUATION_ROWS);
+      if (pageIndex === 0 && rows.length === 0) take = 0;
+      const probeRows = rows.slice(cursor, cursor + take);
+      const probe = makePage(probeRows, pageIndex, 1, cursor);
+      host.appendChild(probe);
+      void probe.offsetHeight;
+      const tbody = probe.querySelector("tbody");
+      // උස වැඩි නම් අන්තිම පේළි ඉවත් කර නැවත මනිනවා
+      let guard = take + 1;
+      while (probe.scrollHeight > HTML_PAGE_HEIGHT && tbody && tbody.children.length > 1 && guard-- > 0) {
+        tbody.removeChild(tbody.lastElementChild as Element);
+      }
+      const fitted = tbody ? tbody.children.length : take;
+      host.removeChild(probe);
+      pageSplits.push({ start: cursor, count: fitted });
+      cursor += fitted;
+      pageIndex++;
+      if (fitted === 0) break;
+      if (cursor >= rows.length) break;
+    }
+    if (!pageSplits.length) pageSplits.push({ start: 0, count: 0 });
+  }
+
+  for (let i = 0; i < pageSplits.length; i++) {
+    const split = pageSplits[i];
+    const el = makePage(rows.slice(split.start, split.start + split.count), i, pageSplits.length, split.start);
     host.appendChild(el);
     // Layout එක settle වූ පසු හැම cell/block එකේම තැන මැනලා තියාගන්නවා.
     void el.offsetHeight;
@@ -362,7 +386,7 @@ export async function buildRegisterPdf(opts: {
     // ✅ Image එක උඩින් නොපෙනෙන ඇත්ත text layer එක — reader search/copy වලට.
     addInvisibleTextLayer(doc as unknown as JsPdfDoc, searchBoxes, hasSearchFont);
     host.removeChild(el);
-    onProgress?.(Math.round(((i + 1) / pages.length) * 100));
+    onProgress?.(Math.round(((i + 1) / pageSplits.length) * 100));
     // browsers හිස් කරන්න ඉඩ දෙන්න (ලොකු PDF වලට)
     if (i % 10 === 9) await new Promise((r) => setTimeout(r, 0));
   }

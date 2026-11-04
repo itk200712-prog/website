@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-30-pdf-first-page-letterhead-v20";
+const SITE_PACKAGE_VERSION = "2026-11-04-pdf-readable-type-v21";
 
 const FILES = [
   "src/app/globals.css",
