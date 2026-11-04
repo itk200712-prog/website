@@ -1239,7 +1239,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
+  genSiteSourceSrc.includes("2026-10-29-register-notice-v19"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1307,7 +1307,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
+  genSiteSourceSrc.includes("2026-10-29-register-notice-v19"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1317,6 +1317,9 @@ const latestBackupUpdateFiles = [
   "src/app/admin/gallery/page.tsx",
   "src/app/admin/news/page.tsx",
   "src/app/gallery/page.tsx",
+  "src/app/admin/settings/page.tsx",
+  "src/app/membership/members/page.tsx",
+  "src/app/membership/voters/page.tsx",
   "src/app/signin/page.tsx",
   "src/app/register/page.tsx",
   "src/app/globals.css",
@@ -1325,6 +1328,7 @@ const latestBackupUpdateFiles = [
   "src/components/cursor-follower.tsx",
   "src/components/directory.tsx",
   "src/components/auth-shell.tsx",
+  "src/components/register-notice.tsx",
   "src/components/floating-lang.tsx",
   "src/components/gallery-grid.tsx",
   "src/components/hero-slideshow.tsx",
@@ -1336,12 +1340,13 @@ const latestBackupUpdateFiles = [
   "src/lib/i18n.tsx",
   "src/lib/media-info.ts",
   "src/lib/pdf-register.ts",
+  "src/lib/register-notice.ts",
   "src/lib/motion-compat.ts",
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files + professional glass auth pages",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-28-auth-glass-v18" &&
-  generatedSiteSource.SITE_SOURCE_FILES.length >= 43 &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-10-29-register-notice-v19" &&
+  generatedSiteSource.SITE_SOURCE_FILES.length >= 48 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
   ) &&
@@ -1368,7 +1373,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
+  genSiteSourceSrc.includes("2026-10-29-register-notice-v19"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1397,7 +1402,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
+  genSiteSourceSrc.includes("2026-10-29-register-notice-v19"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1454,7 +1459,7 @@ ok("member/voter register PDF: visual page keeps a real invisible Unicode text l
   genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
   genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
   genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
+  genSiteSourceSrc.includes("2026-10-29-register-notice-v19"));
 const signinPageSrc = readFileSync(join(root, "src/app/signin/page.tsx"), "utf8");
 const registerPageSrc = readFileSync(join(root, "src/app/register/page.tsx"), "utf8");
 const authShellSrc = readFileSync(join(root, "src/components/auth-shell.tsx"), "utf8");
@@ -1486,7 +1491,52 @@ ok("Sign In + Register professional glass experience: gradient glass shell (no p
   genSiteSourceSrc.includes('"src/app/signin/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/register/page.tsx"') &&
   genSiteSourceSrc.includes('"src/components/auth-shell.tsx"') &&
-  genSiteSourceSrc.includes("2026-10-28-auth-glass-v18"));
+  genSiteSourceSrc.includes("2026-10-29-register-notice-v19"));
+
+const registerNoticeLib = await import("../src/lib/register-notice.ts");
+const noticeDefaults = registerNoticeLib.defaultRegisterNotice();
+const noticeAdminSrc = readFileSync(join(root, "src/app/admin/settings/page.tsx"), "utf8");
+const noticeComponentSrc = readFileSync(join(root, "src/components/register-notice.tsx"), "utf8");
+const membersPageSrc = readFileSync(join(root, "src/app/membership/members/page.tsx"), "utf8");
+const votersPageSrc = readFileSync(join(root, "src/app/membership/voters/page.tsx"), "utf8");
+const noticeDataSrc = readFileSync(join(root, "src/lib/data.ts"), "utf8");
+const noticeTypesSrc = readFileSync(join(root, "src/lib/types.ts"), "utf8");
+ok("member/voter register update notice: default text + phone, admin show/hide per page, live on both pages, inside backup export/import",
+  registerNoticeLib.REGISTER_NOTICE_KEY === "register_update_notice" &&
+  noticeDefaults.phone === "+94 77 945 3982" &&
+  noticeDefaults.phoneDial === "+94779453982" &&
+  noticeDefaults.message_si.includes("යාවත්කාලීන වෙමින් පවතින") &&
+  registerNoticeLib.noticeDialFromPhone("0779453982") === "+94779453982" &&
+  registerNoticeLib.noticeDialFromPhone("+94 77 945 3982") === "+94779453982" &&
+  registerNoticeLib.shouldShowRegisterNotice(noticeDefaults, "member") === true &&
+  registerNoticeLib.shouldShowRegisterNotice(noticeDefaults, "voter") === true &&
+  registerNoticeLib.shouldShowRegisterNotice({ ...noticeDefaults, enabled: false }, "member") === false &&
+  registerNoticeLib.shouldShowRegisterNotice({ ...noticeDefaults, showMembers: false }, "member") === false &&
+  registerNoticeLib.shouldShowRegisterNotice({ ...noticeDefaults, showMembers: false }, "voter") === true &&
+  registerNoticeLib.parseRegisterNotice(registerNoticeLib.serializeRegisterNotice({ ...noticeDefaults, showVoters: false })).showVoters === false &&
+  registerNoticeLib.parseRegisterNotice("not-json").enabled === true &&
+  registerNoticeLib.registerNoticeText(noticeDefaults, "si").title.startsWith("සියලුම") &&
+  registerNoticeLib.registerNoticeText(noticeDefaults, "en").title.includes("Being Updated") &&
+  membersPageSrc.includes("notice={settings.register_notice}") &&
+  votersPageSrc.includes("notice={settings.register_notice}") &&
+  noticeDataSrc.includes('"register_update_notice"') &&
+  noticeDataSrc.includes("parseRegisterNotice(map.get(\"register_update_notice\"))") &&
+  noticeTypesSrc.includes("interface RegisterNoticeSetting") &&
+  noticeComponentSrc.includes("shouldShowRegisterNotice(notice, kind)") &&
+  noticeComponentSrc.includes("tel:${dial}") &&
+  noticeAdminSrc.includes("REGISTER_NOTICE_KEY") &&
+  noticeAdminSrc.includes("Save Notice") &&
+  noticeAdminSrc.includes("showMembers") &&
+  noticeAdminSrc.includes("showVoters") &&
+  noticeAdminSrc.includes("serializeRegisterNotice(notice)") &&
+  globalsCssSrc.includes(".reg-notice-phone") &&
+  globalsCssSrc.includes("@keyframes regNoticePing") &&
+  genSiteSourceSrc.includes('"src/components/register-notice.tsx"') &&
+  genSiteSourceSrc.includes('"src/lib/register-notice.ts"') &&
+  genSiteSourceSrc.includes('"src/app/admin/settings/page.tsx"') &&
+  genSiteSourceSrc.includes('"src/app/membership/members/page.tsx"') &&
+  genSiteSourceSrc.includes('"src/app/membership/voters/page.tsx"') &&
+  genSiteSourceSrc.includes("2026-10-29-register-notice-v19"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

@@ -11,7 +11,8 @@ import { rowMatch } from "@/lib/search";
 import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, FileSpreadsheet, Layers, Printer, Search, Users, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
-import type { DataFile, MemberRow, VoterRow } from "@/lib/types";
+import { RegisterNotice } from "@/components/register-notice";
+import type { DataFile, MemberRow, RegisterNoticeSetting, VoterRow } from "@/lib/types";
 
 type AnyRow = (MemberRow | VoterRow) & { member_no?: string; voter_no?: string; postal_address?: string; file_name?: string };
 
@@ -64,6 +65,7 @@ export function DirectoryTable({
   kind,
   totalRows,
   totalFiles,
+  notice,
 }: {
   kind: "member" | "voter";
   rows?: AnyRow[];
@@ -72,6 +74,8 @@ export function DirectoryTable({
   totalFiles: number;
   title?: string;
   sub?: string;
+  /** Admin → Settings එකෙන් පාලනය වන "යාවත්කාලීන වෙමින්" notice එක */
+  notice?: RegisterNoticeSetting | null;
 }) {
   const { t, lang } = useLang();
   const [q, setQ] = useState("");
@@ -180,6 +184,9 @@ export function DirectoryTable({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      {/* ═══════════════ register update notice (Admin → Settings) ═══════════════ */}
+      <RegisterNotice notice={notice} kind={kind} />
+
       {/* ═══════════════ premium header ═══════════════ */}
       <div className="relative rounded-[26px] bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 shadow-[0_24px_60px_-24px_rgba(49,46,129,0.55)]">
         {/* ✅ decorative glows විතරක් clip වෙනවා — dropdown එකට බාධාවක් නෑ */}

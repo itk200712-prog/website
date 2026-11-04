@@ -5,12 +5,20 @@
 // ============================================================================
 
 import { useEffect, useState } from "react";
-import { Check, Image as ImageIcon, Mail, Plus, RefreshCw, Save, Settings, Trash2, Upload, Globe } from "lucide-react";
+import { BellRing, Check, Image as ImageIcon, Mail, Plus, RefreshCw, Save, Settings, Trash2, Upload, Globe, Users } from "lucide-react";
 import { MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { AdminTopbar, dbUpsert, useNotice } from "@/components/admin";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { deleteSiteImage, uploadSiteImage } from "@/lib/supabase/storage";
 import { SETTINGS } from "@/lib/seed";
+import {
+  REGISTER_NOTICE_KEY,
+  defaultRegisterNotice,
+  normalizeRegisterNotice,
+  parseRegisterNotice,
+  serializeRegisterNotice,
+} from "@/lib/register-notice";
+import type { RegisterNoticeSetting } from "@/lib/types";
 
 export default function AdminSettingsPage() {
   const { show, node } = useNotice();
@@ -24,6 +32,8 @@ export default function AdminSettingsPage() {
   const [socialWa, setSocialWa] = useState<string>("");
   const [socialFb, setSocialFb] = useState<string>("");
   const [siteLogo, setSiteLogo] = useState("");
+  const [notice, setNotice] = useState<RegisterNoticeSetting>(defaultRegisterNotice());
+  const [noticeSaved, setNoticeSaved] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
 
   // DB එකෙන් saved values load කරන්න (seed නෙමෙයි!)
@@ -43,6 +53,11 @@ export default function AdminSettingsPage() {
         if (g("social_whatsapp") != null) setSocialWa(g("social_whatsapp")!);
         if (g("social_facebook") != null) setSocialFb(g("social_facebook")!);
         if (g("site_logo") != null) setSiteLogo(g("site_logo")!);
+        const rawNotice = g(REGISTER_NOTICE_KEY);
+        if (rawNotice != null) {
+          setNotice(parseRegisterNotice(rawNotice));
+          setNoticeSaved(true);
+        }
         const hero = g("hero_images");
         if (hero) {
           try { const arr = JSON.parse(hero); if (Array.isArray(arr)) setHeroImages(arr); } catch { /* ignore */ }
@@ -323,6 +338,199 @@ export default function AdminSettingsPage() {
           </a>
         </section>
 
+        {/* ============ Register Update Notice (Member + Voter) ============ */}
+        <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-emerald-50/60 p-6 mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/25">
+                <BellRing size={18} />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-slate-900 text-[15px]">සාමාජික ලේඛන යාවත්කාලීන Notice</h2>
+                <p className="text-slate-500 text-[11px]">
+                  Member Details (All) + Eligible Voters පිටු දෙකේ උඩින් පෙන්වන notice එක — මෙතනින් show / hide කරන්න
+                </p>
+              </div>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-[10.5px] font-extrabold ${notice.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
+              {notice.enabled ? "VISIBLE · පෙන්වයි" : "HIDDEN · සඟවා ඇත"}
+            </span>
+          </div>
+
+          {/* master + per-page toggles */}
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={notice.enabled}
+              onClick={() => setNotice((n) => ({ ...n, enabled: !n.enabled }))}
+              className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition ${
+                notice.enabled ? "border-emerald-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50"
+              }`}
+            >
+              <span className="text-[12px] font-extrabold text-slate-800">
+                Notice එක පෙන්වන්න
+                <span className="block text-[10px] font-semibold text-slate-400">Master on / off</span>
+              </span>
+              <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${notice.enabled ? "bg-emerald-500" : "bg-slate-300"}`}>
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${notice.enabled ? "left-[22px]" : "left-0.5"}`} />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={notice.showMembers}
+              disabled={!notice.enabled}
+              onClick={() => setNotice((n) => ({ ...n, showMembers: !n.showMembers }))}
+              className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition disabled:opacity-50 ${
+                notice.showMembers && notice.enabled ? "border-indigo-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50"
+              }`}
+            >
+              <span className="text-[12px] font-extrabold text-slate-800">
+                Member Details (All)
+                <span className="block text-[10px] font-semibold text-slate-400">සියලු සාමාජිකයන් පිටුව</span>
+              </span>
+              <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${notice.showMembers ? "bg-indigo-500" : "bg-slate-300"}`}>
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${notice.showMembers ? "left-[22px]" : "left-0.5"}`} />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={notice.showVoters}
+              disabled={!notice.enabled}
+              onClick={() => setNotice((n) => ({ ...n, showVoters: !n.showVoters }))}
+              className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition disabled:opacity-50 ${
+                notice.showVoters && notice.enabled ? "border-sky-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50"
+              }`}
+            >
+              <span className="text-[12px] font-extrabold text-slate-800">
+                Eligible Voters
+                <span className="block text-[10px] font-semibold text-slate-400">ඡන්ද හිමි සාමාජිකයන් පිටුව</span>
+              </span>
+              <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${notice.showVoters ? "bg-sky-500" : "bg-slate-300"}`}>
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${notice.showVoters ? "left-[22px]" : "left-0.5"}`} />
+              </span>
+            </button>
+          </div>
+
+          {/* editable texts */}
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-amber-700">සිංහල</div>
+              <label className="field-label mt-2.5">මාතෘකාව</label>
+              <input
+                value={notice.title_si}
+                onChange={(e) => setNotice((n) => ({ ...n, title_si: e.target.value }))}
+                className="field !text-[12.5px]"
+                placeholder="සියලුම සාමාජිකයන් යාවත්කාලීන වෙමින් පවතී"
+              />
+              <label className="field-label mt-3">පණිවිඩය</label>
+              <textarea
+                value={notice.message_si}
+                onChange={(e) => setNotice((n) => ({ ...n, message_si: e.target.value }))}
+                rows={5}
+                className="field !text-[12.5px] !leading-relaxed"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-indigo-700">English</div>
+              <label className="field-label mt-2.5">Title</label>
+              <input
+                value={notice.title_en}
+                onChange={(e) => setNotice((n) => ({ ...n, title_en: e.target.value }))}
+                className="field !text-[12.5px]"
+                placeholder="All Member Records Are Being Updated"
+              />
+              <label className="field-label mt-3">Message</label>
+              <textarea
+                value={notice.message_en}
+                onChange={(e) => setNotice((n) => ({ ...n, message_en: e.target.value }))}
+                rows={5}
+                className="field !text-[12.5px] !leading-relaxed"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div>
+              <label className="field-label">අමතන්න · Call button number</label>
+              <input
+                value={notice.phone}
+                onChange={(e) => setNotice((n) => ({ ...n, phone: e.target.value }))}
+                className="field max-w-xs"
+                placeholder="+94 77 945 3982"
+              />
+              <p className="text-slate-400 text-[10.5px] mt-1.5">
+                Button එකේ පෙන්වන අංකය — click කළ විට දුරකථනයෙන් කෙලින්ම අමතයි.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setNotice(defaultRegisterNotice())}
+              >
+                <RefreshCw size={15} /> Default Text
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={async () => {
+                  const clean = normalizeRegisterNotice(notice);
+                  setNotice(clean);
+                  const err = await dbUpsert("system_settings", {
+                    key: REGISTER_NOTICE_KEY,
+                    value: serializeRegisterNotice(clean),
+                  });
+                  if (err) {
+                    show(`⚠ ${err}`);
+                    return;
+                  }
+                  setNoticeSaved(true);
+                  show(
+                    clean.enabled
+                      ? `✅ Notice එක save විය — ${clean.showMembers ? "Members" : ""}${clean.showMembers && clean.showVoters ? " + " : ""}${clean.showVoters ? "Voters" : ""} පිටුවේ පෙන්වයි`
+                      : "✅ Notice එක save විය — දැන් සඟවා ඇත (Hidden)"
+                  );
+                }}
+              >
+                <Save size={16} /> Save Notice
+              </button>
+            </div>
+          </div>
+
+          {/* live preview */}
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-900 p-4">
+            <div className="flex items-center gap-2 text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+              <Users size={13} /> Live preview
+            </div>
+            <div className="mt-3 overflow-hidden rounded-xl bg-white/95 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-[0.08em] text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  යාවත්කාලීන වෙමින් පවතී
+                </span>
+                <span className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                  {notice.showVoters && !notice.showMembers ? "Voter register" : "Member register"}
+                </span>
+              </div>
+              <div className="mt-1.5 text-[13.5px] font-extrabold text-slate-900">{notice.title_si}</div>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-slate-500">{notice.message_si}</p>
+              <div className="mt-2.5 inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-600 to-teal-500 px-3 py-1.5 text-[11.5px] font-extrabold text-white">
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-white/20">☎</span>
+                {notice.phone}
+              </div>
+            </div>
+            <p className="mt-2.5 text-[10.5px] text-slate-400">
+              {noticeSaved ? "මෙය දැනටමත් save වී ඇති setting එකයි." : "තවම save කර නැත — Save Notice ඔබන්න."}
+            </p>
+          </div>
+        </section>
+
         {/* ============ Social Media Links ============ */}
         <section className="rounded-2xl border border-slate-200 bg-white p-6 mt-6">
           <div className="flex items-center gap-2.5">
@@ -367,6 +575,7 @@ export default function AdminSettingsPage() {
                 { key: "social_whatsapp", value: socialWa },
                 { key: "social_facebook", value: socialFb },
                 { key: "site_logo", value: siteLogo },
+                { key: REGISTER_NOTICE_KEY, value: serializeRegisterNotice(notice) },
               ];
               let err: string | null = null;
               for (const row of rows) {

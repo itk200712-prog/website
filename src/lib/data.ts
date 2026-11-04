@@ -30,6 +30,7 @@ import {
   getBusinessAnimation,
   parseBusinessAnimations,
 } from "@/lib/animation-settings";
+import { parseRegisterNotice } from "@/lib/register-notice";
 import { normalizeGalleryCount } from "@/lib/gallery-social";
 import type {
   BoardMember,
@@ -230,6 +231,7 @@ const SITE_SETTING_KEYS = [
   "voters_files_count",
   "hero_images",
   "board_bg",
+  "register_update_notice",
 ];
 
 export const getSettings = cache(async (): Promise<SiteSettings> => {
@@ -250,6 +252,7 @@ export const getSettings = cache(async (): Promise<SiteSettings> => {
       voters_files_count: Number(map.get("voters_files_count") ?? SETTINGS.voters_files_count),
       hero_images: parseHeroImages(map.get("hero_images")),
       board_bg: map.get("board_bg") ?? "",
+      register_notice: parseRegisterNotice(map.get("register_update_notice")),
     };
   }, SETTINGS);
 });

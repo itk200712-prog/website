@@ -38,6 +38,28 @@ export interface BusinessService {
   active: boolean;
 }
 
+/**
+ * Admin → Settings එකෙන් පාලනය වන "සාමාජික ලේඛනය යාවත්කාලීන වෙමින්" notice එක.
+ * Member Details + Eligible Voters පිටු දෙකේම උඩින් පෙන්වයි.
+ * system_settings key: register_update_notice (JSON)
+ */
+export interface RegisterNoticeSetting {
+  /** සම්පූර්ණයෙන්ම on/off */
+  enabled: boolean;
+  /** Member Details (All Members) පිටුවේ පෙන්වනවාද */
+  showMembers: boolean;
+  /** Eligible Voters පිටුවේ පෙන්වනවාද */
+  showVoters: boolean;
+  title_si: string;
+  title_en: string;
+  message_si: string;
+  message_en: string;
+  /** පෙන්වන අංකය — උදා: +94 77 945 3982 */
+  phone: string;
+  /** ඇමතුම් link එකට යන අංකය — උදා: +94779453982 */
+  phoneDial: string;
+}
+
 /** Admin → Animation settings (system_settings එකේ save වේ; DB column එකක් නෑ) */
 export interface BusinessAnimation {
   /** මුළු පිටුවේම පසුබිමට වැටෙන watermark image එක (logo එක පිටිපස්සේ නෙවෙයි) */
@@ -214,6 +236,8 @@ export interface SiteSettings {
   hero_images: string[];
   /** ✅ board section background image (admin settings වලින් set කරනවා) */
   board_bg?: string;
+  /** ✅ Member/Voter පිටු දෙකේ උඩින් පෙන්වන "යාවත්කාලීන වෙමින්" notice එක */
+  register_notice?: RegisterNoticeSetting;
 }
 
 export interface HeroStat {

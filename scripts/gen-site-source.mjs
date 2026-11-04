@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-10-28-auth-glass-v18";
+const SITE_PACKAGE_VERSION = "2026-10-29-register-notice-v19";
 
 const FILES = [
   "src/app/globals.css",
@@ -28,6 +28,9 @@ const FILES = [
   "src/app/admin/businesses/page.tsx",
   "src/app/admin/animation/page.tsx",
   "src/app/admin/data/page.tsx",
+  "src/app/admin/settings/page.tsx",
+  "src/app/membership/members/page.tsx",
+  "src/app/membership/voters/page.tsx",
   "src/app/admin/gallery/page.tsx",
   "src/app/admin/news/page.tsx",
   "src/app/gallery/page.tsx",
@@ -44,6 +47,7 @@ const FILES = [
   "src/components/business-detail.tsx",
   "src/components/directory.tsx",
   "src/components/auth-shell.tsx",
+  "src/components/register-notice.tsx",
   "src/components/gallery-grid.tsx",
   "src/components/media-info.tsx",
   "src/components/news-client.tsx",
@@ -56,6 +60,7 @@ const FILES = [
   "src/lib/gallery-social.ts",
   "src/lib/media-info.ts",
   "src/lib/pdf-register.ts",
+  "src/lib/register-notice.ts",
   "src/lib/motion-compat.ts",
   "src/lib/animation-settings.ts",
   "src/lib/branch-settings.ts",

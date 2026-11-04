@@ -14,6 +14,7 @@ export default async function MembersPage() {
       kind="member"
       totalRows={settings.members_total}
       totalFiles={settings.members_files_count}
+      notice={settings.register_notice}
     />
   );
 }

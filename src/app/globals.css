@@ -2145,3 +2145,282 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
     width: 100%;
   }
 }
+
+/* ============================================================================
+   Register update notice — Member Details (All) + Eligible Voters
+   Admin → Settings එකෙන් පාලනය වේ. Glass card + live pulse + shimmer line.
+   ============================================================================ */
+.reg-notice {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  margin-bottom: 20px;
+  padding: clamp(16px, 2.2vw, 22px) clamp(16px, 2.4vw, 26px);
+  border: 1px solid rgba(251, 191, 36, 0.42);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 96% 8%, rgba(251, 191, 36, 0.24), transparent 22rem),
+    radial-gradient(circle at 4% 96%, rgba(16, 185, 129, 0.18), transparent 20rem),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.96), rgba(255, 251, 235, 0.88) 58%, rgba(236, 253, 245, 0.86));
+  box-shadow:
+    0 22px 48px -28px rgba(180, 83, 9, 0.4),
+    0 10px 22px -18px rgba(15, 23, 42, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: regNoticeIn 0.6s cubic-bezier(0.2, 0.86, 0.26, 1) both;
+}
+
+.reg-notice-accent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: linear-gradient(180deg, #f59e0b, #10b981 58%, #0ea5e9);
+  background-size: 100% 220%;
+  animation: regNoticeAccent 5.5s ease-in-out infinite alternate;
+}
+
+.reg-notice-glow,
+.reg-notice::after {
+  content: "";
+  position: absolute;
+  top: -60%;
+  left: -30%;
+  z-index: 0;
+  width: 42%;
+  height: 220%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  transform: skewX(-18deg) translateX(-120%);
+  animation: regNoticeSheen 7s cubic-bezier(0.4, 0, 0.2, 1) 1.2s infinite;
+  pointer-events: none;
+}
+
+.reg-notice-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(13px, 1.8vw, 17px);
+}
+
+.reg-notice-icon {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  background: linear-gradient(150deg, #fef3c7, #fde68a);
+  color: #b45309;
+  box-shadow: inset 0 1px 0 #fff, 0 10px 20px -14px rgba(180, 83, 9, 0.8);
+}
+
+.reg-notice-spin {
+  animation: regNoticeSpin 3.4s linear infinite;
+}
+
+.reg-notice-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.reg-notice-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.reg-notice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px 4px 8px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.reg-notice-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #10b981;
+}
+
+.reg-notice-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  border: 2px solid rgba(16, 185, 129, 0.55);
+  animation: regNoticePing 1.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.reg-notice-page {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.reg-notice-title {
+  color: #0f172a;
+  font-size: clamp(15px, 1.55vw, 17.5px);
+  font-weight: 900;
+  line-height: 1.28;
+  letter-spacing: -0.018em;
+}
+
+.reg-notice-message {
+  margin-top: 5px;
+  max-width: 76ch;
+  color: #475569;
+  font-size: 12.8px;
+  line-height: 1.68;
+}
+
+.reg-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 13px;
+}
+
+.reg-notice-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 8px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #059669, #10b981 62%, #0d9488);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  box-shadow: 0 14px 26px -14px rgba(5, 150, 105, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  transition: transform 0.2s cubic-bezier(0.2, 0.85, 0.25, 1), box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.reg-notice-phone:hover {
+  transform: translateY(-1.5px);
+  filter: brightness(1.05);
+  box-shadow: 0 18px 30px -14px rgba(5, 150, 105, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.reg-notice-phone:active { transform: scale(0.97); }
+
+.reg-notice-phone-icon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.reg-notice-phone:hover .reg-notice-phone-icon svg {
+  animation: regNoticeRing 0.8s ease-in-out;
+}
+
+.reg-notice-phone-number {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.reg-notice-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #7c8da6;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.reg-notice-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(251, 191, 36, 0.16);
+  overflow: hidden;
+}
+
+.reg-notice-progress::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, #f59e0b, #10b981, transparent);
+  animation: regNoticeSlide 3.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes regNoticeIn {
+  from { opacity: 0; transform: translateY(-12px) scale(0.99); filter: blur(3px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+@keyframes regNoticeAccent {
+  from { background-position: 0% 0%; }
+  to { background-position: 0% 100%; }
+}
+
+@keyframes regNoticeSheen {
+  0% { transform: skewX(-18deg) translateX(-140%); }
+  55%, 100% { transform: skewX(-18deg) translateX(420%); }
+}
+
+@keyframes regNoticeSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes regNoticePing {
+  0% { opacity: 0.85; transform: scale(0.6); }
+  70%, 100% { opacity: 0; transform: scale(1.9); }
+}
+
+@keyframes regNoticeRing {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-16deg); }
+  50% { transform: rotate(14deg); }
+  75% { transform: rotate(-8deg); }
+}
+
+@keyframes regNoticeSlide {
+  0% { left: -42%; }
+  100% { left: 102%; }
+}
+
+@media (max-width: 640px) {
+  .reg-notice { border-radius: 20px; }
+  .reg-notice-icon { width: 40px; height: 40px; border-radius: 13px; }
+  .reg-notice-message { font-size: 12.2px; }
+  .reg-notice-help { font-size: 10.4px; }
+  .reg-notice-phone { font-size: 12.5px; padding: 7px 14px 7px 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:not(.motion-compat) .reg-notice,
+  html:not(.motion-compat) .reg-notice-accent,
+  html:not(.motion-compat) .reg-notice::after,
+  html:not(.motion-compat) .reg-notice-spin,
+  html:not(.motion-compat) .reg-notice-dot::after,
+  html:not(.motion-compat) .reg-notice-progress::after {
+    animation: none !important;
+  }
+  html:not(.motion-compat) .reg-notice-phone { transition: none !important; }
+}

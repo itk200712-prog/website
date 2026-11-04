@@ -14,6 +14,7 @@ export default async function VotersPage() {
       kind="voter"
       totalRows={settings.voters_total}
       totalFiles={settings.voters_files_count}
+      notice={settings.register_notice}
     />
   );
 }
