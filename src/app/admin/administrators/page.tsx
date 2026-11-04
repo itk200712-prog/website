@@ -33,6 +33,7 @@ const SECTION_LABELS: Record<string, string> = {
   administrators: "Administrators",
   applications: "Membership Applications",
   data: "Data & Live Metrics",
+  memberupdate: "Member Update",
   board: "Board of Directors",
   news: "News & Notices",
   gallery: "Gallery Moderation",

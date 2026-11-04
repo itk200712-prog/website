@@ -20,6 +20,7 @@ const auth = await import("../src/lib/auth.ts");
 const branchSettings = await import("../src/lib/branch-settings.ts");
 const animSettings = await import("../src/lib/animation-settings.ts");
 const motionCompat = await import("../src/lib/motion-compat.ts");
+const memberUpdate = await import("../src/lib/member-update.ts");
 
 console.log("\n── 1) Seed data (screenshots) ──");
 ok("14 business divisions", seed.BUSINESSES.length === 14, `got ${seed.BUSINESSES.length}`);
@@ -1239,7 +1240,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-11-04-complete-rows-14px-v22"));
+  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1307,7 +1308,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-complete-rows-14px-v22"));
+  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1345,7 +1346,7 @@ const latestBackupUpdateFiles = [
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files + professional glass auth pages",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-04-complete-rows-14px-v22" &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-04-member-update-v23" &&
   generatedSiteSource.SITE_SOURCE_FILES.length >= 48 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
@@ -1373,7 +1374,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-11-04-complete-rows-14px-v22"));
+  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1402,7 +1403,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-complete-rows-14px-v22"));
+  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1460,7 +1461,7 @@ ok("member/voter register PDF: visual page keeps a real invisible Unicode text l
   genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
   genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
   genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-complete-rows-14px-v22"));
+  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
 const signinPageSrc = readFileSync(join(root, "src/app/signin/page.tsx"), "utf8");
 const registerPageSrc = readFileSync(join(root, "src/app/register/page.tsx"), "utf8");
 const authShellSrc = readFileSync(join(root, "src/components/auth-shell.tsx"), "utf8");
@@ -1492,7 +1493,7 @@ ok("Sign In + Register professional glass experience: gradient glass shell (no p
   genSiteSourceSrc.includes('"src/app/signin/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/register/page.tsx"') &&
   genSiteSourceSrc.includes('"src/components/auth-shell.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-complete-rows-14px-v22"));
+  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
 
 const registerNoticeLib = await import("../src/lib/register-notice.ts");
 const noticeDefaults = registerNoticeLib.defaultRegisterNotice();
@@ -1537,7 +1538,48 @@ ok("member/voter register update notice: default text + phone, admin show/hide p
   genSiteSourceSrc.includes('"src/app/admin/settings/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/members/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/voters/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-complete-rows-14px-v22"));
+  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
+
+// ── Member Update (admin edit, no delete) ───────────────────────────────────
+const muSrc = readFileSync(join(root, "src/app/admin/member-update/page.tsx"), "utf8");
+
+ok("Member Update admin section exists in the sidebar with its own permission key",
+  adminShellSrc.includes('href: "/admin/member-update"') &&
+  adminShellSrc.includes('key: "memberupdate"') &&
+  adminShellSrc.includes("PencilLine") &&
+  readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes('memberupdate: "Member Update"') &&
+  genSiteSourceSrc.includes('"src/app/admin/member-update/page.tsx"') &&
+  genSiteSourceSrc.includes('"src/lib/member-update.ts"'));
+
+ok("Member Update: search by name / NIC / address / member number and edit (no delete control at all)",
+  muSrc.includes("නම, NIC, ලිපිනය, සාමාජික අංකය හෝ file නමින් සොයන්න") &&
+  muSrc.includes("[rowNo(r), r.nic, r.full_name, r.address, r.postal_address, r.gender, r.file_name]") &&
+  muSrc.includes(".update(patch).eq(\"id\", editFor.id)") &&
+  !muSrc.includes("dbDelete") &&
+  !muSrc.includes(".delete(") &&
+  !muSrc.includes("Trash2") &&
+  !muSrc.includes("Delete"));
+
+ok("Member Update: editing a member auto-updates the matching voter row (NIC first, then name + address)",
+  muSrc.includes("findMatchingVoters") &&
+  muSrc.includes('eq("nic", nic)') &&
+  muSrc.includes('from("voter_rows").update(voterSyncPatch(candidate))') &&
+  memberUpdate.voterMatchesMember({ nic: "123456789V" }, { nic: "123456789v" }) &&
+  memberUpdate.voterMatchesMember({ nic: "", full_name: "කේ. එම්. පෙරේරා", address: "හෙට්ටිපොල" }, { full_name: "කේ. එම්. පෙරේරා", address: "හෙට්ටිපොල" }) &&
+  !memberUpdate.voterMatchesMember({ nic: "111111111V" }, { nic: "222222222V" }) &&
+  !memberUpdate.voterMatchesMember({ nic: "", full_name: "අමුතු නම", address: "කුරුණෑගල" }, { full_name: "වෙන නම", address: "හෙට්ටිපොල" }) &&
+  !memberUpdate.voterMatchesMember({ nic: "", full_name: "", address: "" }, { full_name: "", address: "" }));
+
+ok("Member Update: NIC / gender validation + incomplete-column badge + backup carries the edited tables",
+  memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", nic: "123456789V" }).length === 0 &&
+  memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", nic: "12345" }).length === 1 &&
+  memberUpdate.validateRegisterEdit({ member_no: "", full_name: "මුදිත" }).length === 1 &&
+  memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", gender: "වෙන" }).length === 1 &&
+  memberUpdate.missingColumns({ member_no: "62/01", full_name: "නම", nic: "", address: "x", postal_address: "y", gender: "පුරුෂ" }).join(",") === "NIC" &&
+  memberUpdate.sanitizeNic(" 123456789 v ") === "123456789V" &&
+  memberUpdate.voterSyncPatch({ nic: "123456789v", full_name: " නම  ", address: "ලිපිනය", postal_address: "තැපැල්", gender: "පුරුෂ" }).nic === "123456789V" &&
+  backupSrc.includes('{ name: "member_rows", pk: "id" }') &&
+  backupSrc.includes('{ name: "voter_rows", pk: "id" }'));
 
 ok("member/voter register PDF: letterhead only on page 1 + 14px readable type + automatic fit-to-page so wrapped rows never squash the page",
   pdfRegisterSrc.includes("const FIRST_PAGE_ROWS = 20;") &&

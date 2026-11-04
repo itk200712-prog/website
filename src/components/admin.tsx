@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut, AtSign, Mail, Megaphone, Newspaper, Settings, ShieldCheck, Sparkles, UserRound, UsersRound, X, Save, Activity,
+  BarChart3, Building2, Database, ExternalLink, Fuel, Gauge, Images, LayoutDashboard, Lock, LogOut, AtSign, Mail, Megaphone, Newspaper, PencilLine, Settings, ShieldCheck, Sparkles, UserRound, UsersRound, X, Save, Activity,
 } from "lucide-react";
 import { MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
@@ -35,6 +35,7 @@ const NAV = [
   { href: "/admin/administrators", label: "Administrators", icon: ShieldCheck, badge: "SUPER", key: "administrators" },
   { href: "/admin/applications", label: "Membership Applications", icon: Megaphone, badge: "", key: "applications" },
   { href: "/admin/data", label: "Data & Live Metrics", icon: Database, badge: "", key: "data" },
+  { href: "/admin/member-update", label: "Member Update", icon: PencilLine, badge: "", key: "memberupdate" },
   { href: "/admin/board", label: "Board of Directors", icon: UsersRound, badge: "", key: "board" },
   { href: "/admin/news", label: "News & Notices", icon: Newspaper, badge: "", key: "news" },
   { href: "/admin/gallery", label: "Gallery Moderation", icon: Images, badge: "", key: "gallery" },
