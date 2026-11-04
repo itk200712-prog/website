@@ -14,6 +14,8 @@ import { logActivity } from "@/lib/activity";
 import { authedClient } from "@/lib/supabase/client";
 import { MEMBER_FILES, SETTINGS, VOTER_FILES } from "@/lib/seed";
 import { isCompleteRegisterRow } from "@/lib/register-rows";
+import { PdfProgressOverlay, type PdfProgressState } from "@/components/pdf-progress";
+import type { RegisterPdfProgress } from "@/lib/pdf-register";
 
 const MODES = [
   { key: "append", label: "Append to existing list" },
@@ -131,7 +133,7 @@ async function parseSpreadsheet(file: File): Promise<ParsedRow[]> {
 }
 
 /* ------------------------------------------------------------------ PDF -- */
-async function buildPdf(label: string, kind: "member" | "voter", rows: ParsedRow[], onProgress: (pct: number) => void) {
+async function buildPdf(label: string, kind: "member" | "voter", rows: ParsedRow[], onProgress: (info: RegisterPdfProgress) => void) {
   const { buildRegisterPdf } = await import("@/lib/pdf-register");
   await buildRegisterPdf({ kind, label, rows, onProgress });
 }
@@ -159,7 +161,7 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
   const [files, setFiles] = useState<{ file_name: string; rows: number }[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [fileOpen, setFileOpen] = useState(false);
-  const [anim, setAnim] = useState<{ pct: number; done: boolean; label: string } | null>(null);
+  const [anim, setAnim] = useState<PdfProgressState | null>(null);
 
   const table = kind === "member" ? "member_rows" : "voter_rows";
   const total = useMemo(() => files.reduce((a, b) => a + b.rows, 0), [files]);
@@ -307,7 +309,8 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
 
   async function downloadPdf() {
     const label = selected || stripExt(files[0]?.file_name ?? "register");
-    setAnim({ pct: 0, done: false, label });
+    // ⏱ "ඉතිරි වෙලාව" (ETA) සහිත animated overlay
+    setAnim({ label, pct: 0, page: 0, totalPages: 0, elapsedMs: 0, etaMs: null, done: false });
     try {
       const sb = await authedClient();
       let rows: ParsedRow[] = [];
@@ -318,9 +321,9 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
         setAnim(null);
         return;
       }
-      await buildPdf(label, kind, rows, (pct) => setAnim({ pct, done: false, label }));
-      setAnim({ pct: 100, done: true, label });
-      setTimeout(() => setAnim(null), 1800);
+      await buildPdf(label, kind, rows, (info) => setAnim({ label, ...info, done: false }));
+      setAnim((prev) => (prev ? { ...prev, pct: 100, done: true } : null));
+      setTimeout(() => setAnim(null), 2600);
     } catch (e) {
       setAnim(null);
       show(`⚠ ${(e as Error).message}`);
@@ -542,32 +545,8 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
         </p>
       </div>
 
-      {/* animated PDF overlay */}
-      {anim && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/55 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-white rounded-3xl p-8 w-[340px] text-center shadow-2xl">
-            {!anim.done ? (
-              <>
-                <div className="mx-auto w-16 h-16 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
-                <div className="mt-4 font-extrabold text-slate-900 text-[15px]">
-                  Preparing <span className="text-indigo-700">{anim.label}</span> PDF…
-                </div>
-                <div className="mt-3 h-2 rounded-full bg-indigo-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-emerald-500 transition-all duration-300" style={{ width: `${anim.pct}%` }} />
-                </div>
-                <div className="mt-2 text-[11px] text-slate-500 tabular-nums">{anim.pct}% — {kind === "member" ? "Member register" : "Electoral register"}</div>
-              </>
-            ) : (
-              <>
-                <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                </div>
-                <div className="mt-4 font-extrabold text-emerald-700 text-[15px]">✅ {anim.label}.pdf downloaded!</div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {/* animated PDF overlay — ඉතිරි වෙලාව (ETA) සහිත */}
+      {anim && <PdfProgressOverlay state={anim} kind={kind} lang="en" />}
     </div>
   );
 }

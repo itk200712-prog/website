@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-11-04-member-update-v23";
+const SITE_PACKAGE_VERSION = "2026-11-04-pdf-eta-v24";
 
 const FILES = [
   "src/app/globals.css",
@@ -47,6 +47,7 @@ const FILES = [
   "src/components/site-header.tsx",
   "src/components/business-detail.tsx",
   "src/components/directory.tsx",
+  "src/components/pdf-progress.tsx",
   "src/components/auth-shell.tsx",
   "src/components/register-notice.tsx",
   "src/components/gallery-grid.tsx",

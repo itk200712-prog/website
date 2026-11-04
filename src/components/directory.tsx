@@ -12,6 +12,7 @@ import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Fil
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { RegisterNotice } from "@/components/register-notice";
+import { PdfProgressOverlay, type PdfProgressState } from "@/components/pdf-progress";
 import { filterCompleteRegisterRows, isCompleteRegisterRow } from "@/lib/register-rows";
 import type { DataFile, MemberRow, RegisterNoticeSetting, VoterRow } from "@/lib/types";
 
@@ -85,7 +86,7 @@ export function DirectoryTable({
   const [fileQ, setFileQ] = useState("");
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<AnyRow | null>(null);
-  const [pdfAnim, setPdfAnim] = useState<{ pct: number; done: boolean; label: string } | null>(null);
+  const [pdfAnim, setPdfAnim] = useState<PdfProgressState | null>(null);
   const perPage = 25;
 
   // ✅ professional PDF — තෝරා ඇති file/සොයුම අනුව සියලු member details, සියලු පිටු වලට
@@ -95,17 +96,18 @@ export function DirectoryTable({
       return;
     }
     const label = file === "all" ? (kind === "member" ? "All-Files-Members" : "All-Files-Voters") : file;
-    setPdfAnim({ pct: 0, done: false, label });
+    // ⏱ "ඉතිරි වෙලාව" (ETA) සහිත animated overlay
+    setPdfAnim({ label, pct: 0, page: 0, totalPages: 0, elapsedMs: 0, etaMs: null, done: false });
     try {
       const { buildRegisterPdf } = await import("@/lib/pdf-register");
       await buildRegisterPdf({
         kind,
         label,
         rows: filtered.map((r) => ({ ...r })),
-        onProgress: (pct) => setPdfAnim({ pct, done: false, label }),
+        onProgress: (info) => setPdfAnim({ label, ...info, done: false }),
       });
-      setPdfAnim({ pct: 100, done: true, label });
-      setTimeout(() => setPdfAnim(null), 2200);
+      setPdfAnim((prev) => (prev ? { ...prev, pct: 100, done: true } : null));
+      setTimeout(() => setPdfAnim(null), 2600);
     } catch {
       setPdfAnim(null);
     }
@@ -468,34 +470,8 @@ export function DirectoryTable({
       </div>
 
 
-      {/* ═══════════════ PDF progress overlay ═══════════════ */}
-      {pdfAnim && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/55 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-white rounded-3xl p-8 w-[360px] text-center shadow-2xl">
-            {!pdfAnim.done ? (
-              <>
-                <div className="mx-auto w-16 h-16 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
-                <div className="mt-4 font-extrabold text-slate-900 text-[15px]">
-                  {lang === "si" ? "සකසමින්" : "Preparing"} <span className="text-indigo-700">{pdfAnim.label}</span> PDF…
-                </div>
-                <div className="mt-3 h-2 rounded-full bg-indigo-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-emerald-500 transition-all duration-500" style={{ width: `${pdfAnim.pct}%` }} />
-                </div>
-                <div className="mt-2 text-[11px] text-slate-500 tabular-nums">
-                  {pdfAnim.pct}% · {lang === "si" ? "සියලු සාමාජික විස්තර ඇතුළත් වෙමින්" : "including all member details"}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                </div>
-                <div className="mt-4 font-extrabold text-emerald-700 text-[15px]">✅ {pdfAnim.label}.pdf {lang === "si" ? "download විය!" : "downloaded!"}</div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {/* ═══════════════ PDF progress overlay (ETA + animation) ═══════════════ */}
+      {pdfAnim && <PdfProgressOverlay state={pdfAnim} kind={kind} lang={lang === "si" ? "si" : "en"} />}
 
       {/* ═══════════════ full details popup ═══════════════ */}
       {detail && (

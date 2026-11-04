@@ -10,6 +10,20 @@
 
 import { filterCompleteRegisterRows } from "@/lib/register-rows";
 
+/** PDF generate වෙන ගමන් UI එකට යන තොරතුරු — "ඉතිරි වෙලාව" (ETA) ඇතුළුව */
+export type RegisterPdfProgress = {
+  /** 0–100 */
+  pct: number;
+  /** සකසා ඉවර වූ පිටු ගණන */
+  page: number;
+  /** මුළු පිටු ගණන (page splits එකෙන් පසු දන්නා තෙක් 0) */
+  totalPages: number;
+  /** දැන් වෙනකන් ගිය වෙලාව (ms) */
+  elapsedMs: number;
+  /** ඉතිරි වෙලාව (ms) — තවම ගණනය කරන්න බැරි නම් null */
+  etaMs: number | null;
+};
+
 export type RegisterRow = {
   member_no?: string;
   voter_no?: string;
@@ -212,9 +226,23 @@ export async function buildRegisterPdf(opts: {
   kind: "member" | "voter";
   label: string; // file label or "All Files"
   rows: RegisterRow[];
-  onProgress?: (pct: number) => void;
+  onProgress?: (info: RegisterPdfProgress) => void;
 }): Promise<void> {
   const { kind, label, onProgress } = opts;
+  // ⏱ "ඉතිරි වෙලාව" ගණනයට — පිටුවකට ගිය සාමාන්‍ය වේලාවෙන් ඉතිරි පිටු ගණන ගුණ කරයි.
+  const startedAt = Date.now();
+  let renderedPages = 0;
+  let totalPages = 0;
+  let elapsedTotal = 0;
+  const report = (pct: number) => {
+    const elapsedMs = Date.now() - startedAt;
+    let etaMs: number | null = null;
+    if (renderedPages > 0 && totalPages > renderedPages) {
+      const avg = elapsedTotal / renderedPages;
+      etaMs = Math.max(500, Math.round(avg * (totalPages - renderedPages)));
+    }
+    onProgress?.({ pct: Math.max(0, Math.min(100, pct)), page: renderedPages, totalPages, elapsedMs, etaMs });
+  };
   // ✅ Excel එකේ තීරු 6ම පිරුණු පේළි පමණයි PDF එකටත් යන්නේ (පිළිවෙල එහෙමම)
   const rows = filterCompleteRegisterRows(opts.rows);
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
@@ -255,6 +283,7 @@ export async function buildRegisterPdf(opts: {
   const totalLabel = isMember ? "සියලු සාමාජිකයින්" : "සියලු ඡන්ද හිමියන්";
   const dateStr = siDateNow();
 
+  report(1);
   const host = document.createElement("div");
   host.style.cssText = `position:fixed;left:-10000px;top:0;width:${HTML_PAGE_WIDTH}px;background:#fff;z-index:-1;`;
   document.body.appendChild(host);
@@ -390,6 +419,9 @@ export async function buildRegisterPdf(opts: {
     }
     if (!pageSplits.length) pageSplits.push({ start: 0, count: 0 });
   }
+  // පිටු කීයක්ද කියලා දැන් දන්නවා → ETA ගණනය පටන් ගන්න පුළුවන්
+  totalPages = pageSplits.length;
+  report(4);
 
   for (let i = 0; i < pageSplits.length; i++) {
     const split = pageSplits[i];
@@ -405,10 +437,14 @@ export async function buildRegisterPdf(opts: {
     // ✅ Image එක උඩින් නොපෙනෙන ඇත්ත text layer එක — reader search/copy වලට.
     addInvisibleTextLayer(doc as unknown as JsPdfDoc, searchBoxes, hasSearchFont);
     host.removeChild(el);
-    onProgress?.(Math.round(((i + 1) / pageSplits.length) * 100));
+    renderedPages = i + 1;
+    elapsedTotal = Date.now() - startedAt;
+    // 4% → 100% අතර, පිටු ගණනට අනුව
+    report(4 + Math.round(((i + 1) / pageSplits.length) * 96));
     // browsers හිස් කරන්න ඉඩ දෙන්න (ලොකු PDF වලට)
     if (i % 10 === 9) await new Promise((r) => setTimeout(r, 0));
   }
   document.body.removeChild(host);
+  report(100);
   doc.save(`${label}-${isMember ? "members" : "voters"}-register.pdf`);
 }

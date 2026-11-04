@@ -1240,7 +1240,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
+  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1308,7 +1308,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
+  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1346,7 +1346,7 @@ const latestBackupUpdateFiles = [
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files + professional glass auth pages",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-04-member-update-v23" &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-04-pdf-eta-v24" &&
   generatedSiteSource.SITE_SOURCE_FILES.length >= 48 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
@@ -1374,7 +1374,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
+  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1403,7 +1403,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
+  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1461,7 +1461,7 @@ ok("member/voter register PDF: visual page keeps a real invisible Unicode text l
   genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
   genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
   genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
+  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
 const signinPageSrc = readFileSync(join(root, "src/app/signin/page.tsx"), "utf8");
 const registerPageSrc = readFileSync(join(root, "src/app/register/page.tsx"), "utf8");
 const authShellSrc = readFileSync(join(root, "src/components/auth-shell.tsx"), "utf8");
@@ -1493,7 +1493,7 @@ ok("Sign In + Register professional glass experience: gradient glass shell (no p
   genSiteSourceSrc.includes('"src/app/signin/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/register/page.tsx"') &&
   genSiteSourceSrc.includes('"src/components/auth-shell.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
+  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
 
 const registerNoticeLib = await import("../src/lib/register-notice.ts");
 const noticeDefaults = registerNoticeLib.defaultRegisterNotice();
@@ -1538,7 +1538,43 @@ ok("member/voter register update notice: default text + phone, admin show/hide p
   genSiteSourceSrc.includes('"src/app/admin/settings/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/members/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/voters/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-member-update-v23"));
+  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
+
+// ── PDF "time remaining" (ETA) overlay ──────────────────────────────────────
+const pdfProgressSrc = readFileSync(join(root, "src/components/pdf-progress.tsx"), "utf8");
+const globalsCssAll = readFileSync(join(root, "src/app/globals.css"), "utf8");
+const directorySrcAll = readFileSync(join(root, "src/components/directory.tsx"), "utf8");
+
+ok("PDF overlay: members + voters show a live time-remaining (ETA) countdown with a strong animation",
+  pdfRegisterSrc.includes("export type RegisterPdfProgress") &&
+  pdfRegisterSrc.includes("etaMs: number | null") &&
+  pdfRegisterSrc.includes("const avg = elapsedTotal / renderedPages") &&
+  pdfRegisterSrc.includes("etaMs = Math.max(500, Math.round(avg * (totalPages - renderedPages)))") &&
+  pdfRegisterSrc.includes("report(4 + Math.round(((i + 1) / pageSplits.length) * 96))") &&
+  pdfProgressSrc.includes('si ? "ඉතිරි වෙලාව" : "TIME REMAINING"') &&
+  pdfProgressSrc.includes("export function formatClock") &&
+  pdfProgressSrc.includes("strokeDashoffset={dash}") &&
+  pdfProgressSrc.includes("pdf-aurora") &&
+  pdfProgressSrc.includes("pdf-orbit") &&
+  pdfProgressSrc.includes("pdf-shimmer") &&
+  pdfProgressSrc.includes("pdf-tick") &&
+  pdfProgressSrc.includes("pdf-burst") &&
+  pdfProgressSrc.includes("shouldReduceMotion") &&
+  globalsCssAll.includes("@keyframes pdfAuroraSpin") &&
+  globalsCssAll.includes("@keyframes pdfOrbitSpin") &&
+  globalsCssAll.includes("@keyframes pdfShimmerSweep") &&
+  globalsCssAll.includes("@keyframes pdfTickIn") &&
+  globalsCssAll.includes("@keyframes pdfBurstRing") &&
+  globalsCssAll.includes("@media (prefers-reduced-motion: reduce)") &&
+  // members + voters page (directory) සහ admin data page — දෙකම overlay එක පාවිච්චි කරයි
+  directorySrcAll.includes('import { PdfProgressOverlay, type PdfProgressState } from "@/components/pdf-progress";') &&
+  directorySrcAll.includes("<PdfProgressOverlay state={pdfAnim} kind={kind}") &&
+  directorySrcAll.includes("onProgress: (info) => setPdfAnim({ label, ...info, done: false })") &&
+  adminDataSrc.includes('import { PdfProgressOverlay, type PdfProgressState } from "@/components/pdf-progress";') &&
+  adminDataSrc.includes("<PdfProgressOverlay state={anim} kind={kind}") &&
+  adminDataSrc.includes("onProgress: (pct: number) => void") === false &&
+  adminDataSrc.includes("(info) => setAnim({ label, ...info, done: false })") &&
+  genSiteSourceSrc.includes('"src/components/pdf-progress.tsx"'));
 
 // ── Member Update (admin edit, no delete) ───────────────────────────────────
 const muSrc = readFileSync(join(root, "src/app/admin/member-update/page.tsx"), "utf8");
