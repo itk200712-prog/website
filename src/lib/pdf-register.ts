@@ -224,10 +224,22 @@ export async function buildRegisterPdf(opts: {
     /* ignore */
   }
 
-  const PER_PAGE = 30;
+  // ✅ Letterhead + directory bar පළවෙනි පිටුවේ විතරයි. ඉතුරු පිටු වල ඉඩ වැඩි නිසා
+  //    ඒවාට පේළි වැඩියෙන් (34) දාලා කඩදාසිය හොඳින් පිරෙනවා.
+  const FIRST_PAGE_ROWS = 30;
+  const CONTINUATION_ROWS = 34;
   const pages: RegisterRow[][] = [];
-  for (let i = 0; i < rows.length; i += PER_PAGE) pages.push(rows.slice(i, i + PER_PAGE));
-  if (!pages.length) pages.push([]);
+  const pageStartIndex: number[] = [];
+  for (let i = 0; i < rows.length; ) {
+    const take = pages.length === 0 ? FIRST_PAGE_ROWS : CONTINUATION_ROWS;
+    pageStartIndex.push(i);
+    pages.push(rows.slice(i, i + take));
+    i += take;
+  }
+  if (!pages.length) {
+    pages.push([]);
+    pageStartIndex.push(0);
+  }
 
   const isMember = kind === "member";
   const head = [
@@ -254,11 +266,14 @@ export async function buildRegisterPdf(opts: {
 
   const makePage = (pageRows: RegisterRow[], idx: number, total: number) => {
     const el = document.createElement("div");
+    // ✅ පළවෙනි පිටුවට විතරයි උඩින් letterhead එකේ ඉඩ; ඉතුරු පිටු කෙලින්ම වගුවෙන් පටන් ගන්නවා.
+    const isFirstPage = idx === 0;
     el.style.cssText =
-      `width:${HTML_PAGE_WIDTH}px;min-height:${HTML_PAGE_HEIGHT}px;padding:36px 38px;box-sizing:border-box;background:#fff;font-family:'Iskoola Pota','Iskoola-Pota','Abhaya Libre','Noto Sans Sinhala',Arial,sans-serif;color:#1e293b;`;
+      `width:${HTML_PAGE_WIDTH}px;min-height:${HTML_PAGE_HEIGHT}px;padding:${isFirstPage ? "36px 38px" : "30px 38px 36px"};box-sizing:border-box;background:#fff;font-family:'Iskoola Pota','Iskoola-Pota','Abhaya Libre','Noto Sans Sinhala',Arial,sans-serif;color:#1e293b;`;
+    const rowStart = pageStartIndex[idx] ?? idx * FIRST_PAGE_ROWS;
     const bodyRows = pageRows
       .map((r, i) => {
-        const no = String(idx * PER_PAGE + i + 1);
+        const no = String(rowStart + i + 1);
         const mno = r.member_no ?? r.voter_no ?? "";
         return `<tr style="background:${i % 2 ? "#f4f6fb" : "#fff"};">
             <td data-pdf-text style="padding:6px 7px;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:10.5px;">${escapeHtml(no)}</td>
@@ -272,8 +287,9 @@ export async function buildRegisterPdf(opts: {
       })
       .join("");
 
-    el.innerHTML = `
-      <!-- letterhead -->
+    const letterheadHtml = isFirstPage
+      ? `
+      <!-- letterhead (පළවෙනි පිටුව පමණයි) -->
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
         <div style="display:flex;align-items:center;gap:13px;">
           <div style="width:52px;height:52px;border-radius:50%;background:#9f1239;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;letter-spacing:0.5px;">coop</div>
@@ -301,9 +317,14 @@ export async function buildRegisterPdf(opts: {
           <div data-pdf-text style="font-size:10.5px;color:#475569;">${escapeHtml(totalLabel)}: <span style="display:inline-block;background:#fff;border:1px solid #a5b4fc;border-radius:7px;padding:3px 10px;font-weight:800;color:#312e81;">${escapeHtml(rows.length.toLocaleString())}</span></div>
         </div>
       </div>
+      `
+      : "";
+
+    el.innerHTML = `
+      ${letterheadHtml}
 
       <!-- table -->
-      <table style="width:100%;border-collapse:collapse;margin-top:14px;font-size:10.5px;">
+      <table style="width:100%;border-collapse:collapse;margin-top:${isFirstPage ? 14 : 0}px;font-size:10.5px;">
         <thead>
           <tr style="background:#1e2f6b;color:#fff;">
             ${head.map((h, hi) => `<th data-pdf-text style="padding:9px 7px;text-align:${hi === 0 ? "center" : "left"};font-weight:700;font-size:10px;">${escapeHtml(h)}</th>`).join("")}
