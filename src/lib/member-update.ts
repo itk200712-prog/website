@@ -17,8 +17,11 @@ export type RegisterFields = {
   gender?: string | null;
 };
 
-/** 12 අංක හෝ 9 අංක + v/x (ඔයාගේ රටේ ජා.හැ.අංක රීතිය) */
-export const NIC_PATTERN = /^(\d{12}|\d{9}[vVxX])$/;
+/**
+ * ජා.හැ.අංක රීතිය — 9 අංක + V/X (පරණ) · 12 අංක (අලුත්) · 9–12 අංක (පරණ ලේඛන වල
+ * තියෙන 10/11 අංක අංකන සහ 0000000000 placeholder එකත් save කරන්න පුළුවන් වෙන්න ඕනෑ)
+ */
+export const NIC_PATTERN = /^(\d{9}[vVxX]|\d{9,12})$/;
 
 export function cleanText(v: string | null | undefined): string {
   return String(v ?? "").replace(/\s+/g, " ").trim();
@@ -56,7 +59,7 @@ export function validateRegisterEdit(r: RegisterFields): string[] {
   if (cleanText(r.full_name).length < 2) errors.push("නම අනිවාර්යයි");
   if (cleanText(r.full_name).length > 120) errors.push("නම දිග වැඩියි");
   const nic = sanitizeNic(r.nic);
-  if (nic && !NIC_PATTERN.test(nic)) errors.push("NIC — අංක 12ක් හෝ අංක 9ක් + V/X විය යුතුයි");
+  if (nic && !NIC_PATTERN.test(nic)) errors.push("NIC — අංක 9–12ක් හෝ අංක 9ක් + V/X විය යුතුයි");
   const g = cleanText(r.gender);
   if (g && !["පුරුෂ", "පිරිමි", "කාන්තා"].includes(g)) errors.push("ස්ත්‍රී/පුරුෂ — පුරුෂ/පිරිමි/කාන්තා පමණයි");
   return errors;

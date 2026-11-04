@@ -1583,6 +1583,10 @@ ok("Member Update: editing a member auto-updates the matching voter row (NIC fir
 ok("Member Update: NIC / gender validation + incomplete-column badge + backup carries the edited tables",
   memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", nic: "123456789V" }).length === 0 &&
   memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", nic: "12345" }).length === 1 &&
+  // පරණ ලේඛනවල තියෙන 10/11 අංක NIC සහ 0000000000 placeholder save වෙන්න ඕනෑ
+  memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", nic: "19601870067" }).length === 0 &&
+  memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", nic: "0000000000" }).length === 0 &&
+  memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", nic: "893570683v" }).length === 0 &&
   memberUpdate.validateRegisterEdit({ member_no: "", full_name: "මුදිත" }).length === 1 &&
   memberUpdate.validateRegisterEdit({ member_no: "62/01", full_name: "මුදිත", gender: "වෙන" }).length === 1 &&
   memberUpdate.missingColumns({ member_no: "62/01", full_name: "නම", nic: "", address: "x", postal_address: "y", gender: "පුරුෂ" }).join(",") === "NIC" &&

@@ -320,7 +320,17 @@ export default function MemberUpdatePage() {
                   <tr key={r.id} className={i % 2 ? "bg-slate-50/60" : "bg-white"}>
                     <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{(page - 1) * PER_PAGE + i + 1}</td>
                     <td className="px-3 py-2 font-bold text-indigo-900 whitespace-nowrap">{rowNo(r) || "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{cleanText(r.nic) || <span className="text-rose-600 font-bold">හිස්</span>}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {cleanText(r.nic) ? (
+                        isRealNic(r.nic) ? cleanText(r.nic) : (
+                          <span className="text-amber-700" title="placeholder — ඇත්ත NIC එක දාන්න">
+                            {cleanText(r.nic)} <span className="text-[9.5px] font-bold uppercase">placeholder</span>
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-rose-600 font-bold">හිස්</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 font-semibold">{cleanText(r.full_name) || <span className="text-rose-600 font-bold">හිස්</span>}</td>
                     <td className="px-3 py-2">{cleanText(r.address) || <span className="text-rose-600 font-bold">හිස්</span>}</td>
                     <td className="px-3 py-2">{cleanText(r.postal_address) || <span className="text-rose-600 font-bold">හිස්</span>}</td>
@@ -395,6 +405,9 @@ export default function MemberUpdatePage() {
               {missingColumns({ ...form, member_no: form.member_no }).length === 0
                 ? "✅ තීරු 6ම පිරිලා — මේ පේළිය සයිට් එකේත් PDF එකේත් පෙන්වයි"
                 : `⚠ හිස්: ${missingColumns({ ...form, member_no: form.member_no }).join(", ")} — පිරෙව්වම තමයි සයිට් එකේ පේන්නේ`}
+              {form.nic.trim() && !isRealNic(form.nic) && (
+                <div className="mt-1.5 font-semibold text-amber-700">⚠ මේ NIC එක placeholder එකක් — ඇත්ත ජා.හැ.අංකය දාන්න</div>
+              )}
               {syncInfo && <div className="mt-1.5 font-semibold text-emerald-700">{syncInfo}</div>}
             </div>
             <div className="sm:col-span-2 flex items-center justify-end gap-2 pt-1">
