@@ -2484,3 +2484,24 @@ body.cursor-fx-on .cursor-fx { opacity: 1; }
     animation: none !important;
   }
 }
+
+/* ══════════════ Download With Special — premium emerald button ══════════════ */
+@keyframes specialDlGlow {
+  0%   { transform: translateX(-120%) rotate(8deg); }
+  100% { transform: translateX(120%) rotate(8deg); }
+}
+@keyframes specialDlPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.45); }
+  50%      { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
+}
+.special-dl {
+  background: linear-gradient(120deg, #059669 0%, #10b981 45%, #22d3ee 100%);
+  animation: specialDlPulse 2.8s ease-in-out infinite;
+}
+.special-dl-glow {
+  background: linear-gradient(105deg, transparent 25%, rgba(255,255,255,0.55) 50%, transparent 75%);
+  animation: specialDlGlow 2.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .special-dl, .special-dl-glow { animation: none !important; }
+}

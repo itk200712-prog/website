@@ -21,6 +21,7 @@ const branchSettings = await import("../src/lib/branch-settings.ts");
 const animSettings = await import("../src/lib/animation-settings.ts");
 const motionCompat = await import("../src/lib/motion-compat.ts");
 const memberUpdate = await import("../src/lib/member-update.ts");
+const specialAccess = await import("../src/lib/special-access.ts");
 
 console.log("\n── 1) Seed data (screenshots) ──");
 ok("14 business divisions", seed.BUSINESSES.length === 14, `got ${seed.BUSINESSES.length}`);
@@ -1240,7 +1241,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
+  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1308,7 +1309,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
+  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1346,7 +1347,7 @@ const latestBackupUpdateFiles = [
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files + professional glass auth pages",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-04-pdf-eta-v24" &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-04-special-download-v25" &&
   generatedSiteSource.SITE_SOURCE_FILES.length >= 48 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
@@ -1374,7 +1375,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
+  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1403,7 +1404,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
+  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1461,7 +1462,7 @@ ok("member/voter register PDF: visual page keeps a real invisible Unicode text l
   genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
   genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
   genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
+  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
 const signinPageSrc = readFileSync(join(root, "src/app/signin/page.tsx"), "utf8");
 const registerPageSrc = readFileSync(join(root, "src/app/register/page.tsx"), "utf8");
 const authShellSrc = readFileSync(join(root, "src/components/auth-shell.tsx"), "utf8");
@@ -1493,7 +1494,7 @@ ok("Sign In + Register professional glass experience: gradient glass shell (no p
   genSiteSourceSrc.includes('"src/app/signin/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/register/page.tsx"') &&
   genSiteSourceSrc.includes('"src/components/auth-shell.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
+  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
 
 const registerNoticeLib = await import("../src/lib/register-notice.ts");
 const noticeDefaults = registerNoticeLib.defaultRegisterNotice();
@@ -1538,7 +1539,70 @@ ok("member/voter register update notice: default text + phone, admin show/hide p
   genSiteSourceSrc.includes('"src/app/admin/settings/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/members/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/voters/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-pdf-eta-v24"));
+  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
+
+// ── Download With Special (admin-granted access + search-only PDF) ──────────
+const specialLibSrc = readFileSync(join(root, "src/lib/special-access.ts"), "utf8");
+const specialPanelSrc = readFileSync(join(root, "src/components/admin-special-access.tsx"), "utf8");
+const schemaSqlSrc = readFileSync(join(root, "supabase/schema.sql"), "utf8");
+
+ok("Download With Special: only signed-in users granted access in the admin panel see the button (F28-style)",
+  specialLibSrc.includes('export const SPECIAL_ACCESS_TABLE = "special_download_access"') &&
+  specialLibSrc.includes("export function canUseSpecialDownload") &&
+  specialAccess.canUseSpecialDownload("active") &&
+  !specialAccess.canUseSpecialDownload("none") &&
+  !specialAccess.canUseSpecialDownload("disabled") &&
+  !specialAccess.canUseSpecialDownload("unknown") &&
+  !specialAccess.canUseSpecialDownload("error") &&
+  specialAccess.accessStateFromRow({ status: "active" }) === "active" &&
+  specialAccess.accessStateFromRow({ status: "disabled" }) === "disabled" &&
+  specialAccess.accessStateFromRow(null) === "none" &&
+  // site page: access load + button hidden unless active
+  directorySrc.includes("SPECIAL_ACCESS_TABLE, SPECIAL_ACCESS_LABEL, accessStateFromRow, canUseSpecialDownload, specialFileLabel,") &&
+  directorySrc.includes('.from(SPECIAL_ACCESS_TABLE)') &&
+  directorySrc.includes('.eq("user_id", u.user.id)') &&
+  directorySrc.includes("const { data: u } = await sb.auth.getUser();") &&
+  directorySrc.includes("{canUseSpecialDownload(special) && (") &&
+  directorySrc.includes("SPECIAL_ACCESS_LABEL") &&
+  !directorySrc.includes("specialAccess={true}") &&
+  // admin panel wiring (Data & Live Metrics)
+  adminDataSrc.includes('import { AdminSpecialAccessPanel } from "@/components/admin-special-access";') &&
+  adminDataSrc.includes("<AdminSpecialAccessPanel />") &&
+  specialPanelSrc.includes('title="Do You Want to Authenticate?"') &&
+  specialPanelSrc.includes("Add User") &&
+  specialPanelSrc.includes("dbUpsert(") &&
+  specialPanelSrc.includes("SPECIAL_ACCESS_TABLE,") &&
+  specialPanelSrc.includes("Enable") &&
+  specialPanelSrc.includes("Disable") &&
+  genSiteSourceSrc.includes('"src/lib/special-access.ts"') &&
+  genSiteSourceSrc.includes('"src/components/admin-special-access.tsx"'));
+
+ok("Download With Special: button exports ONLY the current search results in the same register PDF format",
+  directorySrc.includes("async function downloadPdf(specialMode = false)") &&
+  directorySrc.includes("const label = specialMode ? specialFileLabel(base, q) : base;") &&
+  directorySrc.includes("rows: filtered.map((r) => ({ ...r })),") &&
+  directorySrc.includes('"full_name", "nic", "address", "postal_address", "member_no", "voter_no", "file_name",') &&
+  specialAccess.specialFileLabel("All-Files-Members", "දොරටියාගෙදර") === "All-Files-Members-දොරටියාගෙදර" &&
+  specialAccess.specialFileLabel("All-Files-Voters", "  ") === "All-Files-Voters-Special" &&
+  specialAccess.specialFileLabel("All-Files-Members", 'a/b:c*"d') === "All-Files-Members-a-b-c-d" &&
+  specialAccess.specialPdfFileName("All-Files-Members-දොරටියාගෙදර", "member") === "All-Files-Members-දොරටියාගෙදර-members-register.pdf" &&
+  specialAccess.filterAccessUsers([{ full_name: "මුදිත ලියනආරච්චි", nic: "123456789V" }], "මුදිත").length === 1 &&
+  specialAccess.filterAccessUsers([{ full_name: "මුදිත", nic: "123456789V" }], "999").length === 0 &&
+  specialAccess.dedupeAccessRows([
+    { id: "a", user_id: "u1", status: "disabled" },
+    { id: "b", user_id: "u1", status: "active" },
+    { id: "c", user_id: "u2", status: "active" },
+  ]).length === 2);
+
+ok("Download With Special: SQL table with own-row read + admin-only writes, and it rides inside backup export/import",
+  schemaSqlSrc.includes("create table if not exists public.special_download_access") &&
+  schemaSqlSrc.includes("alter table public.special_download_access enable row level security") &&
+  schemaSqlSrc.includes("using (user_id = auth.uid() or public.is_admin())") &&
+  schemaSqlSrc.includes("using (public.is_admin()) with check (public.is_admin())") &&
+  schemaSqlSrc.includes("create index if not exists special_dl_user_idx") &&
+  backupSrc.includes('{ name: "special_download_access", pk: "id" }') &&
+  !existsSync(join(root, "special-download-access.sql")) // helper SQL workspace එකේ විතරයි — repo එකට යන්නේ නෑ
+);
 
 // ── PDF "time remaining" (ETA) overlay ──────────────────────────────────────
 const pdfProgressSrc = readFileSync(join(root, "src/components/pdf-progress.tsx"), "utf8");

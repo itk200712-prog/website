@@ -8,11 +8,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { rowMatch } from "@/lib/search";
-import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, FileSpreadsheet, Layers, Printer, Search, Users, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Eye, FileSpreadsheet, Layers, Printer, Search, Users, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { RegisterNotice } from "@/components/register-notice";
 import { PdfProgressOverlay, type PdfProgressState } from "@/components/pdf-progress";
+import {
+  SPECIAL_ACCESS_TABLE, SPECIAL_ACCESS_LABEL, accessStateFromRow, canUseSpecialDownload, specialFileLabel,
+  type SpecialAccessState,
+} from "@/lib/special-access";
+import { authedClient } from "@/lib/supabase/client";
 import { filterCompleteRegisterRows, isCompleteRegisterRow } from "@/lib/register-rows";
 import type { DataFile, MemberRow, RegisterNoticeSetting, VoterRow } from "@/lib/types";
 
@@ -87,15 +92,45 @@ export function DirectoryTable({
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<AnyRow | null>(null);
   const [pdfAnim, setPdfAnim] = useState<PdfProgressState | null>(null);
+  // 🔐 "Download With Special" — sign in + admin අවසර තියෙන අයට විතරයි button එක පේන්නේ
+  const [special, setSpecial] = useState<SpecialAccessState>("unknown");
   const perPage = 25;
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const sb = await authedClient();
+        const { data: u } = await sb.auth.getUser();
+        if (!u?.user) {
+          if (alive) setSpecial("none");
+          return;
+        }
+        const { data, error } = await sb
+          .from(SPECIAL_ACCESS_TABLE)
+          .select("status")
+          .eq("user_id", u.user.id)
+          .maybeSingle();
+        if (!alive) return;
+        setSpecial(error ? "error" : accessStateFromRow(data as { status?: string } | null));
+      } catch {
+        if (alive) setSpecial("none");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // ✅ professional PDF — තෝරා ඇති file/සොයුම අනුව සියලු member details, සියලු පිටු වලට
-  async function downloadPdf() {
+  async function downloadPdf(specialMode = false) {
     if (!filtered.length) {
       alert(lang === "si" ? "PDF කිරීමට දත්ත නැත" : "No data to export");
       return;
     }
-    const label = file === "all" ? (kind === "member" ? "All-Files-Members" : "All-Files-Voters") : file;
+    const base = file === "all" ? (kind === "member" ? "All-Files-Members" : "All-Files-Voters") : file;
+    // ✅ Download With Special → දැන් සර්ච් කරලා ඉන්න result ටික විතරයි, සෙවුමේ නමත් PDF එකේ ලියවෙනවා
+    const label = specialMode ? specialFileLabel(base, q) : base;
     // ⏱ "ඉතිරි වෙලාව" (ETA) සහිත animated overlay
     setPdfAnim({ label, pct: 0, page: 0, totalPages: 0, elapsedMs: 0, etaMs: null, done: false });
     try {
@@ -160,7 +195,8 @@ export function DirectoryTable({
     return allRows.filter((r) => {
       if (file !== "all" && r.file_name !== file) return false;
       return rowMatch(r as unknown as Record<string, unknown>, q, [
-        "full_name", "nic", "address", "member_no", "voter_no", "file_name",
+        // ✅ address සහ postal_address දෙකම — "දොරටියාගෙදර" වගේ ලිපිනයකින් සෙව්වම ඒ අය විතරයි එනවා
+        "full_name", "nic", "address", "postal_address", "member_no", "voter_no", "file_name",
       ]);
     });
   }, [q, file, allRows]);
@@ -211,12 +247,37 @@ export function DirectoryTable({
                 {sub && <p className="text-indigo-100/80 text-[13px] mt-1.5">{sub}</p>}
               </div>
             </div>
-            <button
-              onClick={downloadPdf}
-              className="inline-flex items-center gap-2 rounded-2xl bg-amber-400 hover:bg-amber-300 active:scale-[0.97] text-slate-900 font-extrabold text-[13px] px-5 py-3 shadow-lg shadow-amber-500/25 transition-all"
-            >
-              <Printer size={16} /> {t.memberPage.downloadPdf}
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => void downloadPdf(false)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-amber-400 hover:bg-amber-300 active:scale-[0.97] text-slate-900 font-extrabold text-[13px] px-5 py-3 shadow-lg shadow-amber-500/25 transition-all"
+              >
+                <Printer size={16} /> {t.memberPage.downloadPdf}
+              </button>
+
+              {/* 🔐 Download With Special — sign in + admin අවසර ලැබූ අයට විතරයි.
+                  දැන් සර්ච් කරලා ඉන්න result ටික එකම PDF ආකෘතියෙන් බාගත කරයි. */}
+              {canUseSpecialDownload(special) && (
+                <button
+                  onClick={() => void downloadPdf(true)}
+                  className="special-dl group relative inline-flex items-center gap-2 overflow-hidden rounded-2xl px-5 py-3 text-[13px] font-extrabold text-white shadow-[0_10px_30px_-10px_rgba(16,185,129,0.9)] transition-all hover:-translate-y-0.5 active:scale-[0.97]"
+                  title={
+                    lang === "si"
+                      ? "දැන් සර්ච් කරපු ප්‍රතිඵල විතරක් PDF එකක් ලෙස බාගන්න"
+                      : "Download only the current search results as a PDF"
+                  }
+                >
+                  <span className="special-dl-glow pointer-events-none absolute inset-0" />
+                  <Download size={16} className="relative" />
+                  <span className="relative">
+                    {SPECIAL_ACCESS_LABEL}
+                    <span aria-hidden="true" className="ml-1 rounded-full bg-white/25 px-1.5 py-0.5 text-[10px] font-bold tabular-nums">
+                      {filtered.length.toLocaleString()}
+                    </span>
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ═══════════════ toolbar ═══════════════ */}

@@ -34,6 +34,7 @@ export const BACKUP_TABLES: BackupTable[] = [
   { name: "member_rows", pk: "id" },
   { name: "voter_rows", pk: "id" },
   { name: "data_files", pk: "id" },
+  { name: "special_download_access", pk: "id" },
   { name: "data_imports", pk: "id" },
   { name: "membership_applications", pk: "id" },
   { name: "board_members", pk: "id" },

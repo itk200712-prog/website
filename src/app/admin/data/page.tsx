@@ -16,6 +16,7 @@ import { MEMBER_FILES, SETTINGS, VOTER_FILES } from "@/lib/seed";
 import { isCompleteRegisterRow } from "@/lib/register-rows";
 import { PdfProgressOverlay, type PdfProgressState } from "@/components/pdf-progress";
 import type { RegisterPdfProgress } from "@/lib/pdf-register";
+import { AdminSpecialAccessPanel } from "@/components/admin-special-access";
 
 const MODES = [
   { key: "append", label: "Append to existing list" },
@@ -566,6 +567,9 @@ export default function AdminDataPage() {
         <ImportPanel kind="member" title="Members Directory Registry (කාරක සභා 52)" />
         <ImportPanel kind="voter" title="Electoral Register / චන්ද හිමි ලැයිස්තුව" />
       </div>
+
+      {/* 🔐 Download With Special — අවසර දෙන පැනලය (F28 වගේ) */}
+      <AdminSpecialAccessPanel />
     </div>
   );
 }

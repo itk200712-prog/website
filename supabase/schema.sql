@@ -843,6 +843,32 @@ drop policy if exists "f28_items_all" on public.f28_items;
 create policy "f28_items_all" on public.f28_items for all to authenticated using (true) with check (true);
 
 -- ===========================================================================
+-- 12b. Download With Special — තෝරාගත් users ලට පමණක් (F28 වගේම)
+--      · user කෙනෙකුට තමන්ගේ row එක විතරයි කියවන්න පුළුවන්
+--      · add / enable / disable / delete කරන්නේ admin ලට විතරයි
+-- ===========================================================================
+create table if not exists public.special_download_access (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique,
+  nic text default '',
+  full_name text default '',
+  status text not null default 'active',
+  created_at timestamptz default now()
+);
+alter table public.special_download_access enable row level security;
+-- තමන්ගේ row එක (sign in වූ user) කියවන්න පමණයි
+drop policy if exists "special_dl_read_own" on public.special_download_access;
+create policy "special_dl_read_own" on public.special_download_access
+  for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+-- ලිවීම admin ලට පමණයි
+drop policy if exists "special_dl_admin_write" on public.special_download_access;
+create policy "special_dl_admin_write" on public.special_download_access
+  for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+create index if not exists special_dl_user_idx on public.special_download_access (user_id);
+
+-- ===========================================================================
 -- 13. Backup & Restore (superadmin only) — secrets + images + download/upload history
 -- ===========================================================================
 create table if not exists public.backup_secrets (

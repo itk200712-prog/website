@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-11-04-pdf-eta-v24";
+const SITE_PACKAGE_VERSION = "2026-11-04-special-download-v25";
 
 const FILES = [
   "src/app/globals.css",
@@ -48,6 +48,7 @@ const FILES = [
   "src/components/business-detail.tsx",
   "src/components/directory.tsx",
   "src/components/pdf-progress.tsx",
+  "src/components/admin-special-access.tsx",
   "src/components/auth-shell.tsx",
   "src/components/register-notice.tsx",
   "src/components/gallery-grid.tsx",
@@ -64,6 +65,7 @@ const FILES = [
   "src/lib/pdf-register.ts",
   "src/lib/register-rows.ts",
   "src/lib/member-update.ts",
+  "src/lib/special-access.ts",
   "src/lib/register-notice.ts",
   "src/lib/motion-compat.ts",
   "src/lib/animation-settings.ts",
