@@ -805,6 +805,18 @@ ok("root: password reset is server-only (service role + Auth Admin API + display
   resetRouteSrc.includes("password_display") &&
   resetRouteSrc.includes("self_reset_use_profile") &&
   membersSrc.includes('fetch("/api/admin-reset-password"'));
+ok("login: NIC login retries the real auth email + admin reset creates a missing login account", 
+  readFileSync(join(root, "src/lib/auth.ts"), "utf8").includes("login_email_for_nic") &&
+  readFileSync(join(root, "src/lib/auth.ts"), "utf8").includes("const candidates: string[] = []") &&
+  readFileSync(join(root, "src/lib/auth.ts"), "utf8").includes("return { error: null, role: uid ? await roleOf(sb, uid) : \"member\" }") &&
+  resetRouteSrc.includes("createdLogin") &&
+  resetRouteSrc.includes("auth_create_failed") &&
+  resetRouteSrc.includes("email: nicEmail") &&
+  resetRouteSrc.includes("profilePatch.auth_email = loginEmail") &&
+  schema.includes("create or replace function public.login_email_for_nic(p_nic text)") &&
+  schema.includes("grant execute on function public.login_email_for_nic(text) to anon, authenticated") &&
+  schema.includes("ilike '%@members.mpcs.lk'"));
+
 ok("root: admin UIs lock protected accounts (view/edit/delete/role)",
   membersSrc.includes("canViewPassword") &&
   membersSrc.includes("canDeleteAccount") &&

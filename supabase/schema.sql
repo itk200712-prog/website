@@ -58,6 +58,24 @@ drop trigger if exists trg_protect_role on public.profiles;
 create trigger trg_protect_role before update on public.profiles
   for each row execute function public.protect_role_change();
 
+-- ✅ NIC → login email lookup (SECURITY DEFINER)
+--    Backup restore එකකින් හෝ admin එකෙන් NIC edit කිරීමෙන් auth email එක
+--    වෙනස් වුණත් NIC එකෙන්ම login වෙන්න පුළුවන් වෙන්න. රහස් email එකක් කවදාවත්
+--    return කරන්නේ නෑ — @members.mpcs.lk ලෙස හදපු synthetic email එක විතරයි.
+create or replace function public.login_email_for_nic(p_nic text)
+returns text
+language sql stable security definer set search_path = public
+as $$
+  select p.auth_email
+  from public.profiles p
+  where upper(regexp_replace(coalesce(p.nic, ''), '[[:space:]-]', '', 'g')) =
+        upper(regexp_replace(coalesce(p_nic, ''), '[[:space:]-]', '', 'g'))
+    and coalesce(p.auth_email, '') ilike '%@members.mpcs.lk'
+  limit 1
+$$;
+
+grant execute on function public.login_email_for_nic(text) to anon, authenticated;
+
 -- ---------------------------------------------------------------------------
 -- 2. business_units + children
 -- ---------------------------------------------------------------------------

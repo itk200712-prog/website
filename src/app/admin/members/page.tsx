@@ -303,7 +303,11 @@ export default function AdminMembersPage() {
                           ? "Server setup එක අඩුයි — Vercel එකේ SUPABASE_SERVICE_ROLE_KEY env එක අවශ්‍යයි"
                           : j?.reason === "weak_password"
                             ? "Password එක දුර්වලයි — අකුරු 8කට වැඩි එකක් දාන්න"
-                            : "Password reset එක අසාර්ථක වුණා";
+                            : j?.reason === "auth_create_failed"
+                              ? "මේ ගිණුමට login account එකක් හදන්න බැරි වුණා — Supabase → Authentication → Users එකේ email එක දැනටමත් තියෙනවද බලන්න"
+                              : j?.reason === "no_login_email"
+                                ? "මේ member ගේ NIC/email එක පිරිලා නෑ — NIC එක හරිද බලන්න"
+                                : "Password reset එක අසාර්ථක වුණා";
                     setEditFor(null);
                     await load();
                     show(`⚠ විස්තර save වුණා, නමුත් ${reasonText}`);
@@ -319,7 +323,11 @@ export default function AdminMembersPage() {
               }
               setEditFor(null);
               await load();
-              show(newPw ? "✅ Updated — අලුත් password එකෙන් දැන් login වෙන්න පුළුවන්" : "✅ Member updated");
+              show(
+                newPw
+                  ? "✅ Updated — අලුත් password එකෙන් දැන් NIC එකෙන් login වෙන්න පුළුවන්"
+                  : "✅ Member updated"
+              );
             }}
             className="space-y-4"
           >

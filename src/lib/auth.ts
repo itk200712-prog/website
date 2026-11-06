@@ -111,6 +111,39 @@ export async function registerMember(input: {
   return { error: null };
 }
 
+type SbClient = ReturnType<typeof createClient>;
+
+/** Login වුණු කෙනාගේ role එක profiles එකෙන් (හැම වෙලාවෙම ඇත්ත role එක) */
+async function roleOf(sb: SbClient, uid: string): Promise<string> {
+  try {
+    const { data } = await sb.from("profiles").select("role").eq("id", uid).maybeSingle();
+    const role = (data as { role?: string } | null)?.role;
+    return role || "member";
+  } catch {
+    return "member";
+  }
+}
+
+/**
+ * NIC එකට අදාළ "ඇත්ත" auth email එක.
+ * Backup restore / admin එකෙන් NIC edit කිරීම වගේ අවස්ථාවල auth email එක
+ * NIC එකෙන් හදන email එකට වෙනස් වෙන්න පුළුවන් — එතකොට login එක fail වෙනවා.
+ * මේක `public.login_email_for_nic()` RPC (SECURITY DEFINER, @members.mpcs.lk පමණයි) එකෙන් ගන්නවා.
+ * SQL function එක තාම run කරලා නැත්නම් නිකම් හිස් අගයක් එනවා (login එක නවත්තන්නේ නෑ).
+ */
+async function emailForNic(sb: SbClient, nic: string): Promise<string> {
+  try {
+    const { data } = await sb.rpc("login_email_for_nic", { p_nic: nic });
+    const value = typeof data === "string" ? data.trim().toLowerCase() : "";
+    return value.includes("@") ? value : "";
+  } catch {
+    return "";
+  }
+}
+
+const CONFIRM_MSG =
+  "Email confirm වී නැත — Supabase හි \"Confirm email\" OFF කරලා admin ට කියන්න";
+
 export async function loginWithNic(
   nic: string,
   password: string
@@ -119,34 +152,28 @@ export async function loginWithNic(
   const sb = createClient();
   // ✅ NIC field එකේ email එකක් දැම්මත් වැඩ (පරණ accounts වලට safety net)
   const raw = nic.trim();
-  const email = raw.includes("@") ? raw : nicToEmail(raw);
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) {
-    if (/email not confirmed/i.test(error.message || "")) {
-      return { error: "Email confirm වී නැත — Supabase හි \"Confirm email\" OFF කරලා admin ට කියන්න" };
+  const candidates: string[] = [];
+  const push = (value: string) => {
+    const email = value.trim().toLowerCase();
+    if (email && email.includes("@") && !candidates.includes(email)) candidates.push(email);
+  };
+  // ① සාමාන්‍ය තත්ත්වය — NIC → {nic}@members.mpcs.lk
+  push(raw.includes("@") ? raw : nicToEmail(raw));
+  // ② seed කරන ලද superadmin account එක
+  if (raw.toLowerCase() === "superadmin") push("superadmin@mpcs.lk");
+  // ③ profile එකේ ඇත්ත auth_email එක (NIC edit / backup restore වලින් වෙනස් වෙලා නම්)
+  if (!raw.includes("@")) push(await emailForNic(sb, raw));
+
+  for (const email of candidates) {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (!error) {
+      storeTokens(data.session); // ✅ localStorage එකට token
+      const uid = data.user?.id ?? "";
+      return { error: null, role: uid ? await roleOf(sb, uid) : "member" };
     }
-    // Superadmin seed uses superadmin@mpcs.lk — try fallback email forms
-    const alt = await sb.auth.signInWithPassword({
-      email: raw.toLowerCase() === "superadmin" ? "superadmin@mpcs.lk" : email,
-      password,
-    });
-    if (alt.error) {
-      if (/email not confirmed/i.test(alt.error?.message || "")) {
-        return { error: "Email confirm වී නැත — Supabase හි \"Confirm email\" OFF කරලා admin ට කියන්න" };
-      }
-      return { error: "Invalid NIC or password" };
-    }
-    storeTokens(alt.data.session); // ✅ localStorage එකට token
-    return { error: null, role: "superadmin" };
+    if (/email not confirmed/i.test(error.message || "")) return { error: CONFIRM_MSG };
   }
-  storeTokens(data.session); // ✅ localStorage එකට token
-  const uid = data.user?.id;
-  let role = "member";
-  if (uid) {
-    const { data: prof } = await sb.from("profiles").select("role").eq("id", uid).single();
-    if (prof?.role) role = prof.role;
-  }
-  return { error: null, role };
+  return { error: "Invalid NIC or password" };
 }
 
 /**

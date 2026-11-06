@@ -72,7 +72,7 @@ async function restRows(path: string, serviceKey: string): Promise<Record<string
 }
 
 async function loadAccounts(serviceKey: string): Promise<AccountLike[] | null> {
-  const rows = await restRows("profiles?select=id,role,joined_date,nic,auth_email", serviceKey);
+  const rows = await restRows("profiles?select=id,role,joined_date,nic,auth_email,full_name", serviceKey);
   if (!rows) return null;
   const accounts = rows as AccountLike[];
   // is_root_admin column එක තියෙනවා නම් ඒ ලකුණත් ගන්නවා (නැත්නම් seed/පැරණිම එක අනුව හොයයි)
@@ -134,22 +134,66 @@ export async function POST(req: NextRequest) {
     return json({ ok: false, reason: "protected_admin" }, 403);
   }
 
+  // ✅ Login එක වැඩ කරන්නම ඕන email එක — NIC එකෙන් හදන එකම
+  //    (NIC edit / backup restore වලින් auth email එක වෙනස් වෙලා තිබ්බොත් login එක fail වෙනවා →
+  //     reset කරන වෙලාවෙම ඒකත් හදනවා)
+  const cleanNic = String(target.nic ?? "").replace(/[\s-]/g, "");
+  const nicEmail = /^(\d{9}[vV]|\d{12})$/.test(cleanNic) ? `${cleanNic.toLowerCase()}@members.mpcs.lk` : "";
+  const adminHeaders = {
+    apikey: serviceKey,
+    Authorization: `Bearer ${serviceKey}`,
+    "Content-Type": "application/json",
+  };
+
   // 1) ඇත්ත login password එක (Supabase Auth Admin API)
-  const authUpdate = await fetchJson(`${base}/auth/v1/admin/users/${encodeURIComponent(targetId)}`, {
-    method: "PUT",
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ password: newPassword, email_confirm: true }),
-  });
-  if (authUpdate.status < 200 || authUpdate.status >= 300) {
-    return json({ ok: false, reason: "auth_update_failed", status: authUpdate.status || undefined }, 502);
+  let authStatus = 0;
+  let loginEmail = nicEmail;
+  const putUser = (body: Record<string, unknown>) =>
+    fetchJson(`${base}/auth/v1/admin/users/${encodeURIComponent(targetId)}`, {
+      method: "PUT",
+      headers: adminHeaders,
+      body: JSON.stringify(body),
+    });
+
+  const withEmail = nicEmail
+    ? await putUser({ password: newPassword, email: nicEmail, email_confirm: true })
+    : { status: 0, data: null };
+  const authUpdate = nicEmail && withEmail.status >= 200 && withEmail.status < 300
+    ? withEmail
+    : await putUser({ password: newPassword, email_confirm: true });
+  authStatus = authUpdate.status;
+  if (withEmail.status >= 200 && withEmail.status < 300) loginEmail = nicEmail;
+  else if (nicEmail) loginEmail = String(target.auth_email ?? "").trim() || nicEmail;
+
+  // Auth account එකක්ම නැත්නම් (backup restore / import කරපු profile) → අලුතින් හදනවා
+  let createdLogin = false;
+  if (authStatus === 404) {
+    const createEmail = nicEmail || String(target.auth_email ?? "").trim();
+    if (!createEmail) return json({ ok: false, reason: "no_login_email" }, 400);
+    const create = await fetchJson(`${base}/auth/v1/admin/users`, {
+      method: "POST",
+      headers: adminHeaders,
+      body: JSON.stringify({
+        id: targetId,
+        email: createEmail,
+        password: newPassword,
+        email_confirm: true,
+        user_metadata: { nic: cleanNic, role: target.role ?? "member" },
+      }),
+    });
+    if (create.status < 200 || create.status >= 300) {
+      return json({ ok: false, reason: "auth_create_failed", status: create.status || undefined }, 502);
+    }
+    createdLogin = true;
+    loginEmail = createEmail;
+  } else if (authStatus < 200 || authStatus >= 300) {
+    return json({ ok: false, reason: "auth_update_failed", status: authStatus || undefined }, 502);
   }
 
-  // 2) Admin ලාට පේන password_display එකත් sync කරනවා (base64)
+  // 2) Admin ලාට පේන password_display එකත් sync කරනවා (base64) + auth_email එකත් හරි කරනවා
   const display = Buffer.from(newPassword, "utf8").toString("base64");
+  const profilePatch: Record<string, unknown> = { password_display: display };
+  if (loginEmail) profilePatch.auth_email = loginEmail;
   const profileUpdate = await fetchJson(`${base}/rest/v1/profiles?id=eq.${encodeURIComponent(targetId)}`, {
     method: "PATCH",
     headers: {
@@ -158,11 +202,16 @@ export async function POST(req: NextRequest) {
       "Content-Type": "application/json",
       Prefer: "return=representation",
     },
-    body: JSON.stringify({ password_display: display }),
+    body: JSON.stringify(profilePatch),
   });
   if (profileUpdate.status < 200 || profileUpdate.status >= 300) {
     return json({ ok: false, reason: "profile_update_failed", status: profileUpdate.status || undefined }, 502);
   }
 
-  return json({ ok: true, targetRole: target.role ?? "member" });
+  return json({
+    ok: true,
+    targetRole: target.role ?? "member",
+    createdLogin,
+    loginEmail: loginEmail || undefined,
+  });
 }
