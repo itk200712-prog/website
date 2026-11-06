@@ -229,17 +229,25 @@ export async function buildRegisterPdf(opts: {
   onProgress?: (info: RegisterPdfProgress) => void;
 }): Promise<void> {
   const { kind, label, onProgress } = opts;
-  // ⏱ "ඉතිරි වෙලාව" ගණනයට — පිටුවකට ගිය සාමාන්‍ය වේලාවෙන් ඉතිරි පිටු ගණන ගුණ කරයි.
+  // ⏱ "ඉතිරි වෙලාව" ගණනයට — පිටුවකට ගිය වේලාවෙන් ඉතිරි පිටු ගණන ගුණ කරයි.
+  //   · මුල් පිටුව (letterhead + fonts) හැම වෙලාවෙම ලොකු වෙලාවක් ගන්නවා → සම්පූර්ණ සාමාන්‍යයෙන් ගණන් කළොත්
+  //     ETA එක පැන පැන වෙනස් වෙනවා. ඒ නිසා "පසුගිය පිටුවේ වේලාව" (LIVE) ට වැඩි බරක් දීලා,
+  //     සම්පූර්ණ සාමාන්‍යය (cumulative) එක්ක මිශ්‍ර කරනවා → අංකය ස්වභාවිකව අඩු වෙනවා, පනින්නේ නෑ.
   const startedAt = Date.now();
   let renderedPages = 0;
   let totalPages = 0;
   let elapsedTotal = 0;
+  let emaPageMs = 0; // පිටුවකට ගත වෙන වේලාවේ smooth (EMA) අගය
+  let pageStartedAt = Date.now();
   const report = (pct: number) => {
     const elapsedMs = Date.now() - startedAt;
     let etaMs: number | null = null;
     if (renderedPages > 0 && totalPages > renderedPages) {
-      const avg = elapsedTotal / renderedPages;
-      etaMs = Math.max(500, Math.round(avg * (totalPages - renderedPages)));
+      const cumAvg = elapsedTotal / renderedPages;
+      // පළවෙනි පිටු 2 ට පස්සේ LIVE අගයට වැඩි බර (0.62), මුල් පිටුවලදී cumulative එකට වැඩි බර
+      const liveWeight = renderedPages <= 2 ? 0.35 : 0.62;
+      const perPage = emaPageMs * liveWeight + cumAvg * (1 - liveWeight);
+      etaMs = Math.max(400, Math.round(perPage * (totalPages - renderedPages)));
     }
     onProgress?.({ pct: Math.max(0, Math.min(100, pct)), page: renderedPages, totalPages, elapsedMs, etaMs });
   };
@@ -424,6 +432,7 @@ export async function buildRegisterPdf(opts: {
   report(4);
 
   for (let i = 0; i < pageSplits.length; i++) {
+    pageStartedAt = Date.now();
     const split = pageSplits[i];
     const el = makePage(rows.slice(split.start, split.start + split.count), i, pageSplits.length, split.start);
     host.appendChild(el);
@@ -439,6 +448,9 @@ export async function buildRegisterPdf(opts: {
     host.removeChild(el);
     renderedPages = i + 1;
     elapsedTotal = Date.now() - startedAt;
+    // පසුගිය පිටුවේ වේලාව — EMA (α = 0.55) → පිටුවක් හෙමින්/වේගයෙන් ගියත් ETA එක පනින්නේ නෑ
+    const thisPageMs = Math.max(1, Date.now() - pageStartedAt);
+    emaPageMs = emaPageMs === 0 ? thisPageMs : emaPageMs * 0.45 + thisPageMs * 0.55;
     // 4% → 100% අතර, පිටු ගණනට අනුව
     report(4 + Math.round(((i + 1) / pageSplits.length) * 96));
     // browsers හිස් කරන්න ඉඩ දෙන්න (ලොකු PDF වලට)

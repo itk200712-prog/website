@@ -1612,8 +1612,9 @@ const directorySrcAll = readFileSync(join(root, "src/components/directory.tsx"),
 ok("PDF overlay: members + voters show a live time-remaining (ETA) countdown with a strong animation",
   pdfRegisterSrc.includes("export type RegisterPdfProgress") &&
   pdfRegisterSrc.includes("etaMs: number | null") &&
-  pdfRegisterSrc.includes("const avg = elapsedTotal / renderedPages") &&
-  pdfRegisterSrc.includes("etaMs = Math.max(500, Math.round(avg * (totalPages - renderedPages)))") &&
+  pdfRegisterSrc.includes("const cumAvg = elapsedTotal / renderedPages") &&
+  pdfRegisterSrc.includes("etaMs = Math.max(400, Math.round(perPage * (totalPages - renderedPages)))") &&
+  pdfRegisterSrc.includes("emaPageMs = emaPageMs === 0 ? thisPageMs : emaPageMs * 0.45 + thisPageMs * 0.55") &&
   pdfRegisterSrc.includes("report(4 + Math.round(((i + 1) / pageSplits.length) * 96))") &&
   pdfProgressSrc.includes('si ? "ඉතිරි වෙලාව" : "TIME REMAINING"') &&
   pdfProgressSrc.includes("export function formatClock") &&
@@ -1623,6 +1624,13 @@ ok("PDF overlay: members + voters show a live time-remaining (ETA) countdown wit
   pdfProgressSrc.includes("pdf-shimmer") &&
   pdfProgressSrc.includes("pdf-tick") &&
   pdfProgressSrc.includes("pdf-burst") &&
+  // smooth + human-like countdown: report අතරේත් ETA එක තත්පරයේ කොටසකින් අඩු වේ (පනින්නේ නෑ)
+  pdfProgressSrc.includes("const etaTarget = r.eta === null ? null : Math.max(0, r.eta - since)") &&
+  pdfProgressSrc.includes("d.eta += (etaTarget - d.eta) * (1 - Math.exp(-dt / 900))") &&
+  pdfProgressSrc.includes("d.pct += (pctTarget - d.pct) * (1 - Math.exp(-dt / 520))") &&
+  pdfProgressSrc.includes("window.setInterval(() => {") &&
+  pdfProgressSrc.includes("stroke-dashoffset 200ms linear") &&
+  pdfProgressSrc.includes("formatClock(Math.max(eta, 900))") &&
   pdfProgressSrc.includes("shouldReduceMotion") &&
   globalsCssAll.includes("@keyframes pdfAuroraSpin") &&
   globalsCssAll.includes("@keyframes pdfOrbitSpin") &&
