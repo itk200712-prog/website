@@ -12,6 +12,7 @@ import {
   backupHistoryIdsToPrune,
   buildManifest,
   buildRecoveryChecklist,
+  dedupeTableRows,
   encryptBackupText,
   sha256Hex,
   type ParsedInsert,
@@ -516,6 +517,17 @@ export async function generateBackupSql(
   await Promise.all(Array.from({ length: Math.min(3, BACKUP_TABLES.length) }, () => gatherWorker()));
   for (const w of gatherWarnings) if (w) lines.push(w);
 
+  // 🔁 EXPORT dedupe — board_members / gallery_items වල duplicate rows ZIP එකට යන්නේ නෑ
+  //    (site එකේ පේන ලෙසම: එකම නම / එකම image එක වරක් විතරයි). Merge කරද්දී හිස් තැන් පිරෙනවා.
+  for (const g of gathered) {
+    if (!g) continue;
+    const before = g.rows.length;
+    g.rows = dedupeTableRows(g.name, g.rows);
+    if (g.rows.length !== before) {
+      lines.push(`-- 🔁 ${g.name}: duplicate ${before - g.rows.length}ක් merge කළා (${before} → ${g.rows.length})`);
+    }
+  }
+
   // DDL
   onProgress("Writing table DDL…", 50);
   lines.push(`-- ------------------------------- TABLES -------------------------------`);
@@ -637,6 +649,14 @@ export async function restoreBackup(
     if (!byTable.has(ins.table)) byTable.set(ins.table, []);
     byTable.get(ins.table)!.push(row);
   }
+  // 🔁 IMPORT dedupe — පරණ backup එකක duplicate board/gallery rows තිබුණත් ඒවා
+  //    නැවත හැදෙන්නේ නෑ. (board_members_email_uniq index එකත් කැඩෙන්නේ නෑ.)
+  let dedupedRows = 0;
+  for (const [name, rows] of byTable) {
+    const clean = dedupeTableRows(name, rows);
+    if (clean.length !== rows.length) dedupedRows += rows.length - clean.length;
+    byTable.set(name, clean);
+  }
 
   // 1) storage images first (URL rewrite එකට)
   onProgress("Restoring images to storage…", 5);
@@ -753,6 +773,37 @@ export async function restoreBackup(
       }
     }
     if (!failed) restored[t.name] = rows.length;
+  }
+
+  // 2b) 📊 Restore එකෙන් පස්සේ system_settings වල සාමාජික/ඡන්ද ගණන් ඇත්තට sync කරයි
+  //     — නැත්නම් පරණ backup එකක තිබ්බ පරණ ගණනක් pages වල පෙන්නන්න පුළුවන්.
+  if (restored["member_rows"] != null || restored["voter_rows"] != null || restored["data_files"] != null) {
+    try {
+      const [m, v, mf, vf] = await Promise.all([
+        sb.from("member_rows").select("id", { count: "exact", head: true }),
+        sb.from("voter_rows").select("id", { count: "exact", head: true }),
+        sb.from("data_files").select("file_name").eq("kind", "member"),
+        sb.from("data_files").select("file_name").eq("kind", "voter"),
+      ]);
+      const uniq = (rows: { file_name?: string }[] | null) =>
+        new Set((rows ?? []).map((r) => String(r.file_name ?? "").trim()).filter(Boolean)).size;
+      const patch: { key: string; value: string }[] = [];
+      if (typeof m.count === "number") patch.push({ key: "members_total", value: String(m.count) });
+      if (typeof v.count === "number") patch.push({ key: "voters_total", value: String(v.count) });
+      if (!mf.error) patch.push({ key: "members_files_count", value: String(uniq(mf.data as { file_name?: string }[] | null)) });
+      if (!vf.error) patch.push({ key: "voters_files_count", value: String(uniq(vf.data as { file_name?: string }[] | null)) });
+      if (patch.length) {
+        const { error } = await sb.from("system_settings").upsert(patch, { onConflict: "key" });
+        if (error) throw new Error(error.message);
+      }
+    } catch (e) {
+      errors.push(`counters sync: ${(e as Error).message}`);
+    }
+  }
+
+  // 2c) 🔁 Duplicate rows merge වුණා නම් ඒ ගැන දැනුම් දේ (කිසිවක් නැති වුණේ නෑ)
+  if (dedupedRows > 0) {
+    errors.push(`ℹ duplicate rows ${dedupedRows}ක් merge කළා (board/gallery) — දත්ත කිසිවක් මකා නෑ, හිස් තැන් පුරවා එක row එකක් කළා.`);
   }
 
   // 3) ⚠ Import/Restore එකෙන් කිසිම ගිණුමක් මකන්නේ නෑ (profiles NEVER deleted)

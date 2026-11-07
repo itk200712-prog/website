@@ -102,6 +102,82 @@ export function parseBackupSql(sql: string): ParsedInsert[] {
   return out;
 }
 
+/* ------------------------------------------------------------ DEDUPE --- */
+/**
+ * 🔁 Board of Directors / Officers duplicate ඉවත් කිරීම (export + import දෙකේම).
+ *
+ * හේතුව: seed row එකේ email තියෙනවා (`member5@mpcs.lk`) නමුත් admin එකෙන් photo
+ * upload කරපු row එකේ email හිස් — ඒ නිසා එකම කෙනා rows දෙකක් වෙනවා. Backup එකක්
+ * export/import කරද්දී ඒ duplicate ටික ආයේ හැදෙන එක නවත්වන්න මේකෙන් rows
+ * write කරන්න කලින්ම එකට එකතු කරනවා (හිස් තැන් පිරවීම සමඟ).
+ */
+const BOARD_MERGE_FIELDS = [
+  "photo", "qualification", "phone", "email", "address", "name_si", "position_en", "position_si",
+] as const;
+
+function dedupeKey(name: unknown): string {
+  return String(name ?? "").toLowerCase().replace(/[\s.\-_/\\,'"]+/g, "");
+}
+
+function filled(v: unknown): boolean {
+  return v !== null && v !== undefined && String(v).trim() !== "";
+}
+
+function richness(row: Record<string, unknown>, fields: readonly string[]): number {
+  return fields.reduce((n, f) => n + (filled(row[f]) ? 1 : 0), 0);
+}
+
+export function dedupeBoardRows<T extends Record<string, unknown>>(rows: readonly T[]): T[] {
+  const order: string[] = [];
+  const best = new Map<string, T>();
+  for (const row of rows) {
+    const nameKey = dedupeKey(row.name_en);
+    const key = nameKey.length >= 3 ? `n:${nameKey}` : `e:${String(row.email ?? "").toLowerCase()}`;
+    const prev = best.get(key);
+    if (!prev) {
+      best.set(key, row);
+      order.push(key);
+      continue;
+    }
+    const merged: Record<string, unknown> = { ...prev };
+    for (const f of BOARD_MERGE_FIELDS) if (!filled(merged[f]) && filled(row[f])) merged[f] = row[f];
+    if (!filled(merged.category) && filled(row.category)) merged.category = row.category;
+    best.set(key, (richness(row, BOARD_MERGE_FIELDS) > richness(prev, BOARD_MERGE_FIELDS) ? { ...row, ...merged } : merged) as T);
+  }
+  return order.map((k) => best.get(k)!);
+}
+
+/** 🖼 Gallery — එකම image එක (path/URL) දෙපාරක් පෙන්වීම නවත්වයි */
+export function dedupeGalleryRows<T extends Record<string, unknown>>(rows: readonly T[]): T[] {
+  const order: string[] = [];
+  const best = new Map<string, T>();
+  for (const row of rows) {
+    const key = String(row.image ?? row.src ?? row.url ?? row.id ?? "").trim();
+    if (!key) {
+      order.push(`id:${String(row.id ?? order.length)}`);
+      best.set(`id:${String(row.id ?? order.length)}`, row);
+      continue;
+    }
+    const prev = best.get(key);
+    if (!prev) {
+      best.set(key, row);
+      order.push(key);
+      continue;
+    }
+    const merged: Record<string, unknown> = { ...prev };
+    for (const [k, v] of Object.entries(row)) if (!filled(merged[k]) && filled(v)) merged[k] = v;
+    best.set(key, richness(row, Object.keys(row)) > richness(prev, Object.keys(prev)) ? { ...row, ...merged } : merged as T);
+  }
+  return order.map((k) => best.get(k)!);
+}
+
+/** Backup එකේ table එකකට අදාළ dedupe එක (නැත්නම් එලෙසම) */
+export function dedupeTableRows(table: string, rows: readonly Record<string, unknown>[]): Record<string, unknown>[] {
+  if (table === "board_members") return dedupeBoardRows(rows);
+  if (table === "gallery_items") return dedupeGalleryRows(rows);
+  return [...rows];
+}
+
 /** Import preview එකට — table එකින් එක row ගණන */
 export function summarizeInserts(inserts: ParsedInsert[]): { tables: { name: string; rows: number }[]; totalRows: number } {
   const map = new Map<string, number>();

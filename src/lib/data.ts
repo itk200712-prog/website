@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { cache } from "react";
+import { dedupeBoardRows, dedupeGalleryRows } from "@/lib/backup-utils";
 import { createAnonClient } from "@/lib/supabase/anon";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
@@ -153,41 +154,11 @@ export const getBusiness = cache(async (slug: string): Promise<BusinessUnit | nu
 /**
  * 📛 නම අනුව duplicate ඉවත් කිරීම — email key එකක් විදිහට ගැනීම වැරදියි:
  * admin එකෙන් photo upload කරපු row එකේ email හිස් වෙනවා, seed row එකේ email
- * තියෙනවා → එතකොට එකම පුද්ගලයා දෙපාරක් පේනවා. දැන් නම normalize කරලා එකයි.
- * තියෙන rows දෙකෙන් වඩාත් සම්පූර්ණ එක (photo + qualification තියෙන එක) තියාගන්නවා.
+ * තියෙනවා → එතකොට එකම පුද්ගලයා දෙපාරක් පේනවා. Logics එක `backup-utils` එකේ
+ * (backup export/import එකත් එකම logic එකම පාවිච්චි කරයි).
  */
 export function dedupeBoard(rows: BoardMember[]): BoardMember[] {
-  const norm = (v: unknown) =>
-    String(v ?? "")
-      .toLowerCase()
-      .replace(/[\s.\-_/\\,'"]+/g, "");
-  const score = (p: BoardMember) =>
-    (p.photo ? 4 : 0) + (p.qualification ? 2 : 0) + (p.phone ? 1 : 0) + (p.email ? 1 : 0);
-  const best = new Map<string, BoardMember>();
-  const order: string[] = [];
-  for (const p of rows) {
-    const key = norm(p.name_en) || norm(p.email);
-    if (!key) continue;
-    const prev = best.get(key);
-    if (!prev) {
-      best.set(key, p);
-      order.push(key);
-      continue;
-    }
-    const merged: BoardMember = {
-      ...prev,
-      photo: prev.photo || p.photo,
-      qualification: prev.qualification || p.qualification,
-      phone: prev.phone || p.phone,
-      email: prev.email || p.email,
-      name_si: prev.name_si || p.name_si,
-      position_en: prev.position_en || p.position_en,
-      position_si: prev.position_si || p.position_si,
-      address: prev.address || p.address,
-    };
-    best.set(key, score(p) > score(prev) ? { ...merged, category: p.category } : merged);
-  }
-  return order.map((k) => best.get(k)!).filter(Boolean);
+  return dedupeBoardRows(rows as unknown as Record<string, unknown>[]) as unknown as BoardMember[];
 }
 
 export async function getBoard(): Promise<BoardMember[]> {
@@ -221,14 +192,8 @@ export const getGallery = cache(async (): Promise<GalleryItem[]> => {
     // ✅ comments gallery_comments table එකෙන් එකතු කරන්න (bug fix)
     const cm = commentsRes.data;
     // 🔁 seed එක දෙපාරක් run වුණොත් එකම image එක දෙපාරක් පෙනෙනවා — image path එකෙන් unique
-    const seenImg = new Set<string>();
-    const uniqueItems = (data as unknown as GalleryItem[]).filter((g) => {
-      const k = String(g.image ?? "").trim();
-      if (!k) return true;
-      if (seenImg.has(k)) return false;
-      seenImg.add(k);
-      return true;
-    });
+    //    (backup export/import එකත් මේ logic එකම පාවිච්චි කරයි)
+    const uniqueItems = dedupeGalleryRows(data as unknown as Record<string, unknown>[]) as unknown as GalleryItem[];
     return uniqueItems.map((g) => ({
       ...g,
       comments: (cm ?? [])

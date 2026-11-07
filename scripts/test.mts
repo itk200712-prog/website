@@ -874,21 +874,37 @@ ok("backup: auto/scheduled ZIP still embeds schema.sql (server auth with x-backu
 
 // ── Duplicate board/officers + seed re-run + live counts (2026-11-07) ────────
 const adminBoardSrc = readFileSync(join(root, "src/app/admin/board/page.tsx"), "utf8");
+const backupUtilsSrc = readFileSync(join(root, "src/lib/backup-utils.ts"), "utf8");
 
 const dataLibSrc = readFileSync(join(root, "src/lib/data.ts"), "utf8");
 const schemaSqlFile = readFileSync(join(root, "supabase/schema.sql"), "utf8");
 
-ok("board: duplicates never reach the site (name-based dedupe, not email)",
+ok("board: duplicates never reach the site (name-based dedupe shared with backup)",
   dataLibSrc.includes("export function dedupeBoard") &&
-  dataLibSrc.includes('replace(/[\\s.\\-_/\\\\,\'"]+/g, "")') &&
+  dataLibSrc.includes("dedupeBoardRows(rows as unknown as Record<string, unknown>[])") &&
   dataLibSrc.includes("return dedupeBoard(data as unknown as BoardMember[])") &&
+  backupUtilsSrc.includes("export function dedupeBoardRows") &&
+  backupUtilsSrc.includes("nameKey.length >= 3") &&
   !dataLibSrc.includes('const k = (p.email || p.name_en || "").toLowerCase()'));
 
-ok("gallery: same image never shows twice",
-  dataLibSrc.includes("const seenImg = new Set<string>()") && dataLibSrc.includes("return uniqueItems.map((g) => ({"));
+ok("gallery: same image never shows twice (shared helper)",
+  dataLibSrc.includes("dedupeGalleryRows(data as unknown as Record<string, unknown>[])") &&
+  backupUtilsSrc.includes("export function dedupeGalleryRows"));
 
 ok("admin board: adding an existing person updates that row instead of duplicating",
   adminBoardSrc.includes("duplicate එකක් හැදෙන්නේ නැතුව ඒ row එක update කළා"));
+
+ok("backup export/import: duplicate board & gallery rows are merged, never re-created",
+  backupSrc.includes("g.rows = dedupeTableRows(g.name, g.rows)") &&
+  backupSrc.includes("const clean = dedupeTableRows(name, rows)") &&
+  backupSrc.includes('errors.push(`ℹ duplicate rows ${dedupedRows}ක් merge කළා') &&
+  backupUtilsSrc.includes('if (table === "board_members") return dedupeBoardRows(rows)') &&
+  backupUtilsSrc.includes('if (table === "gallery_items") return dedupeGalleryRows(rows)'));
+
+ok("backup import: member/voter counters re-synced from the restored rows",
+  backupSrc.includes('key: "members_total", value: String(m.count)') &&
+  backupSrc.includes('key: "voters_total", value: String(v.count)') &&
+  backupSrc.includes('sb.from("system_settings").upsert(patch, { onConflict: "key" })'));
 
 ok("seed SQL is idempotent — re-running schema.sql never duplicates board/gallery/news/rows",
   schemaSqlFile.includes("if not exists (select 1 from public.board_members) then") &&
