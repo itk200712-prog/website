@@ -33,23 +33,29 @@ export function requestOrigins(request: NextRequest): string[] {
 }
 
 /**
- * හැම privacy-sensitive feature එකකටම **explicit origin allowlist** එක.
- * origins හිස් නම් `feature=()` (සම්පූර්ණයෙන් block) — කවදාවත් `(self)`/`*` නෑ.
+ * Permissions-Policy value එක — හැම feature එකක්ම **`()` (සම්පූර්ණයෙන් block)**.
+ *
+ * ඇයි `()` (සහ `(self)` නොව)?
+ *   · site එකේ geolocation/camera/microphone/payment කිසිවක් පාවිච්චි නොකරයි →
+ *     ඒවා කිසිම origin එකකට (අපේම origin එකටත්) අවසර දෙන්නේ නෑ = උපරිම ආරක්ෂාව.
+ *   · third-party iframe එකකටවත් delegate වෙන්නේ නෑ.
+ *
+ * ⚠ pentestnet scanner එකේ parser bug එකක් නිසා එයාගේ report එකේ තාම
+ *   "not restricted to specific origins" note එකක් පෙනෙන්න පුළුවන් — ඒක අපේ
+ *   header එකේ ප්‍රශ්නයක් නෙවෙයි (proof: SECURITY.md → "pentestnet false positive").
  */
-export function buildPermissionsPolicy(origins: string[]): string {
-  const allow = origins.map((o) => `"${o}"`).join(" ");
-  const feature = (name: string) => (allow ? `${name}=(${allow})` : `${name}=()`);
+export function buildPermissionsPolicy(): string {
   return [
-    feature("geolocation"),
-    feature("microphone"),
-    feature("camera"),
-    feature("payment"),
-    feature("usb"),
-    feature("magnetometer"),
-    feature("gyroscope"),
-    feature("accelerometer"),
-    feature("fullscreen"),
-    feature("picture-in-picture"),
+    "geolocation=()",
+    "microphone=()",
+    "camera=()",
+    "payment=()",
+    "usb=()",
+    "magnetometer=()",
+    "gyroscope=()",
+    "accelerometer=()",
+    "fullscreen=()",
+    "picture-in-picture=()",
     "interest-cohort=()",
   ].join(", ");
 }

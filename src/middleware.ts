@@ -1,5 +1,5 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { buildPermissionsPolicy, requestOrigins } from "@/lib/permissions-policy";
+import { buildPermissionsPolicy } from "@/lib/permissions-policy";
 import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
@@ -76,7 +76,7 @@ export async function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV !== "production";
   const nonce = makeNonce();
   const csp = buildCsp(nonce, isDev);
-  const permissionsPolicy = buildPermissionsPolicy(requestOrigins(request));
+  const permissionsPolicy = buildPermissionsPolicy();
 
   // Next.js මේ request header එකෙන් තමන්ගේ inline scripts වලට nonce එක දාගන්නවා
   const requestHeaders = new Headers(request.headers);
