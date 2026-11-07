@@ -661,7 +661,7 @@ ok("restore: site-source/ entries source ලෙස හඳුනාගනී (dat
   bu.isSiteSourceEntry("site-source/src/lib/x.ts") && !bu.isSiteSourceEntry("site-assets/public/icons/a.png"));
 
 // 🔐 coverage route auth + manual/scheduled parity
-const covRoute = readFileSync(join(root, "src/app/api/backup/coverage/route.ts"), "utf8");
+const covRoute = readFileSync(join(root, "src/app/api/backup/coverage-check/route.ts"), "utf8");
 ok("coverage route: admin Bearer හෝ cron secret නැත්නම් deny (401/403)",
   covRoute.includes("userIsAdmin") && covRoute.includes("secretOk") &&
   /return deny\(401\)|return deny\(\)|deny\(403\)/.test(covRoute) &&
@@ -2229,6 +2229,51 @@ console.log("\n── 26) Auto-backup වාර්තා email (file name · typ
     mailSrc.includes('key: "backup"') && mailSrc.includes("Auto Backup Reports") &&
     mailPage.includes("backup: HardDriveDownload") &&
     mailSrc.includes("return `mail_route_${route}_${n}`;"));
+}
+
+console.log("\n── 27) Mail delivery — SMTP (Gmail App Password) + FormSubmit fallback ──");
+{
+  const ms = readFileSync(join(root, "src/lib/mail-server.ts"), "utf8");
+  const mrs = readFileSync(join(root, "src/lib/mail-routes-server.ts"), "utf8");
+  const sendRoute = readFileSync(join(root, "src/app/api/mail/send/route.ts"), "utf8");
+  const setRoute = readFileSync(join(root, "src/app/api/mail/settings/route.ts"), "utf8");
+  const mailSrc = readFileSync(join(root, "src/lib/mail-routes.ts"), "utf8");
+  const emailsPage = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { dependencies: Record<string, string> };
+
+  ok("mail: nodemailer dependency + SMTP transport (Gmail App Password)",
+    Boolean(pkg.dependencies.nodemailer) && ms.includes("import nodemailer from \"nodemailer\"") &&
+    ms.includes("nodemailer.createTransport") && ms.includes("smtp.gmail.com"));
+  ok("mail: SMTP රහස් backup_secrets එකේ (service role) — browser bundle එකට යන්නේ නෑ",
+    ms.includes("backup_secrets") && ms.includes("SUPABASE_SERVICE_ROLE_KEY") &&
+    ms.includes('smtp_pass') && ms.includes("loadSmtp"));
+  ok("mail: SMTP fail වුණොත් FormSubmit වලට fallback (double safety)",
+    ms.includes("export async function sendViaSmtp") && ms.includes("export async function sendViaFormSubmit") &&
+    ms.includes("// SMTP fail → FormSubmit උත්සාහය"));
+  ok("mail: FormSubmit 522 (සේවාව down) වුණොත් retry + පැහැදිලි හේතුව",
+    ms.includes("res.status === 522") && ms.includes("FormSubmit සේවාව down"));
+
+  ok("/api/mail/send: admin Bearer හෝ cron secret — නැත්නම් යවන්නේ නෑ (open relay නෑ)",
+    sendRoute.includes("userIsAdmin") && sendRoute.includes("cronSecretOk") &&
+    sendRoute.includes("if (!authed) return json({ ok: false, reason: \"unauthorized\" }, 401)"));
+  ok("/api/mail/send: public forms වලට route එකකින් විතරයි — ලිපින server එකේම හොයයි + rate limit",
+    sendRoute.includes("SERVER_MAIL_ROUTES.includes(wanted)") &&
+    sendRoute.includes("routeEmailsServer(wanted)") && sendRoute.includes("rateLimit(ip, wanted)") &&
+    mrs.includes("export const SERVER_MAIL_ROUTES") && mrs.includes("MAX_PER_WINDOW"));
+  ok("/api/mail/settings: SMTP save + test send (admin පමණයි)",
+    setRoute.includes("saveSmtp(") && setRoute.includes("body?.testTo") && setRoute.includes("userIsAdmin"));
+
+  ok("site forms: මුලින්ම server (SMTP) → නැත්නම් FormSubmit (sendToRoute)",
+    mailSrc.includes("async function sendViaServerRoute") && mailSrc.includes('fetch("/api/mail/send"') &&
+    mailSrc.includes("const viaServer = await sendViaServerRoute(route, payload);") &&
+    mailSrc.includes("// ② පරණ FormSubmit ක්‍රමය (fallback)"));
+  ok("Admin → Emails: 📮 Mail Server (SMTP) card + Gmail App Password උපදෙස් + Activate → server route",
+    emailsPage.includes("Mail Server (SMTP)") && emailsPage.includes("App Password") &&
+    emailsPage.includes("myaccount.google.com/apppasswords") &&
+    emailsPage.includes("await sendViaServer(") && !emailsPage.includes("sendActivationMail("));
+  ok("auto-backup emails: SMTP sender එකෙන් යවයි (scheduled route + backup report)",
+    readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8").includes("await sendMail({ to, subject, text })") &&
+    readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").includes("sender?: (to: string[], subject: string, text: string) => Promise<number>"));
 }
 
 console.log(`\n══════════════════════════════════════`);

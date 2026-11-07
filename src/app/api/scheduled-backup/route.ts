@@ -20,6 +20,7 @@ import ws from "ws";
 import { generateBackupZip, type BackupClient } from "@/lib/backup";
 import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils";
 import { sendBackupReport } from "@/lib/backup-report";
+import { sendMail } from "@/lib/mail-server";
 import {
   autoBackupFileName,
   backupDueDecision,
@@ -532,7 +533,8 @@ export async function POST(req: NextRequest) {
           encrypted,
           schedule: `Every ${settings.intervalHours}h from 00:00 (LK)`,
         },
-        emails
+        emails,
+        async (to, subject, text) => (await sendMail({ to, subject, text })).ok
       );
     } catch {
       /* email එක යැවීමේ දෝෂයක් ආවත් backup flow එක නවත්වන්නේ නෑ */
@@ -605,7 +607,8 @@ export async function POST(req: NextRequest) {
           ? "Manual test run"
           : `Every ${settings.intervalHours}h from 00:00 (LK) — slots: ${scheduleTimesOfDay(settings.intervalHours).join(", ")}`,
       },
-      emails
+      emails,
+      async (to, subject, text) => (await sendMail({ to, subject, text })).ok
     );
   } catch {
     /* email report එක අසාර්ථක වුණත් backup එක සාර්ථකයි — response එකට බලපෑමක් නෑ */

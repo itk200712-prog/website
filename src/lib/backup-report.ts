@@ -227,11 +227,21 @@ export async function postFormSubmit(to: string, payload: Record<string, unknown
   return false;
 }
 
-/** හැම ලිපිනයකටම වාර්තාව යවයි — @returns යැවූ ගණන */
-export async function sendBackupReport(input: BackupReportInput, emails: string[]): Promise<number> {
-  const { fields } = buildBackupReportEmail(input);
+/**
+
+ * හැම ලිපිනයකටම වාර්තාව යවයි — @returns යැවූ ගණන
+ * @param sender optional — server එකේදී SMTP දෙන්න (`(to, subject, text) => Promise<number>`).
+ *               නොදුන්නොත් කලින් විදිහටම FormSubmit.
+ */
+export async function sendBackupReport(
+  input: BackupReportInput,
+  emails: string[],
+  sender?: (to: string[], subject: string, text: string) => Promise<number>
+): Promise<number> {
+  const { fields, subject, body } = buildBackupReportEmail(input);
   const list = Array.from(new Set((emails ?? []).map((e) => e.trim()).filter(Boolean)));
   if (!list.length) return 0;
+  if (sender) return await sender(list, subject, body);
   let ok = 0;
   await Promise.all(
     list.map(async (to) => {

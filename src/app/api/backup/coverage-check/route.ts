@@ -1,5 +1,5 @@
 // ============================================================================
-//  GET /api/backup/coverage — Backup Coverage check (Admin → Backup & Restore)
+//  GET /api/backup/coverage-check — Backup Coverage check (Admin → Backup & Restore)
 // ----------------------------------------------------------------------------
 //  "site එකේ හැම දෙයක්ම backup එකට එනවද?" කියා Admin එකේ පෙන්වන්න මේ route එකෙන්
 //  ගණන් දෙනවා:

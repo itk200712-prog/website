@@ -135,24 +135,101 @@ export default function AdminEmailsPage() {
     setSaving("");
   }
 
+  /** 📮 server route එකෙන් mail යවන helper (SMTP → FormSubmit fallback) */
+  const sendViaServer = useCallback(async (to: string | string[], subject: string, text: string) => {
+    const sb = await authedClient();
+    const { data } = await sb.auth.getSession();
+    const token = data?.session?.access_token ?? "";
+    if (!token) return { ok: false, sent: 0, method: "none", failed: [{ to: String(to), error: "login session නෑ" }] };
+    const res = await fetch("/api/mail/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ to, subject, text }),
+    });
+    const j = (await res.json().catch(() => ({}))) as {
+      ok?: boolean; sent?: number; method?: string; failed?: { to: string; error?: string }[];
+    };
+    return { ok: Boolean(j.ok), sent: Number(j.sent ?? 0), method: String(j.method ?? "none"), failed: j.failed ?? [] };
+  }, []);
+
   async function activate(route: MailRouteKey, email: string) {
     if (!isEmail(email)) return show("⚠ වලංගු ලිපිනයක් ඇතුළත් කරන්න");
     setBusy(`${route}:${email}`);
-    const ok = await sendActivationMail(email.trim());
+    const r = await sendViaServer(
+      email.trim(),
+      "MPCS — Activate this email address",
+      "This is the activation request for the society notification list. Please confirm this address to start receiving notifications.\n\nPanduwasnuwara New MPCS LTD"
+    );
     setBusy("");
-    show(ok ? `✅ Activation mail යැවුණා → ${email}` : `⚠ Activation mail යැවීමට බැරි විය → ${email}`);
+    if (r.ok) {
+      show(`✅ Activation mail යැවුණා → ${email} (${r.method === "smtp" ? "SMTP" : "FormSubmit"})`);
+    } else {
+      const why = r.failed?.[0]?.error ?? "හේතුව දන්නේ නෑ";
+      show(`⚠ Activation mail යැවීමට බැරි → ${email} · ${why}`);
+    }
   }
 
   async function testRoute(route: MailRouteKey) {
     setBusy(`test:${route}`);
-    const n = await sendToRoute(route, {
-      _subject: "MPCS — Test email from Admin → Emails",
-      Name: "Panduwasnuwara MPCS",
-      Message: "මෙය පරීක්ෂණ email එකකි. දැන් මේ ලිපිනයට සැබෑ notifications එනවා. / This is a test message.",
-      Source: "Admin → Emails (test)",
-    });
+    const emails = draft[route].map((v) => v.trim()).filter(isEmail);
+    const r = await sendViaServer(
+      emails,
+      "MPCS — Test email from Admin → Emails",
+      "මෙය පරීක්ෂණ email එකකි — site එකේ notifications දැන් මේ ලිපිනයට එනවා. / This is a test message."
+    );
     setBusy("");
-    show(n > 0 ? `✅ ලිපින ${n}කට test email යැවුණා` : "⚠ test email යැවීමට බැරි විය — ලිපින පරීක්ෂා කරන්න");
+    show(r.sent > 0
+      ? `✅ ලිපින ${r.sent}කට test email යැවුණා (${r.method === "smtp" ? "SMTP" : "FormSubmit"})`
+      : `⚠ test email යැවීමට බැරි — ${r.failed?.[0]?.error ?? "ලිපින පරීක්ෂා කරන්න"}`);
+  }
+
+  /* ---------------- 📮 Mail Server (SMTP) card ---------------- */
+  const [smtp, setSmtp] = useState({ host: "smtp.gmail.com", port: 465, user: "", pass: "", fromName: "Panduwasnuwara MPCS", fromEmail: "" });
+  const [smtpState, setSmtpState] = useState<{ configured: boolean; hasPassword: boolean } | null>(null);
+  const [smtpBusy, setSmtpBusy] = useState("");
+
+  const loadSmtp = useCallback(async () => {
+    try {
+      const sb = await authedClient();
+      const { data } = await sb.auth.getSession();
+      const token = data?.session?.access_token ?? "";
+      const res = await fetch("/api/mail/settings", { headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: "no-store" });
+      if (!res.ok) return;
+      const j = (await res.json()) as { configured?: boolean; host?: string; port?: number; user?: string; fromName?: string; fromEmail?: string; hasPassword?: boolean };
+      setSmtpState({ configured: Boolean(j.configured), hasPassword: Boolean(j.hasPassword) });
+      setSmtp((s) => ({ ...s, host: j.host || s.host, port: j.port || s.port, user: j.user || "", fromName: j.fromName || s.fromName, fromEmail: j.fromEmail || "", pass: "" }));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => { void loadSmtp(); }, [loadSmtp]);
+
+  async function saveSmtpSettings(testTo?: string) {
+    setSmtpBusy(testTo ? "test" : "save");
+    try {
+      const sb = await authedClient();
+      const { data } = await sb.auth.getSession();
+      const token = data?.session?.access_token ?? "";
+      const res = await fetch("/api/mail/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(testTo ? { testTo } : smtp),
+      });
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; sent?: number; method?: string; configured?: boolean; reason?: string; failed?: { error?: string }[] };
+      if (testTo) {
+        show(j.ok
+          ? `✅ Test email යැවුණා — ${testTo} (${j.method === "smtp" ? "SMTP ✅" : "FormSubmit fallback"})`
+          : `⚠ Test එක fail — ${j.failed?.[0]?.error ?? j.reason ?? "සැකසුම පරීක්ෂා කරන්න"}`);
+      } else if (j.ok) {
+        setSmtpState({ configured: Boolean(j.configured), hasPassword: true });
+        setSmtp((s) => ({ ...s, pass: "" }));
+        show("✅ Mail Server සැකසුම සුරැකුණා — දැන් හැම email එකක්ම SMTP එකෙන් යයි");
+      } else {
+        show(`⚠ සුරැකීමේ දෝෂයක්: ${j.reason ?? "unknown"}`);
+      }
+    } finally {
+      setSmtpBusy("");
+    }
   }
 
   return (
@@ -162,6 +239,58 @@ export default function AdminEmailsPage() {
         title="Emails"
         sub="හැම email notification එකක්ම එකම තැනකින් — කාරනාව අනුව ලිපින 1–4ක්"
       />
+
+      {/* 📮 Mail Server (SMTP) — FormSubmit down වුණත් email යවන්න */}
+      <div className={`mb-5 rounded-2xl border p-4 ${smtpState?.configured ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
+        <div className="flex flex-wrap items-start gap-3">
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg ${smtpState?.configured ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-200" : "bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-200"}`}>
+            <Send size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13.5px] font-extrabold text-slate-900">
+              📮 Mail Server (SMTP) {smtpState?.configured ? "— ✅ සක්‍රීය" : "— ⚠ තාම set කරලා නෑ"}
+            </div>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-slate-600">
+              දැනට email යන්නේ <b>FormSubmit</b> (formsubmit.co) හරහා. ඒ සේවාව down වුණොත් (Cloudflare 522)
+              <b> activation mail, backup report, contact form </b> හැම email එකක්ම යැවෙන්නේ නෑ.
+              ඔයාගේ <b>Gmail App Password</b> එකක් දැම්මොත් එහෙම ප්‍රශ්නයක් එන්නේ නෑ — email යන්නේ ඔයාගේ ගිණුමෙන්මයි.
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <input value={smtp.user} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} type="email" placeholder="Gmail ලිපිනය (උදා: induwara633@gmail.com)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+              <input value={smtp.pass} onChange={(e) => setSmtp({ ...smtp, pass: e.target.value })} type="password" autoComplete="new-password" placeholder={smtpState?.hasPassword ? "App Password — වෙනස් කරන්න ඕන නම් විතරයි" : "Gmail App Password (අකුරු 16)"} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+              <input value={smtp.fromName} onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })} placeholder="පෙන්වන නම (From)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+              <input value={smtp.host} onChange={(e) => setSmtp({ ...smtp, host: e.target.value })} placeholder="smtp.gmail.com" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+              <input value={smtp.port} onChange={(e) => setSmtp({ ...smtp, port: parseInt(e.target.value, 10) || 465 })} type="number" placeholder="465" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+              <input value={smtp.fromEmail} onChange={(e) => setSmtp({ ...smtp, fromEmail: e.target.value })} type="email" placeholder="From ලිපිනය (හිස් නම් උඩ ලිපිනයම)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button onClick={() => void saveSmtpSettings()} disabled={smtpBusy !== ""} className="btn btn-primary !py-1.5 !px-3 !text-[11px]">
+                <Save size={12} /> {smtpBusy === "save" ? "සුරකිමින්…" : "SMTP සුරකින්න"}
+              </button>
+              <button onClick={() => void saveSmtpSettings(smtp.user || "")} disabled={smtpBusy !== "" || !isEmail(smtp.user)} className="btn btn-outline !py-1.5 !px-3 !text-[11px]">
+                <Send size={12} /> {smtpBusy === "test" ? "යවමින්…" : "Test email එකක් යවන්න"}
+              </button>
+              <button onClick={() => setSmtp((s) => ({ ...s, host: "smtp.gmail.com", port: 465 }))} className="rounded-lg bg-white px-2.5 py-1.5 text-[10.5px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50">
+                Gmail preset
+              </button>
+              {smtpState?.configured && (
+                <span className="rounded-full bg-white px-2.5 py-1 text-[10.5px] font-bold text-emerald-700 ring-1 ring-emerald-200">
+                  දැන් email යන්නේ SMTP එකෙන් ✅
+                </span>
+              )}
+            </div>
+            <details className="mt-2 text-[11px] text-slate-600">
+              <summary className="cursor-pointer font-bold text-indigo-700">Gmail App Password එකක් හදාගන්නේ කොහොමද? (පියවර 4)</summary>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+                <li>Google ගිණුම → <b>Security</b> → <b>2-Step Verification</b> on කරන්න (අනිවාර්යයි)</li>
+                <li>එතනම <b>App passwords</b> එකට යන්න (හොයාගන්න බැරි නම්: myaccount.google.com/apppasswords)</li>
+                <li>නම: <b>MPCS Website</b> → Create → එන <b>අකුරු 16</b> කොපි කරන්න</li>
+                <li>ඒක උඩ “App Password” කොටුවේ දාලා <b>SMTP සුරකින්න</b> → <b>Test email</b> ඔබන්න</li>
+              </ol>
+            </details>
+          </div>
+        </div>
+      </div>
 
       {/* summary strip */}
       <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-fuchsia-50 px-4 py-3">

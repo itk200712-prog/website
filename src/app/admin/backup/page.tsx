@@ -31,7 +31,7 @@ import { logActivity } from "@/lib/activity";
 import {
   BACKUP_COVERAGE, buildCoverageReport, type CoverageReport, type CoverageRow,
 } from "@/lib/backup-coverage";
-import { sendBackupReport } from "@/lib/backup-report";
+import { buildBackupReportEmail } from "@/lib/backup-report";
 import { getRouteEmails } from "@/lib/mail-routes";
 
 function formatFileSize(size?: number | null): string {
@@ -318,25 +318,33 @@ export default function AdminBackupPage() {
         show("⚠ ලිපිනයක් දාලා නෑ — Admin → Emails → “Auto Backup Reports” එකේ email එකක් add කරලා Save කරන්න");
         return;
       }
-      const sent = await sendBackupReport(
-        {
-          status: "success",
-          source: "auto",
-          fileName: `mpcs-full-backup-${new Date().toISOString().slice(0, 10).replace(/-/g, "-")}_TEST.zip`,
-          fileSize: 1884417,
-          durationMs: 134_000,
-          destinations: ["Supabase (TEST)"],
-          rows: 53210,
-          tables: 29,
-          images: 24,
-          encrypted: false,
-          schedule: `Every ${sch.intervalHours}h from 00:00 (LK) — TEST`,
-        },
-        list
-      );
+      const { subject, body } = buildBackupReportEmail({
+        status: "success",
+        source: "auto",
+        fileName: `mpcs-full-backup-${new Date().toISOString().slice(0, 10)}_TEST.zip`,
+        fileSize: 1884417,
+        durationMs: 134_000,
+        destinations: ["Supabase (TEST)"],
+        rows: 53210,
+        tables: 29,
+        images: 24,
+        encrypted: false,
+        schedule: `Every ${sch.intervalHours}h from 00:00 (LK) — TEST`,
+      });
+      // 📮 server route — SMTP configure කරලා නම් SMTP එකෙන්, නැත්නම් FormSubmit
+      const sb = await authedClient();
+      const { data: sess } = await sb.auth.getSession();
+      const token = sess?.session?.access_token ?? "";
+      const res = await fetch("/api/mail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ to: list, subject, text: body }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { sent?: number; method?: string; failed?: { error?: string }[] };
+      const sent = Number(j?.sent ?? 0);
       show(sent > 0
-        ? `✅ Test report එක ${sent} ලිපිනයකට යැවුණා — inbox (සහ spam) බලන්න`
-        : `⚠ Email යැවීම අසාර්ථක — ලිපිනය FormSubmit එකේ “Activate” කරලා තියෙනවද? (Admin → Emails)`);
+        ? `✅ Test report එක ${sent} ලිපිනයකට යැවුණා (${j.method === "smtp" ? "SMTP" : "FormSubmit"}) — inbox/spam බලන්න`
+        : `⚠ Email යැවීම අසාර්ථක — ${j.failed?.[0]?.error ?? "Admin → Emails එකේ SMTP දාන්න (FormSubmit down)"}`);
     } finally {
       setReportBusy(false);
     }
@@ -373,7 +381,7 @@ export default function AdminBackupPage() {
       try {
         const { data: sess } = await sb.auth.getSession();
         const token = sess?.session?.access_token ?? "";
-        const res = await fetch("/api/backup/coverage", {
+        const res = await fetch("/api/backup/coverage-check", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           cache: "no-store",
         });

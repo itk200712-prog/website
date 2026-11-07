@@ -164,7 +164,42 @@ export async function getRouteEmailsCached(route: MailRouteKey): Promise<string[
  * හැම ලිපිනයකටම email යවයි.
  * @returns යැවූ ගණන
  */
+/**
+ * 🌐 මුලින්ම **server route** එකෙන් යවන්න බලයි (`/api/mail/send`, SMTP).
+ * FormSubmit down වුණත් (522) SMTP configure කරලා තියෙනවා නම් email යනවා.
+ * Server එකෙන් යැවීම අසාර්ථක නම් පමණක් පරණ FormSubmit ක්‍රමයට යයි.
+ */
+async function sendViaServerRoute(route: MailRouteKey, payload: Record<string, unknown>): Promise<number> {
+  try {
+    const subject = String(payload._subject ?? "MPCS — පණිවිඩයක්");
+    const skip = new Set(["_subject", "_template", "_autoresponse", "_captcha", "Message"]);
+    const lines: string[] = [];
+    const msg = payload.Message ?? payload.message ?? "";
+    if (msg) lines.push(String(msg));
+    for (const [k, v] of Object.entries(payload)) {
+      if (skip.has(k) || v === "" || v === undefined || v === null) continue;
+      const show = String(v) === "true" ? "ඔව්" : String(v) === "false" ? "නෑ" : String(v);
+      lines.push(`${k}: ${show}`);
+    }
+    lines.push("", "— Panduwasnuwara New MPCS LTD");
+    const res = await fetch("/api/mail/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ route, subject, text: lines.join("\n") }),
+    });
+    if (!res.ok) return 0;
+    const j = (await res.json().catch(() => ({}))) as { sent?: number };
+    return Number(j?.sent ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
 export async function sendToRoute(route: MailRouteKey, payload: Record<string, unknown>): Promise<number> {
+  // ① SMTP (server) — configure කරලා නම් / FormSubmit down නම් වැඩ කරයි
+  const viaServer = await sendViaServerRoute(route, payload);
+  if (viaServer > 0) return viaServer;
+  // ② පරණ FormSubmit ක්‍රමය (fallback)
   const list = await getRouteEmails(route);
   if (!list.length) return 0;
   let ok = 0;
