@@ -1287,12 +1287,11 @@ ok("identity: 'you said google/gemini before' is answered by fixed identity, not
   bot.detectBotIdentityIntent("oya kalin kiwwe google kiyala") === "model" &&
   bot.detectBotIdentityIntent("you said you are gemini") === "model");
 
-console.log("\n── 23) Scheduled auto-backup (interval days + time → Supabase/MEGA) ──");
+console.log("\n── 23) Scheduled auto-backup (දවසට පැය කීයකට වරක්ද → රෑ 12 පටන් → Supabase/MEGA) ──");
 const sched = await import("../src/lib/scheduled-backup.ts");
 const schSettings = sched.parseScheduleSettings((k) => ({
   backup_schedule_enabled: "1",
-  backup_schedule_interval_days: "3",
-  backup_schedule_time: "9:00",
+  backup_schedule_interval_hours: "4",
   backup_schedule_anchor: "2026-10-16",
   backup_schedule_to_supabase: "1",
   backup_schedule_to_mega: "1",
@@ -1300,27 +1299,76 @@ const schSettings = sched.parseScheduleSettings((k) => ({
   backup_schedule_mega_folder: "MPCS Backups",
   backup_schedule_encrypt: "0",
 }[k]));
-ok("schedule: settings parse + normalize + rows roundtrip",
-  schSettings.enabled === true && schSettings.intervalDays === 3 && schSettings.timeHHMM === "09:00" &&
+ok("schedule: settings parse (පැය ගාණ) + normalize + rows roundtrip",
+  schSettings.enabled === true && schSettings.intervalHours === 4 &&
   schSettings.toMega === true && schSettings.keepCount === 8 && schSettings.encrypt === false &&
   sched.parseScheduleSettings(() => undefined).encrypt === true &&
+  sched.parseScheduleSettings(() => undefined).intervalHours === 24 &&
   sched.scheduleSettingsRows(schSettings).length === 9 &&
-  sched.parseScheduleSettings((k) => Object.fromEntries(sched.scheduleSettingsRows(schSettings).map((r) => [r.key, r.value]))[k]).intervalDays === 3 &&
+  sched.parseScheduleSettings((k) => Object.fromEntries(sched.scheduleSettingsRows(schSettings).map((r) => [r.key, r.value]))[k]).intervalHours === 4 &&
   sched.parseScheduleSettings(() => undefined).enabled === false &&
-  sched.parseScheduleSettings((k) => k === "backup_schedule_interval_days" ? "99" : undefined).intervalDays === 30);
+  // 24න් බෙදෙන්නේ නැති ගාණක් → ළඟම valid එකට (5 → 4, 7 → 6, 11 → 12)
+  sched.normalizeScheduleHours(5) === 4 &&
+  sched.normalizeScheduleHours(7) === 6 &&
+  sched.normalizeScheduleHours(11) === 12 &&
+  sched.normalizeScheduleHours(99) === 24 &&
+  sched.normalizeScheduleHours(0) === 1 &&
+  // පරණ "දවස්" setting එකක් තිබ්බොත් migrate වේ (3 දවස් → 24 පැය = දවසකට එකයි)
+  sched.parseScheduleSettings((k) => k === "backup_schedule_interval_days" ? "1" : undefined).intervalHours === 24);
+
+ok("schedule: slots = 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 (රෑ 12 පටන්)",
+  JSON.stringify(sched.scheduleTimesOfDay(4)) === JSON.stringify(["00:00", "04:00", "08:00", "12:00", "16:00", "20:00"]) &&
+  JSON.stringify(sched.scheduleTimesOfDay(6)) === JSON.stringify(["00:00", "06:00", "12:00", "18:00"]) &&
+  JSON.stringify(sched.scheduleTimesOfDay(12)) === JSON.stringify(["00:00", "12:00"]) &&
+  JSON.stringify(sched.scheduleTimesOfDay(24)) === JSON.stringify(["00:00"]) &&
+  sched.scheduleTimesOfDay(1).length === 24);
+
 const lkAt = (day: number, h: number, m: number) => new Date(Date.UTC(2026, 9, day, h, m) - 330 * 60_000);
-ok("schedule: due logic (anchor+3 days at/after 09:00 LK, once per due day)",
-  sched.isScheduleDay(schSettings, "2026-10-16") === false &&
-  sched.isScheduleDay(schSettings, "2026-10-19") === true &&
-  sched.isScheduleDay(schSettings, "2026-10-20") === false &&
-  sched.backupDueDecision(schSettings, null, lkAt(19, 10, 0)).due === true &&
-  sched.backupDueDecision(schSettings, null, lkAt(19, 8, 0)).reason === "before_time" &&
-  sched.backupDueDecision(schSettings, null, lkAt(18, 10, 0)).reason === "not_schedule_day" &&
-  sched.backupDueDecision(schSettings, "2026-10-19", lkAt(19, 12, 0)).reason === "already_done_today" &&
+const ISO_DAY19 = lkAt(19, 0, 0).toISOString();
+ok("schedule: due logic (පැය 4කට වරක් — 00/04/08/12/16/20, slot එකකට එක වරක්)",
+  // 00:00 slot එකට කලින් (පෙර දවස 23:30) → ඊළඟ එක 19 රෑ 12
+  sched.backupDueDecision(schSettings, null, lkAt(18, 23, 30)).nextAt === ISO_DAY19 &&
+  sched.backupDueDecision(schSettings, null, lkAt(19, 0, 5)).due === true &&
+  sched.backupDueDecision(schSettings, null, lkAt(19, 3, 59)).due === true && // 00:00 slot එක තාම pending
+  sched.backupDueDecision(schSettings, ISO_DAY19, lkAt(19, 3, 59)).reason === "already_done" &&
+  sched.backupDueDecision(schSettings, ISO_DAY19, lkAt(19, 4, 1)).due === true && // 04:00 slot එක අලුත්
+  sched.backupDueDecision(schSettings, lkAt(19, 4, 0).toISOString(), lkAt(19, 7, 59)).reason === "already_done" &&
+  sched.backupDueDecision(schSettings, lkAt(19, 4, 0).toISOString(), lkAt(19, 8, 0)).due === true &&
+  // 20:00 ට පස්සේ ඊළඟ එක ඊළඟ දවස රෑ 12
+  sched.backupDueDecision(schSettings, lkAt(19, 20, 0).toISOString(), lkAt(19, 22, 0)).reason === "already_done" &&
+  sched.backupDueDecision(schSettings, lkAt(19, 20, 0).toISOString(), lkAt(19, 22, 0)).nextAt === lkAt(20, 0, 0).toISOString() &&
+  // disabled / destination නැති / anchor නැති
   sched.backupDueDecision({ ...schSettings, enabled: false }, null, lkAt(19, 10, 0)).reason === "disabled" &&
-  sched.nextScheduleDate(schSettings, lkAt(17, 10, 0)) === "2026-10-19" &&
+  sched.backupDueDecision({ ...schSettings, toSupabase: false, toMega: false }, null, lkAt(19, 10, 0)).reason === "no_destination" &&
+  sched.backupDueDecision({ ...schSettings, anchorDate: "" }, null, lkAt(19, 10, 0)).reason === "not_started" &&
+  // පැය 24කට වරක් → දවසකට එකයි
+  sched.backupDueDecision({ ...schSettings, intervalHours: 24 }, lkAt(19, 0, 0).toISOString(), lkAt(19, 23, 0)).reason === "already_done" &&
+  // LK වේලාව + ගොනු නම
   sched.lkDateParts(new Date(Date.UTC(2026, 9, 19, 3, 0))).dateStr === "2026-10-19" &&
-  sched.autoBackupFileName(lkAt(19, 10, 0)) === "mpcs-full-backup-2026-10-19.zip");
+  sched.autoBackupFileName(lkAt(19, 10, 0)) === "mpcs-full-backup-2026-10-19.zip" &&
+  sched.nextRunLabel(schSettings, lkAt(19, 5, 0)) === "2026-10-19 08:00" &&
+  sched.nextRunLabel({ ...schSettings, anchorDate: "2026-11-09" }, lkAt(19, 5, 0)) === "2026-11-09 00:00");
+
+ok("schedule: පළවෙනි backup = Save කරපු වේලාවෙන් පස්සේ එන පළවෙනි slot (missed run catch-up)",
+  (() => {
+    const base = { ...schSettings, anchorDate: "2026-10-19", savedAt: lkAt(19, 14, 0).toISOString() };
+    // 14:00 ට save → 16:00 ට පළවෙනි එක (දවස මැද save කළත් රෑ 12 baseline එකේම slot)
+    const at14 = sched.backupDueDecision(base, null, lkAt(19, 14, 5));
+    // 23:50 ට save → ඊළඟ එක ඊළඟ දවස රෑ 12:00
+    const late = sched.backupDueDecision({ ...base, savedAt: lkAt(19, 23, 50).toISOString() }, null, lkAt(19, 23, 55));
+    return (
+      sched.nextRunLabel(base, lkAt(19, 14, 5)) === "2026-10-19 16:00" &&
+      at14.due === false && at14.reason !== "already_done" &&
+      sched.backupDueDecision(base, null, lkAt(19, 16, 1)).due === true &&
+      sched.backupDueDecision(base, lkAt(19, 16, 0).toISOString(), lkAt(19, 19, 0)).reason === "already_done" &&
+      sched.backupDueDecision(base, lkAt(19, 16, 0).toISOString(), lkAt(19, 20, 0)).due === true &&
+      // cron runner විනාඩි 15කට වරක් වුණත් slot එක මග හැරුණොත් ඊළඟ check එකේදීම එක වරක් යයි
+      sched.backupDueDecision(base, lkAt(19, 12, 0).toISOString(), lkAt(19, 20, 7)).due === true &&
+      sched.nextRunLabel({ ...base, savedAt: lkAt(19, 23, 50).toISOString() }, lkAt(19, 23, 55)) === "2026-10-20 00:00" &&
+      late.due === false
+    );
+  })());
+
 const cronSqlSample = sched.buildCronSql("https://example.vercel.app/", "s3cr3t");
 ok("schedule: cron SQL = every 15 min to site route with secret header + bucket",
   cronSqlSample.includes("*/15 * * * *") &&

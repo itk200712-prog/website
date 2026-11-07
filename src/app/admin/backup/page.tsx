@@ -23,7 +23,8 @@ import {
   type BackupManifest, type ParsedInsert,
 } from "@/lib/backup-utils";
 import {
-  buildCronSql, DEFAULT_SCHEDULE, lkDateParts, nextScheduleDate, parseScheduleSettings,
+  buildCronSql, DEFAULT_SCHEDULE, lkDateParts, nextRunLabel, normalizeScheduleHours, parseScheduleSettings,
+  scheduleTimesOfDay, SCHEDULE_HOUR_OPTIONS,
   SCHEDULE_SECRET_KEYS, SCHEDULE_SETTING_KEYS, scheduleSettingsRows, type BackupScheduleSettings,
 } from "@/lib/scheduled-backup";
 import { logActivity } from "@/lib/activity";
@@ -141,8 +142,8 @@ export default function AdminBackupPage() {
     show(deleted > 0 ? `✅ පරණ history සටහන් ${deleted}ක් මැකුවා — අලුත්ම ${BACKUP_HISTORY_KEEP} විතරයි` : `✅ History එකේ අලුත්ම ${BACKUP_HISTORY_KEEP} විතරයි තියෙන්නේ`);
   }
 
-  // 📅 Scheduled settings save — anchor එක අදට වැටෙන නිසා පළමු auto backup එක
-  // අදින් දවස් interval එකකට පස්සේ තෝරපු වෙලාවට යයි.
+  // 📅 Scheduled settings save — anchor = අද රෑ 12:00, savedAt = දැන් වේලාව.
+  // ඒ නිසා පළවෙනි auto backup එක save කරපු වේලාවෙන් පස්සේ එන පළවෙනි slot එකේදී යයි.
   async function saveSchedule() {
     if (sch.enabled && !sch.toSupabase && !sch.toMega) {
       return show("⚠ Backup එක යන තැනක් තෝරන්න — Supabase හරි MEGA හරි එකක්වත් on කරන්න");
@@ -152,7 +153,12 @@ export default function AdminBackupPage() {
     setSavingSch(true);
     try {
       const sb = await authedClient();
-      const next: BackupScheduleSettings = { ...sch, anchorDate: lkDateParts().dateStr };
+      // anchor = අද (රෑ 12 baseline) · savedAt = දැන් වේලාව → මේකෙන් පස්සේ එන පළවෙනි slot එකෙන් පටන් ගනී
+      const next: BackupScheduleSettings = {
+        ...sch,
+        anchorDate: lkDateParts().dateStr,
+        savedAt: new Date().toISOString(),
+      };
       const { error } = await sb.from("system_settings").upsert(scheduleSettingsRows(next), { onConflict: "key" });
       if (error) throw new Error(error.message);
       const emailErr = await setBackupSecret(SCHEDULE_SECRET_KEYS.megaEmail, megaEmail.trim());
@@ -166,14 +172,14 @@ export default function AdminBackupPage() {
       setSch(next);
       void logActivity(
         "BACKUP_SCHEDULE",
-        `Scheduled auto-backup ${next.enabled ? "enabled" : "disabled"} · every ${next.intervalDays} day(s) at ${next.timeHHMM} · to ${[next.toSupabase ? "Supabase" : "", next.toMega ? "MEGA" : ""].filter(Boolean).join("+") || "none"}${next.encrypt ? " · 🔒 encrypted" : ""}`
+        `Scheduled auto-backup ${next.enabled ? "enabled" : "disabled"} · every ${next.intervalHours}h from 00:00 (LK) · to ${[next.toSupabase ? "Supabase" : "", next.toMega ? "MEGA" : ""].filter(Boolean).join("+") || "none"}${next.encrypt ? " · 🔒 encrypted" : ""}`
       );
       if (next.enabled && next.encrypt && secrets && !secrets.encryption) {
         show("✅ Save වුණා — හැබැයි ⚠ Encryption Password එක තාම set කරලා නෑ! ඉහළ card එකෙන් set කළේ නැත්නම් auto backup එක encrypt නොවී යනවා");
       } else {
         show(
           next.enabled
-            ? `✅ Save වුණා — පළමු auto backup එක: ${nextScheduleDate(next)} දවසේ ${next.timeHHMM} ට (Cron SQL එක run කරලා නැත්නම් පහතින් run කරන්න)`
+            ? `✅ Save වුණා — පළමු auto backup එක: ${nextRunLabel(next)} ට (රෑ 12 පටන් පැය ${next.intervalHours}කට වරක් · Cron SQL එක run කරලා නැත්නම් පහතින් run කරන්න)`
             : "✅ Save වුණා — Scheduled auto-backup එක off කරලා"
         );
       }
@@ -870,8 +876,10 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           </span>
         </div>
         <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
-          දවස් කීයකට වරක්ද, කීයටද කියා තෝරලා Save කරන්න — ඊට පස්සේ ඒ දවසේ ඒ වෙලාවට backup එක
-          ඉබේම අරගෙන තෝරපු තැනට (Supabase සහ/හෝ MEGA) upload වෙනවා. පළමු එක <b>අදින් දවස් {sch.intervalDays}කට පස්සේ</b> යයි.
+          <b>දවසට පැය කීයකට වරක්ද</b> කියා තෝරලා Save කරන්න — පටන් ගැන්ම හැමදාම <b>රෑ 12:00 (ශ්‍රී ලංකා)</b>.
+          උදා: පැය 4කට වරක් නම් රෑ 12ට එකයි, පාන්දර 4ට එකයි, උදේ 8ට එකයි … ඒ වගේ.
+          එතකොට backup එක ඉබේම අරගෙන තෝරපු තැනට (Supabase සහ/හෝ MEGA) upload වෙනවා.
+          පළවෙනි backup එක <b>Save කරපු වේලාවෙන් පස්සේ එන පළවෙනි slot</b> එකේදී යයි (උදා: දැන් 14:00 නම් පැය 4කට වරක් දාලා නම් අද 16:00ට).
           මේක <b>manual Download එකට සම්පූර්ණයෙන්ම සමාන FULL ZIP එකමයි</b> — schema + logins (password සහිතව) + images + registers ඔක්කොම එක්ක.
           කැමති නම් පහළින් <b>Encryption Password එකෙන් encrypt</b> කරන්නත් පුළුවන් — එතකොට Import කරද්දී ඒ password එකම ඉල්ලනවා.
         </p>
@@ -879,39 +887,41 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
             <input type="checkbox" className="mt-0.5" checked={sch.enabled} onChange={(e) => setSch({ ...sch, enabled: e.target.checked })} />
-            <span><b>Auto-backup on කරන්න</b><br /><span className="text-slate-500">නියමිත දවසේ/වෙලාවට ඉබේම ගනී</span></span>
+            <span><b>Auto-backup on කරන්න</b><br /><span className="text-slate-500">රෑ 12 පටන් පැය {sch.intervalHours}කට වරක් ඉබේම ගනී</span></span>
           </label>
           <div>
-            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">දවස් කීයකට වරක්ද?</label>
-            <div className="mt-1 flex items-center gap-1.5">
-              {[1, 3, 7, 14].map((d) => (
+            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">දවසට පැය කීයකට වරක්ද?</label>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {SCHEDULE_HOUR_OPTIONS.map((h) => (
                 <button
-                  key={d}
+                  key={h}
                   type="button"
-                  onClick={() => setSch({ ...sch, intervalDays: d })}
-                  className={`rounded-lg px-2 py-1.5 text-[11px] font-extrabold ${sch.intervalDays === d ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  onClick={() => setSch({ ...sch, intervalHours: h })}
+                  className={`rounded-lg px-2 py-1.5 text-[11px] font-extrabold ${sch.intervalHours === h ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                 >
-                  {d}යි
+                  {h}
                 </button>
               ))}
               <input
                 type="number"
                 min={1}
-                max={30}
-                value={sch.intervalDays}
-                onChange={(e) => setSch({ ...sch, intervalDays: Math.min(30, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+                max={24}
+                value={sch.intervalHours}
+                onChange={(e) => setSch({ ...sch, intervalHours: normalizeScheduleHours(e.target.value) })}
                 className="w-16 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5 text-[12px] outline-none focus:border-indigo-400 focus:bg-white"
               />
+              <span className="text-[11px] text-slate-500">පැය</span>
             </div>
+            <div className="mt-1 text-[10px] text-slate-400">24න් බෙදෙන ගාණක් තෝරන්න (1, 2, 3, 4, 6, 8, 12, 24)</div>
           </div>
           <div>
-            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">වෙලාව (ශ්‍රී ලංකා)</label>
-            <input
-              type="time"
-              value={sch.timeHHMM}
-              onChange={(e) => setSch({ ...sch, timeHHMM: e.target.value || "09:00" })}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
-            />
+            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">දවසේ යන වෙලාවන් (රෑ 12 පටන්)</label>
+            <div className="mt-1 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[11.5px] font-bold leading-relaxed text-indigo-700">
+              {scheduleTimesOfDay(sch.intervalHours).join(" · ")}
+            </div>
+            <div className="mt-1 text-[10px] text-slate-400">
+              දවසට {scheduleTimesOfDay(sch.intervalHours).length} වරක් · ශ්‍රී ලංකා වේලාවෙන්
+            </div>
           </div>
           <div>
             <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">තබා ගන්නා copies</label>
@@ -1035,7 +1045,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             {(() => {
               const last = history.find((h) => h.action === "scheduled");
               return sch.enabled
-                ? `ඊළඟ auto backup: ${nextScheduleDate(sch)} · ${sch.timeHHMM}${last ? ` · අන්තිම එක: ${formatHistoryTime(last.created_at)} (${last.status})` : " · තාම එකක්වත් ගිහින් නෑ"}`
+                ? `ඊළඟ auto backup: ${nextRunLabel(sch)} (LK)${last ? ` · අන්තිම එක: ${formatHistoryTime(last.created_at)} (${last.status})` : " · තාම එකක්වත් ගිහින් නෑ"}`
                 : last
                   ? `අන්තිම scheduled එක: ${formatHistoryTime(last.created_at)} (${last.status})`
                   : "Scheduled එක off කරලා තියෙන්නේ";

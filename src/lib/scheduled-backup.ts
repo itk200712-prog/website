@@ -1,34 +1,47 @@
 // ============================================================================
 //  Scheduled Auto-Backup — settings + due ගණනය (pure helpers)
-//  Admin → Backup & Restore එකෙන් දවස් ගාණ (උදා: 3, 7) සහ වෙලාව (උදා: 09:00)
-//  තෝරා save කළ විට, Supabase pg_cron එක විනාඩි 15කට වරක් site එකේ
-//  /api/scheduled-backup route එක කැඳවයි. මේ helpers වලින් තමයි "අද ඒ
-//  වෙලාවට backup එකක් ගත යුතුද" කියා තීරණය වන්නේ (ශ්‍රී ලංකා වේලාවෙන්).
-//  Settings: system_settings (public) · රහස්: backup_secrets (superadmin-only)
+// ----------------------------------------------------------------------------
+//  🕛 නව ක්‍රමය: **දවසට පැය කීයකට වරක්ද** කියන එක විතරයි තෝරන්නේ.
+//     පටන් ගැන්ම **හැමදාම රෑ 12:00 (ශ්‍රී ලංකා වේලාවෙන්)**.
+//
+//     උදා: පැය 4කට වරක්  →  00:00 · 04:00 · 08:00 · 12:00 · 16:00 · 20:00
+//          පැය 6කට වරක්  →  00:00 · 06:00 · 12:00 · 18:00
+//          පැය 12කට වරක් →  00:00 · 12:00
+//          පැය 24කට වරක් →  00:00 (දවසකට එකයි)
+//          පැය 1කට වරක්  →  පැයක් පාසා (00:00, 01:00, 02:00 …)
+//
+//  · Settings save කරන දවස (**anchor**) රෑ 12:00 තමයි baseline එක —
+//    එදා රෑ 12ට පළවෙනි backup එක යයි.
+//  · Supabase pg_cron එක විනාඩි 15කට වරක් site එකේ /api/scheduled-backup
+//    route එක කැඳවනවා. ඒ route එකෙන් "දැන් යා යුතු slot එක පහු වෙලාද?"
+//    කියා මේ helpers වලින් තීරණය කරනවා (missed run එකක් තිබ්බත්
+//    ඊළඟ check එකේදීම එක වරක් catch-up වෙනවා).
+//  · Settings: system_settings (public) · රහස්: backup_secrets (superadmin-only)
 // ============================================================================
 
 export type BackupScheduleSettings = {
   enabled: boolean;
-  /** දවස් කීයකට වරක්ද (1–30) */
-  intervalDays: number;
-  /** ශ්‍රී ලංකා වේලාවෙන් "HH:MM" (24h) */
-  timeHHMM: string;
-  /** settings save කරපු දිනය (LK, yyyy-mm-dd) — පළමු backup එක මෙයින් දවස් interval එකකට පසු */
+  /** **දවසට පැය කීයකට වරක්ද** (1–24) — හැමදාම රෑ 12:00 ට පටන් ගනී */
+  intervalHours: number;
+  /** settings save කරපු දිනය (LK, yyyy-mm-dd) — එදා රෑ 12:00 baseline එක */
   anchorDate: string;
+  /** settings save කරපු **නියම වේලාව** (ISO) — මේකට පස්සේ එන පළවෙනි slot එකෙන් පටන් ගනී */
+  savedAt: string;
   toSupabase: boolean;
   toMega: boolean;
   /** තබා ගන්නා අලුත්ම auto-backup ගාණ (ඊට වඩා පරණ ඒවා මැකේ) */
   keepCount: number;
   megaFolder: string;
-  /** true නම් auto backup එකත් backup_encryption_password එකෙන් encrypt වෙනවා (manual encrypted backup වගේම Import වෙයි) */
+  /** true නම් auto backup එකත් backup_encryption_password එකෙන් encrypt වෙනවා */
   encrypt: boolean;
 };
 
 export const SCHEDULE_SETTING_KEYS = {
   enabled: "backup_schedule_enabled",
-  intervalDays: "backup_schedule_interval_days",
-  time: "backup_schedule_time",
+  /** 🕛 අලුත් key — දවසට පැය කීයකට වරක්ද */
+  intervalHours: "backup_schedule_interval_hours",
   anchor: "backup_schedule_anchor",
+  savedAt: "backup_schedule_saved_at",
   toSupabase: "backup_schedule_to_supabase",
   toMega: "backup_schedule_to_mega",
   keep: "backup_schedule_keep",
@@ -36,8 +49,17 @@ export const SCHEDULE_SETTING_KEYS = {
   encrypt: "backup_schedule_encrypt",
 } as const;
 
-/** History එක latest 5 ට prune වුණත් අද backup එක දැනටමත් ගිහින්ද කියා මතක තබන hidden setting එක */
+/** පරණ (දවස් ගාණ) settings — migrate එකට විතරයි කියවන්නේ, තීරණයට පාවිච්චි නොකරයි */
+export const LEGACY_SCHEDULE_KEYS = {
+  intervalDays: "backup_schedule_interval_days",
+  time: "backup_schedule_time",
+} as const;
+
+/** History එක prune වුණත් "අන්තිමට කවදා ගියාද" මතක තබන hidden setting එක (ISO වේලාව) */
 export const SCHEDULE_LAST_SUCCESS_KEY = "backup_schedule_last_success_date";
+
+/** තෝරන්න පුළුවන් පැය ගාණ — 24න් බෙදෙන ඒවා (හැමදාම එකම වෙලාවට slot වැටේ) */
+export const SCHEDULE_HOUR_OPTIONS = [1, 2, 3, 4, 6, 8, 12, 24] as const;
 
 export const SCHEDULE_SECRET_KEYS = {
   megaEmail: "mega_email",
@@ -47,9 +69,9 @@ export const SCHEDULE_SECRET_KEYS = {
 
 export const DEFAULT_SCHEDULE: BackupScheduleSettings = {
   enabled: false,
-  intervalDays: 3,
-  timeHHMM: "09:00",
+  intervalHours: 24,
   anchorDate: "",
+  savedAt: "",
   toSupabase: true,
   toMega: false,
   keepCount: 8,
@@ -62,22 +84,51 @@ function onOff(value: string | undefined, fallback: boolean): boolean {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
-export function normalizeScheduleTime(value: unknown): string {
-  const m = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})/);
-  if (!m) return DEFAULT_SCHEDULE.timeHHMM;
-  const h = Math.min(23, Math.max(0, parseInt(m[1], 10) || 0));
-  const min = Math.min(59, Math.max(0, parseInt(m[2], 10) || 0));
-  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+/**
+ * පැය ගාණ 1–24 අතරට ගේනවා. 24න් බෙදෙන්නේ නැති එකක් (උදා: 5) දුන්නොත්
+ * ළඟම තියෙන valid එකට වට කරනවා (5 → 4) — එතකොට හැමදාම රෑ 12ට slot එක වැටේ.
+ */
+export function normalizeScheduleHours(value: unknown): number {
+  const n = parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(n)) return DEFAULT_SCHEDULE.intervalHours;
+  const clamped = Math.min(24, Math.max(1, n));
+  if (24 % clamped === 0) return clamped;
+  let best = DEFAULT_SCHEDULE.intervalHours;
+  let bestDiff = Infinity;
+  for (const opt of SCHEDULE_HOUR_OPTIONS) {
+    const diff = Math.abs(opt - clamped);
+    if (diff < bestDiff) {
+      best = opt;
+      bestDiff = diff;
+    }
+  }
+  return best;
+}
+
+/** දවසට පැය කීයකට වරක්ද → ඒ දවසේ slot වේලාවන් (උදා: 4 → ["00:00","04:00",…,"20:00"]) */
+export function scheduleTimesOfDay(intervalHours: number): string[] {
+  const h = normalizeScheduleHours(intervalHours);
+  const out: string[] = [];
+  for (let minutes = 0; minutes < 24 * 60; minutes += h * 60) {
+    out.push(`${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`);
+  }
+  return out;
 }
 
 export function parseScheduleSettings(get: (key: string) => string | undefined): BackupScheduleSettings {
-  const interval = parseInt(get(SCHEDULE_SETTING_KEYS.intervalDays) ?? "", 10);
+  // පරණ "දවස්" setting එකක් විතරක් තිබ්බොත් (අලුත් key එක නෑ) → එයාට සමාන පැය ගාණකට migrate
+  const rawHours = get(SCHEDULE_SETTING_KEYS.intervalHours);
+  let hours = normalizeScheduleHours(rawHours);
+  if (rawHours == null || rawHours === "") {
+    const legacyDays = parseInt(get(LEGACY_SCHEDULE_KEYS.intervalDays) ?? "", 10);
+    hours = Number.isFinite(legacyDays) ? Math.min(24, Math.max(1, legacyDays * 24)) : DEFAULT_SCHEDULE.intervalHours;
+  }
   const keep = parseInt(get(SCHEDULE_SETTING_KEYS.keep) ?? "", 10);
   return {
     enabled: onOff(get(SCHEDULE_SETTING_KEYS.enabled), false),
-    intervalDays: Number.isFinite(interval) ? Math.min(30, Math.max(1, interval)) : DEFAULT_SCHEDULE.intervalDays,
-    timeHHMM: normalizeScheduleTime(get(SCHEDULE_SETTING_KEYS.time)),
+    intervalHours: hours,
     anchorDate: (get(SCHEDULE_SETTING_KEYS.anchor) ?? "").trim(),
+    savedAt: (get(SCHEDULE_SETTING_KEYS.savedAt) ?? "").trim(),
     toSupabase: onOff(get(SCHEDULE_SETTING_KEYS.toSupabase), true),
     toMega: onOff(get(SCHEDULE_SETTING_KEYS.toMega), false),
     keepCount: Number.isFinite(keep) ? Math.min(30, Math.max(2, keep)) : DEFAULT_SCHEDULE.keepCount,
@@ -90,9 +141,9 @@ export function parseScheduleSettings(get: (key: string) => string | undefined):
 export function scheduleSettingsRows(s: BackupScheduleSettings): { key: string; value: string }[] {
   return [
     { key: SCHEDULE_SETTING_KEYS.enabled, value: s.enabled ? "1" : "0" },
-    { key: SCHEDULE_SETTING_KEYS.intervalDays, value: String(s.intervalDays) },
-    { key: SCHEDULE_SETTING_KEYS.time, value: normalizeScheduleTime(s.timeHHMM) },
+    { key: SCHEDULE_SETTING_KEYS.intervalHours, value: String(normalizeScheduleHours(s.intervalHours)) },
     { key: SCHEDULE_SETTING_KEYS.anchor, value: s.anchorDate },
+    { key: SCHEDULE_SETTING_KEYS.savedAt, value: s.savedAt },
     { key: SCHEDULE_SETTING_KEYS.toSupabase, value: s.toSupabase ? "1" : "0" },
     { key: SCHEDULE_SETTING_KEYS.toMega, value: s.toMega ? "1" : "0" },
     { key: SCHEDULE_SETTING_KEYS.keep, value: String(s.keepCount) },
@@ -103,6 +154,7 @@ export function scheduleSettingsRows(s: BackupScheduleSettings): { key: string; 
 
 // ── ශ්‍රී ලංකා (UTC+5:30) දිනය/වේලාව ──
 const LK_OFFSET_MIN = 330;
+const HOUR_MS = 3_600_000;
 
 export function lkDateParts(now: Date = new Date()): { dateStr: string; minutes: number } {
   const lk = new Date(now.getTime() + LK_OFFSET_MIN * 60_000);
@@ -112,67 +164,104 @@ export function lkDateParts(now: Date = new Date()): { dateStr: string; minutes:
   return { dateStr: `${y}-${m}-${d}`, minutes: lk.getUTCHours() * 60 + lk.getUTCMinutes() };
 }
 
-function daysBetween(fromDateStr: string, toDateStr: string): number {
-  const a = Date.parse(`${fromDateStr}T00:00:00Z`);
-  const b = Date.parse(`${toDateStr}T00:00:00Z`);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return NaN;
-  return Math.round((b - a) / 86_400_000);
-}
-
-function addDays(dateStr: string, days: number): string {
+/** LK දිනයක **රෑ 12:00** (UTC ms) — baseline එක */
+export function lkMidnightMs(dateStr: string): number | null {
   const t = Date.parse(`${dateStr}T00:00:00Z`);
-  if (!Number.isFinite(t)) return dateStr;
-  return new Date(t + days * 86_400_000).toISOString().slice(0, 10);
+  if (!Number.isFinite(t)) return null;
+  return t - LK_OFFSET_MIN * 60_000; // LK 00:00 = UTC 18:30 (පෙර දවස)
 }
 
-function timeToMinutes(hhmm: string): number {
-  const [h, m] = normalizeScheduleTime(hhmm).split(":").map((x) => parseInt(x, 10) || 0);
-  return h * 60 + m;
+/** LK වේලාවෙන් "yyyy-mm-dd HH:MM" (Admin එකේ පෙන්වීමට) */
+export function formatLk(ms: number): string {
+  if (!Number.isFinite(ms)) return "—";
+  const lk = new Date(ms + LK_OFFSET_MIN * 60_000);
+  const y = lk.getUTCFullYear();
+  const m = String(lk.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(lk.getUTCDate()).padStart(2, "0");
+  const hh = String(lk.getUTCHours()).padStart(2, "0");
+  const mm = String(lk.getUTCMinutes()).padStart(2, "0");
+  return `${y}-${m}-${d} ${hh}:${mm}`;
+}
+
+export type ScheduleSlot = {
+  /** මීට කලින් වැටුණු slot (දැන් යා යුතු slot එක) */
+  lastSlotMs: number | null;
+  /** ඊළඟට යා යුතු slot */
+  nextSlotMs: number | null;
+  /** baseline (anchor රෑ 12:00) */
+  anchorMs: number | null;
+  /** settings save කරපු වේලාව — මේකට කලින් slots යන්නේ නෑ */
+  cutoffMs: number;
+};
+
+/** cutoff (save වේලාව) ට සමාන හෝ ඊට පස්සේ එන පළවෙනි slot එක */
+function firstSlotFrom(anchorMs: number, step: number, cutoffMs: number): number {
+  if (cutoffMs <= anchorMs) return anchorMs;
+  const steps = Math.ceil((cutoffMs - anchorMs) / step);
+  return anchorMs + steps * step;
 }
 
 /**
- * අද (LK) backup දිනයක්ද? නීතිය: anchor දිනයෙන් දවස් interval එකේ
- * ගුණාකාරයක් ගෙවී ඇති දවස් (පළමු එක anchor + interval දිනයේ).
+ * anchor (රෑ 12:00) ඉඳන් intervalHours පාසා වැටෙන slots.
+ * · lastSlotMs = cutoff (= settings save කරපු වේලාව) ට පස්සේ වැටුණු ළඟම slot
+ * · nextSlotMs = ඊළඟට යා යුතු slot
  */
-export function isScheduleDay(s: BackupScheduleSettings, dateStr: string): boolean {
-  if (!s.anchorDate) return false;
-  const diff = daysBetween(s.anchorDate, dateStr);
-  return Number.isFinite(diff) && diff > 0 && diff % s.intervalDays === 0;
-}
+export function scheduleSlots(s: BackupScheduleSettings, now: Date = new Date()): ScheduleSlot {
+  const anchorMs = s.anchorDate ? lkMidnightMs(s.anchorDate) : null;
+  if (anchorMs == null) return { lastSlotMs: null, nextSlotMs: null, anchorMs: null, cutoffMs: 0 };
 
-/** ඊළඟ backup දිනය (Admin එකේ පෙන්වීමට) — අද due නම් අදම */
-export function nextScheduleDate(s: BackupScheduleSettings, now: Date = new Date()): string {
-  const { dateStr } = lkDateParts(now);
-  if (!s.anchorDate) return addDays(dateStr, s.intervalDays);
-  let cursor = dateStr;
-  for (let i = 0; i <= s.intervalDays + 1; i++) {
-    if (isScheduleDay(s, cursor)) return cursor;
-    cursor = addDays(cursor, 1);
+  const step = normalizeScheduleHours(s.intervalHours) * HOUR_MS;
+  const nowMs = now.getTime();
+  const savedMs = s.savedAt ? Date.parse(s.savedAt) : NaN;
+  const cutoffMs = Number.isFinite(savedMs) ? savedMs : anchorMs;
+  const firstMs = firstSlotFrom(anchorMs, step, cutoffMs);
+
+  if (nowMs < firstMs) {
+    return { lastSlotMs: null, nextSlotMs: firstMs, anchorMs, cutoffMs };
   }
-  return cursor;
+  const steps = Math.floor((nowMs - firstMs) / step);
+  const lastSlotMs = firstMs + steps * step;
+  return { lastSlotMs, nextSlotMs: lastSlotMs + step, anchorMs, cutoffMs };
 }
 
-export type ScheduleDecision = { due: boolean; reason: string; todayStr: string; nextDate: string };
+export type ScheduleDecision = {
+  due: boolean;
+  reason: string;
+  /** යා යුතු slot එකේ වේලාව (ISO) */
+  slotAt: string | null;
+  /** ඊළඟ slot එක (ISO) — Admin එකේ පෙන්වීමට */
+  nextAt: string | null;
+};
 
 /**
  * දැන් backup එකක් ගත යුතුද?
- * lastSuccessDateStr = අන්තිමට සාර්ථක වූ scheduled backup එකේ LK දිනය (backup_history).
+ * lastSuccessAt = අන්තිම සාර්ථක scheduled backup එකේ **ISO වේලාව** (null = කවදාවත් නෑ).
  */
 export function backupDueDecision(
   s: BackupScheduleSettings,
-  lastSuccessDateStr: string | null,
+  lastSuccessAt: string | null,
   now: Date = new Date()
 ): ScheduleDecision {
-  const { dateStr: todayStr, minutes } = lkDateParts(now);
-  const nextDate = nextScheduleDate(s, now);
-  if (!s.enabled) return { due: false, reason: "disabled", todayStr, nextDate };
-  if (!s.toSupabase && !s.toMega) return { due: false, reason: "no_destination", todayStr, nextDate };
-  if (!isScheduleDay(s, todayStr)) return { due: false, reason: "not_schedule_day", todayStr, nextDate };
-  if (lastSuccessDateStr && lastSuccessDateStr >= todayStr) {
-    return { due: false, reason: "already_done_today", todayStr, nextDate };
+  const { lastSlotMs, nextSlotMs } = scheduleSlots(s, now);
+  const slotAt = lastSlotMs != null ? new Date(lastSlotMs).toISOString() : null;
+  const nextAt = nextSlotMs != null ? new Date(nextSlotMs).toISOString() : null;
+
+  if (!s.enabled) return { due: false, reason: "disabled", slotAt, nextAt };
+  if (!s.toSupabase && !s.toMega) return { due: false, reason: "no_destination", slotAt, nextAt };
+  if (!s.anchorDate || lastSlotMs == null) return { due: false, reason: "not_started", slotAt, nextAt };
+
+  const lastMs = lastSuccessAt ? Date.parse(lastSuccessAt) : NaN;
+  if (Number.isFinite(lastMs) && lastMs >= lastSlotMs) {
+    return { due: false, reason: "already_done", slotAt, nextAt };
   }
-  if (minutes < timeToMinutes(s.timeHHMM)) return { due: false, reason: "before_time", todayStr, nextDate };
-  return { due: true, reason: "due", todayStr, nextDate };
+  return { due: true, reason: "due", slotAt, nextAt };
+}
+
+/** ඊළඟ auto-backup වේලාව — LK වේලාවෙන් "yyyy-mm-dd HH:MM" (Admin එකේ පෙන්වීමට) */
+export function nextRunLabel(s: BackupScheduleSettings, now: Date = new Date()): string {
+  const { lastSlotMs, nextSlotMs } = scheduleSlots(s, now);
+  if (lastSlotMs == null) return nextSlotMs != null ? formatLk(nextSlotMs) : "—";
+  return formatLk(nextSlotMs ?? lastSlotMs);
 }
 
 /** manual download එකේ නමමයි — `mpcs-full-backup-2026-10-19.zip` (එකම FULL ZIP එක) */
@@ -185,7 +274,8 @@ export function buildCronSql(siteUrl: string, cronSecret: string): string {
   const base = siteUrl.replace(/\/$/, "");
   return [
     "-- MPCS Auto-Backup timer — විනාඩි 15කට වරක් site එක check කරයි.",
-    "-- (ඇත්ත දවස/වෙලාව Admin → Backup & Restore එකෙන් තෝරනවා; මෙය එක වරක් run කළාම ඇති.)",
+    "-- (පැය කීයකට වරක්ද කියා Admin → Backup & Restore එකෙන් තෝරනවා; පටන් ගැන්ම හැමදාම රෑ 12:00.",
+    "--  මෙය එක වරක් run කළාම ඇති — ඊට පස්සේ වෙලාව වෙනස් කරන හැම එකක්ම Admin එකෙන් විතරයි.)",
     "insert into storage.buckets (id, name, public)",
     "values ('backups', 'backups', false)",
     "on conflict (id) do nothing;",

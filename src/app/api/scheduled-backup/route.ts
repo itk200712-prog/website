@@ -22,8 +22,9 @@ import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils
 import {
   autoBackupFileName,
   backupDueDecision,
-  lkDateParts,
+  lkMidnightMs,
   parseScheduleSettings,
+  scheduleTimesOfDay,
   SCHEDULE_LAST_SUCCESS_KEY,
   SCHEDULE_SECRET_KEYS,
   SCHEDULE_SETTING_KEYS,
@@ -89,8 +90,8 @@ async function loadSecrets(): Promise<{ cronSecret: string; megaEmail: string; m
   };
 }
 
-/** අන්තිම සාර්ථක scheduled backup එකේ LK දිනය — history එක prune වුණත් hidden setting එකෙන් මතකයි. */
-async function lastScheduledSuccessDate(): Promise<string | null> {
+/** අන්තිම සාර්ථක scheduled backup එකේ **ISO වේලාව** — history එක prune වුණත් hidden setting එකෙන් මතකයි. */
+async function lastScheduledSuccessAt(): Promise<string | null> {
   const [historyRows, settingRows] = await Promise.all([
     restGet(
       "backup_history?select=created_at&action=eq.scheduled&status=in.(success,partial)&order=created_at.desc&limit=1",
@@ -103,11 +104,18 @@ async function lastScheduledSuccessDate(): Promise<string | null> {
   ]);
 
   const stored = settingRows?.[0]?.value?.trim() ?? "";
-  const storedDate = /^\d{4}-\d{2}-\d{2}$/.test(stored) ? stored : null;
-  const iso = historyRows?.[0]?.created_at;
-  const historyDate = iso && !Number.isNaN(new Date(iso).getTime()) ? lkDateParts(new Date(iso)).dateStr : null;
-  if (storedDate && historyDate) return storedDate > historyDate ? storedDate : historyDate;
-  return storedDate ?? historyDate;
+  // අලුත් අගය = ISO වේලාව · පරණ අගය = "yyyy-mm-dd" (එදා LK රෑ 12:00 ලෙස ගනී)
+  const storedMs = /^\d{4}-\d{2}-\d{2}$/.test(stored)
+    ? lkMidnightMs(stored)
+    : Number.isFinite(Date.parse(stored))
+      ? Date.parse(stored)
+      : null;
+  const historyIso = historyRows?.[0]?.created_at;
+  const historyMs = historyIso && Number.isFinite(Date.parse(historyIso)) ? Date.parse(historyIso) : null;
+
+  const best = [storedMs, historyMs].filter((v): v is number => v != null && Number.isFinite(v));
+  if (!best.length) return null;
+  return new Date(Math.max(...best)).toISOString();
 }
 
 /** run lock එක ගලවනවා (success/fail දෙකේදීම) */
@@ -124,12 +132,12 @@ async function clearRunLock(): Promise<void> {
   }
 }
 
-async function storeLastScheduledSuccessDate(dateStr: string): Promise<void> {
+async function storeLastScheduledSuccessDate(iso: string): Promise<void> {
   try {
     await fetch(`${SUPA_BASE}/rest/v1/system_settings`, {
       method: "POST",
       headers: svcHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
-      body: JSON.stringify({ key: SCHEDULE_LAST_SUCCESS_KEY, value: dateStr }),
+      body: JSON.stringify({ key: SCHEDULE_LAST_SUCCESS_KEY, value: iso }),
       cache: "no-store",
     });
   } catch {
@@ -444,10 +452,16 @@ export async function POST(req: NextRequest) {
   }).catch(() => undefined);
 
   if (!force) {
-    const last = await lastScheduledSuccessDate();
+    const last = await lastScheduledSuccessAt();
     const decision = backupDueDecision(settings, last);
     if (!decision.due) {
-      return json({ ok: true, skipped: true, reason: decision.reason, nextDate: decision.nextDate });
+      return json({
+        ok: true,
+        skipped: true,
+        reason: decision.reason,
+        slotAt: decision.slotAt,
+        nextRun: decision.nextAt,
+      });
     }
   } else if (!settings.toSupabase && !settings.toMega) {
     await clearRunLock(); // lock එක දාලා ආපහු නවත්තන නිසා lock එක ඉවත් කරයි
@@ -500,7 +514,9 @@ export async function POST(req: NextRequest) {
 
   const status = done.length && !failed.length ? "success" : done.length ? "partial" : "failed";
   const detail = [
-    force ? "Manual test run" : `Every ${settings.intervalDays} day(s) at ${settings.timeHHMM} (LK)`,
+    force
+      ? "Manual test run"
+      : `Every ${settings.intervalHours}h from 00:00 (LK) — slots: ${scheduleTimesOfDay(settings.intervalHours).join(", ")}`,
     `FULL ZIP = manual backup (schema + logins + ${built.images} images + registers)`,
     encrypted ? "🔒 Encrypted (Encryption Password)" : "Not encrypted",
     encryptWarning,
@@ -520,7 +536,7 @@ export async function POST(req: NextRequest) {
     detail,
     encrypted,
   });
-  if (done.length) await storeLastScheduledSuccessDate(lkDateParts().dateStr);
+  if (done.length) await storeLastScheduledSuccessDate(new Date().toISOString());
   await clearRunLock();
 
   if (!done.length) return json({ ok: false, reason: "upload_failed", detail }, 500);
