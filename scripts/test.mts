@@ -594,7 +594,7 @@ ok("backup: login SQL uses crypt(pgcrypto) and creates auth.identities",
 ok("backup: ZIP embeds canonical schema.sql (live chat DB logic + RLS) — server route එකෙන්",
   backupSrc.includes('addFile("schema.sql"') &&
   backupSrc.includes("async function fetchSchemaSql") &&
-  backupSrc.includes('fetch("/api/backup/schema"') &&
+  backupSrc.includes("/api/backup/schema") &&
   !backupSrc.includes('import("../../supabase/schema.sql")'));
 ok("backup: image scan covers nested JSON (JSON.stringify) + recursive storage list",
   backupSrc.includes("scanImagePathsInRows") && backupSrc.includes("JSON.stringify(r)") && backupSrc.includes("listAllStorageFiles"));
@@ -863,6 +863,14 @@ ok("security: schema.sql (default passwords) is server-only — not in the brows
   !seedSrc.includes('btoa("Kenula@123")') &&
   !adminBackupSrc.includes("MPCS@Backup#2026") &&
   !adminBackupSrc.includes("MPCS@Encrypt#2026"));
+
+ok("backup: auto/scheduled ZIP still embeds schema.sql (server auth with x-backup-secret)",
+  schemaRouteSrc.includes("async function cronSecretOk") &&
+  schemaRouteSrc.includes("sameSecret") &&
+  schemaRouteSrc.includes('req.headers.get("x-backup-secret")') &&
+  scheduledRouteSrc.includes("secrets.cronSecret") &&
+  scheduledRouteSrc.includes("cronSecret: cronSecret || undefined") &&
+  backupSrc.includes("fetchSchemaSql(opts?.assetBaseUrl, opts?.cronSecret)"));
 
 ok("security: no plaintext default passwords left in client-side source",
   !readdirSync(join(root, "src/lib"), { recursive: true } as never)
@@ -1263,7 +1271,7 @@ ok("backup v3: public icons/images + CSS/cursor source in ZIP, manifest-hashed, 
   genSiteSourceSrc.includes('"src/app/admin/businesses/page.tsx"') &&
   packageJsonSrc.includes('"prebuild": "node scripts/gen-site-source.mjs"') &&
   packageJsonSrc.includes('"predev": "node scripts/gen-site-source.mjs"') &&
-  scheduledBackupSrc.includes("buildFullBackupZip(encPw, req.nextUrl.origin)") &&
+  scheduledBackupSrc.includes("buildFullBackupZip(encPw, req.nextUrl.origin, secrets.cronSecret)") &&
   scheduledBackupSrc.includes("assetBaseUrl,") &&
   adminBackupSrc.includes("site-assets/public/") &&
   adminBackupSrc.includes("siteSourceCount") &&

@@ -142,7 +142,8 @@ async function storeLastScheduledSuccessDate(dateStr: string): Promise<void> {
 // AES-GCM වලින් encrypt වෙනවා → Import එකේදී ඒ password එකම දීලා restore කළ හැක.
 async function buildFullBackupZip(
   encryptPassword = "",
-  assetBaseUrl?: string // Format v3: public assets fetch කරන්න මේ request එකේම origin එක
+  assetBaseUrl?: string, // Format v3: public assets fetch කරන්න මේ request එකේම origin එක
+  cronSecret = "" // schema.sql embed කරන්න /api/backup/schema වලට (server-backup auth)
 ): Promise<{ zip: Buffer; totalRows: number; tables: number; images: number }> {
   const sb = createClient(SUPA_BASE, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -154,6 +155,7 @@ async function buildFullBackupZip(
     client: sb as unknown as BackupClient,
     encryptPassword: encryptPassword || undefined,
     assetBaseUrl,
+    cronSecret: cronSecret || undefined,
     onMeta: (m) => {
       meta = m;
     },
@@ -464,7 +466,7 @@ export async function POST(req: NextRequest) {
   await pruneBackupHistory();
   let built: Awaited<ReturnType<typeof buildFullBackupZip>>;
   try {
-    built = await buildFullBackupZip(encPw, req.nextUrl.origin);
+    built = await buildFullBackupZip(encPw, req.nextUrl.origin, secrets.cronSecret);
   } catch (e) {
     const detail = `FULL ZIP build failed: ${(e as Error).message}`;
     await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed", detail, encrypted });

@@ -372,19 +372,22 @@ function contentTypeForPath(path: string): string {
  * Canonical schema.sql — client bundle එකට නොයවා, server route එකෙන් ගන්නවා.
  * (ලොග් වී ඉන්න admin/superadmin කෙනෙකුට විතරයි — token එකක් නැත්නම් හිස් string)
  */
-async function fetchSchemaSql(): Promise<string> {
+async function fetchSchemaSql(baseUrl?: string, cronSecret?: string): Promise<string> {
   try {
-    const sb = await authedClient();
-    const { data } = await sb.auth.getSession();
-    const token = data?.session?.access_token ?? "";
-    if (!token && typeof window !== "undefined") {
-      const { data: alt } = await sb.auth.getUser();
-      if (!alt?.user) return "";
+    // Server (scheduled / auto) backup එකේදී browser session එකක් නෑ → absolute URL එක +
+    // cron secret එකෙන් route එක කතා කරයි. Browser එකේදී සයින් වුණු admin ගේ token එකෙන්.
+    const url = baseUrl ? `${baseUrl.replace(/\/$/, "")}/api/backup/schema` : "/api/backup/schema";
+    let headers: Record<string, string> = {};
+    if (cronSecret) {
+      headers = { "x-backup-secret": cronSecret };
+    } else {
+      const sb = await authedClient();
+      const { data } = await sb.auth.getSession();
+      const token = data?.session?.access_token ?? "";
+      if (!token) return "";
+      headers = { Authorization: `Bearer ${token}` };
     }
-    const res = await fetch("/api/backup/schema", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      cache: "no-store",
-    });
+    const res = await fetch(url, { headers, cache: "no-store" });
     if (!res.ok) return "";
     return await res.text();
   } catch {
@@ -987,6 +990,7 @@ export async function generateBackupZip(
     encryptPassword?: string; // දීලා ඇත්නම් database.sql එක AES-GCM වලින් encrypt වේ
     client?: BackupClient; // server scheduled-backup එක service-role client එක inject කරයි
     assetBaseUrl?: string; // Format v3: public/ assets fetch කරන site base URL එක (නැත්නම් browser origin/env)
+    cronSecret?: string; // Server backup (scheduled) එකේදී schema.sql ගන්න x-backup-secret
     onMeta?: (meta: { tableCounts: Record<string, number>; imageCount: number }) => void;
   }
 ): Promise<Blob> {
@@ -1032,7 +1036,7 @@ export async function generateBackupZip(
   try {
     // 🔒 schema.sql එක Dං browser bundle එකට ගන්නේ නෑ (default passwords/seed
     //    credentials ඒකේ තියෙනවා) — superadmin-only server route එකෙන් ගන්නවා.
-    const schemaText = await fetchSchemaSql();
+    const schemaText = await fetchSchemaSql(opts?.assetBaseUrl, opts?.cronSecret);
     if (typeof schemaText === "string" && schemaText.length > 1000) {
       schemaSha256 = await sha256Hex(schemaText);
       await addFile("schema.sql", schemaText);
