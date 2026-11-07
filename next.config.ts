@@ -11,35 +11,24 @@ import type { NextConfig } from "next";
 const SUPABASE_ORIGIN = "https://*.supabase.co";
 const SUPABASE_WS = "wss://*.supabase.co";
 
-/** Next.js app-router inline bootstrap scripts + Tailwind inline styles නිසා
- *  script/style වලට 'unsafe-inline' අවශ්‍යයි. Dev mode එකේදී පමණක් 'unsafe-eval'. */
-function buildCsp(isDev: boolean): string {
-  return [
-    "default-src 'self'",
-    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data: blob:",
-    "media-src 'self' data: blob: https:",
-    `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS} https://*.supabase.in https://vitals.vercel-insights.com`,
-    "worker-src 'self' blob:",
-    "frame-src 'self'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'self'",
-    ...(isDev ? [] : ["upgrade-insecure-requests"]),
-  ].join("; ");
-}
+/**
+ * 📌 CSP එක දැන් **middleware** එකේ per-request nonce එකකින් set වේ
+ * (`src/middleware.ts` → `buildCsp(nonce)`). next.config එකේ CSP දැම්මොත් header
+ * දෙකක් යනවා → browser එකේ දෙකේම intersection එක බලන නිසා nonce එක වැඩ කරන්නේ නෑ.
+ */
 
-const securityHeaders = (isDev: boolean) => [
-  { key: "Content-Security-Policy", value: buildCsp(isDev) },
+const securityHeaders = (_isDev: boolean) => [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), interest-cohort=()",
+    // 📌 pentestnet: "feature 'geolocation' is not restricted to specific origins"
+    //    → origin එක explicit ව දෙන්නේ (self පමණයි = වෙන කිසිම third-party origin එකකට බෑ)
+    value:
+      "camera=(self), microphone=(self), geolocation=(self), payment=(self), " +
+      "usb=(self), magnetometer=(self), gyroscope=(self), accelerometer=(self), " +
+      "fullscreen=(self), picture-in-picture=(self), interest-cohort=()",
   },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "X-DNS-Prefetch-Control", value: "on" },

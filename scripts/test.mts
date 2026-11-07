@@ -927,21 +927,27 @@ const sitemapFileSrc = readFileSync(join(root, "src/app/sitemap.ts"), "utf8");
 const securityTxtSrc = readFileSync(join(root, "src/app/.well-known/security.txt/route.ts"), "utf8");
 
 ok("security: all pentest-reported headers are sent (CSP, XFO, nosniff, referrer, permissions)",
-  nextConfigSrc.includes('{ key: "Content-Security-Policy", value: buildCsp(isDev) }') &&
   nextConfigSrc.includes('{ key: "X-Frame-Options", value: "SAMEORIGIN" }') &&
   nextConfigSrc.includes('{ key: "X-Content-Type-Options", value: "nosniff" }') &&
   nextConfigSrc.includes('{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" }') &&
   nextConfigSrc.includes('key: "Permissions-Policy"') &&
-  nextConfigSrc.includes("async headers()") &&
-  // CSP එකේ අනිවාර්ය කොටස්
-  nextConfigSrc.includes('"default-src \'self\'"') &&
-  nextConfigSrc.includes('"object-src \'none\'"') &&
-  nextConfigSrc.includes('"base-uri \'self\'"') &&
-  nextConfigSrc.includes('"frame-ancestors \'self\'"') &&
-  nextConfigSrc.includes("connect-src 'self' ${SUPABASE_ORIGIN}") &&
-  // data exfiltration වළක්වන connect-src (අපේ Supabase විතරයි)
-
-  !nextConfigSrc.includes('default-src *'));
+  // permissions-policy: origin-explicit (pentest warning fix)
+  nextConfigSrc.includes("geolocation=(self)") &&
+  nextConfigSrc.includes("microphone=(self)") &&
+  nextConfigSrc.includes("payment=(self)") &&
+  // CSP එක දැන් middleware එකේ nonce සහිතව
+  !nextConfigSrc.includes('key: "Content-Security-Policy"') &&
+  middlewareSrc.includes("function makeNonce") &&
+  middlewareSrc.includes('`script-src \'self\' \'nonce-${nonce}\' \'strict-dynamic\'') &&
+  !middlewareSrc.includes("script-src 'self' 'unsafe-inline'") &&
+  middlewareSrc.includes("requestHeaders.set(\"Content-Security-Policy\", csp)") &&
+  middlewareSrc.includes('response.headers.set("Content-Security-Policy", csp)') &&
+  middlewareSrc.includes("res.headers.set(\"Content-Security-Policy\", csp)") &&
+  middlewareSrc.includes("object-src 'none'") &&
+  middlewareSrc.includes("base-uri 'self'") &&
+  middlewareSrc.includes("frame-ancestors 'self'") &&
+  nextConfigSrc.includes("connect-src 'self' ${SUPABASE_ORIGIN}") === false &&
+  middlewareSrc.includes("connect-src 'self' ${SUPABASE_ORIGIN}"));
 
 ok("security: framework fingerprint hidden + robots.txt + sitemap + security.txt present",
   nextConfigSrc.includes("poweredByHeader: false") &&
@@ -968,6 +974,21 @@ ok("excel import: strictly manual — runs only on the Upload button, destructiv
   readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8").includes("🛡 MANUAL ONLY") &&
   readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8").includes('if (mode !== "append")') &&
   readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8").includes("window.confirm(msg)"));
+
+ok("backup auto-covers future updates: site-source + public assets are auto-discovered",
+  readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8").includes("AUTO-DISCOVER") &&
+  readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8").includes('const AUTO_ROOTS = ["src", "."]') &&
+  readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8").includes("PUBLIC_ASSET_FILES") &&
+  readFileSync(join(root, "src/lib/site-source.generated.ts"), "utf8").split('{ path: "').length - 1 >= 100 &&
+  // API routes ද auto-add වේ (future updates) — ඒත් රහස් කිසිවක් snapshot එකේ නෑ
+  readFileSync(join(root, "src/lib/site-source.generated.ts"), "utf8").includes('{ path: "src/app/api/scheduled-backup/route.ts"') &&
+  !readFileSync(join(root, "src/lib/site-source.generated.ts"), "utf8").includes('{ path: ".env') &&
+  !/eyJhbGciOi[A-Za-z0-9._-]{20,}/.test(readFileSync(join(root, "src/lib/site-source.generated.ts"), "utf8")) &&
+  !/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(readFileSync(join(root, "src/lib/site-source.generated.ts"), "utf8")) &&
+  readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8").includes("SECRET_PATTERNS") &&
+  backupSrc.includes('import { PUBLIC_ASSET_FILES } from "@/lib/public-assets.generated"') &&
+  backupSrc.includes("...PUBLIC_ASSET_FILES,") &&
+  readFileSync(join(root, "src/lib/public-assets.generated.ts"), "utf8").includes('"icons/phone-call.png"'));
 
 ok("security: no plaintext default passwords left in client-side source",
   !readdirSync(join(root, "src/lib"), { recursive: true } as never)
@@ -1547,9 +1568,10 @@ ok("backup latest updates: generated site-source snapshot is current and include
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
   ) &&
   latestBackupUpdateFiles.every((p) => generatedSiteSourceByPath.has(p)) &&
-  backupSrc.includes('await import("./site-source-assets")') &&
-  backupSrc.includes("siteSourceFiles = mod.getSiteSourceFiles()") &&
-  backupSrc.includes("sitePackageVersion = mod.SITE_PACKAGE_VERSION"));
+  // Source snapshot දැන් server route එකකින් (client bundle එකට MB එකතු නොවේ)
+  backupSrc.includes("fetchSiteSourceSnapshot(") &&
+  backupSrc.includes("/api/backup/site-source") &&
+  !backupSrc.includes('await import("./site-source-assets")'));
 const windowsCursorEnv = {
   userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
   platform: "Win32",

@@ -31,8 +31,58 @@ function isRootFile(pathname: string): boolean {
   return ROOT_FILES.some((f) => pathname === f || pathname.startsWith(`${f}/`));
 }
 
+// ============================================================================
+//  🔐 CSP with per-request NONCE (pentestnet: "Unsafe source 'unsafe-inline'
+//     in directive script-src")
+//  · nonce එක request එකට අලුත් (crypto.randomUUID) → guess කරන්න බෑ
+//  · Next.js app-router එකේ inline bootstrap scripts වලට Next.js එකෙන්ම
+//    මේ nonce එක auto add වේ (CSP header එක request headers වල තියෙන නිසා)
+//  · script-src: 'self' 'nonce-…' 'strict-dynamic' — 'unsafe-inline' නෑ
+//  · style-src වලට 'unsafe-inline' අවශ්‍යයි (Tailwind inline styles)
+// ============================================================================
+const SUPABASE_ORIGIN = "https://*.supabase.co";
+const SUPABASE_WS = "wss://*.supabase.co";
+
+function makeNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+function buildCsp(nonce: string, isDev: boolean): string {
+  return [
+    "default-src 'self'",
+    // ⚠ 'unsafe-inline' එකක් නෑ — modern browsers nonce එකක් තියෙනවා නම් inline script ignore කරයි
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data: blob:",
+    "media-src 'self' data: blob: https:",
+    `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS} https://*.supabase.in https://vitals.vercel-insights.com`,
+    "worker-src 'self' blob:",
+    "frame-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+    ...(isDev ? [] : ["upgrade-insecure-requests"]),
+  ].join("; ");
+}
+
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const isDev = process.env.NODE_ENV !== "production";
+  const nonce = makeNonce();
+  const csp = buildCsp(nonce, isDev);
+
+  // Next.js මේ request header එකෙන් තමන්ගේ inline scripts වලට nonce එක දාගන්නවා
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("Content-Security-Policy", csp);
+  requestHeaders.set("x-nonce", nonce);
+
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
 
   const { pathname } = request.nextUrl;
 
@@ -60,7 +110,8 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet: CookieToSet[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
+          response = NextResponse.next({ request: { headers: requestHeaders } });
+          response.headers.set("Content-Security-Policy", csp);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
@@ -97,15 +148,18 @@ export async function middleware(request: NextRequest) {
 
   // ---- /si /en -> render same page with locale header + cookie ------------
   if (isPrefixed) {
-    const reqHeaders = new Headers(request.headers);
-    reqHeaders.set("x-locale", locale);
+    // 🔐 CSP (nonce සහිත) request header එකේම තියෙන්න ඕනේ — Next.js ඒකෙන් තමන්ගේ
+    //    inline scripts වලට nonce එක දාගන්නවා. ඒ නිසා requestHeaders පාවිච්චි කරයි.
+    requestHeaders.set("x-locale", locale);
     const res = NextResponse.rewrite(
       new URL(stripped + request.nextUrl.search, request.url),
-      { request: { headers: reqHeaders } }
+      { request: { headers: requestHeaders } }
     );
     // Supabase refresh එකෙන් සැකසූ cookies රැගෙන යන්න
     response.cookies.getAll().forEach((c) => res.cookies.set(c.name, c.value, c));
     res.cookies.set("lang", locale, { path: "/", maxAge: 31536000, sameSite: "lax" });
+    res.headers.set("Content-Security-Policy", csp);
+    res.headers.set("x-nonce", nonce);
     return res;
   }
 

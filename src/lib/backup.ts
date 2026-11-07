@@ -279,7 +279,12 @@ async function fetchBase64(url: string): Promise<{ b64: string; type: string } |
  * වෙන නිසා ඊළඟ backups වලටත් මේවා අහුවෙනවා.
  * ⚠ public/ එකට අලුත් file එකක් දැම්මොත් මේ list එකටත් දාන්න.
  */
-export const PUBLIC_ASSET_PATHS = [
+// 🖼 `public/` එකේ හැම file එකක්ම (auto-generated manifest) — ඉදිරි updates වලට
+//    අලුතෙන් දාන icon/image/font එකක් backup ZIP එකට අපේම එකතු වේ.
+import { PUBLIC_ASSET_FILES } from "@/lib/public-assets.generated";
+
+export const PUBLIC_ASSET_PATHS: string[] = [
+  ...PUBLIC_ASSET_FILES,
   "fonts/AbhayaLibre-Regular.ttf",
   "icons/phone-call.png",
   "icons/location.png",
@@ -394,6 +399,32 @@ async function fetchSchemaSql(baseUrl?: string, cronSecret?: string): Promise<st
   } catch {
     return "";
   }
+}
+
+/**
+ * 🗂 Site design/update source snapshot එක (backup ZIP එකේ `site-source/`) —
+ * server-only route එකකින් fetch වේ. Fail වුණොත් හිස් list එකක් එවයි
+ * (backup එක නවත්තන්නේ නෑ, manifest එකේ 0 කියා පෙනේ).
+ */
+async function fetchSiteSourceSnapshot(
+  baseUrl?: string,
+  cronSecret?: string
+): Promise<{ version: string; files: { path: string; content: string }[] }> {
+  const url = baseUrl ? `${baseUrl.replace(/\/$/, "")}/api/backup/site-source` : "/api/backup/site-source";
+  let headers: Record<string, string> = {};
+  if (cronSecret) {
+    headers = { "x-backup-secret": cronSecret };
+  } else {
+    const sb = await authedClient();
+    const { data } = await sb.auth.getSession();
+    const token = data?.session?.access_token ?? "";
+    if (!token) return { version: "", files: [] };
+    headers = { Authorization: `Bearer ${token}` };
+  }
+  const res = await fetch(url, { headers, cache: "no-store" });
+  if (!res.ok) return { version: "", files: [] };
+  const json = (await res.json()) as { version?: string; files?: { path: string; content: string }[] };
+  return { version: String(json.version ?? ""), files: Array.isArray(json.files) ? json.files : [] };
 }
 
 /* ------------------------------------------------------ LOGIN ACCOUNTS - */
@@ -1103,9 +1134,11 @@ export async function generateBackupZip(
   let siteSourceFiles: { path: string; content: string }[] = [];
   let sitePackageVersion = "";
   try {
-    const mod = await import("./site-source-assets");
-    siteSourceFiles = mod.getSiteSourceFiles();
-    sitePackageVersion = mod.SITE_PACKAGE_VERSION;
+    // 🔒 Source snapshot එක දැන් **server route** එකකින් — browser bundle එකට MB ගණනක්
+    //    එකතු වෙන්නේ නෑ (schema.sql එකට කළ විදිහම). Cron secret / admin token එකෙන් auth.
+    const snap = await fetchSiteSourceSnapshot(opts?.assetBaseUrl, opts?.cronSecret);
+    siteSourceFiles = snap.files;
+    sitePackageVersion = snap.version;
   } catch { /* source snapshot බැරි වුණත් දත්ත backup එක හැදේ — manifest එකේ 0 කියා පෙනේ */ }
   for (const asset of siteAssets) {
     try {

@@ -5,20 +5,25 @@
 
 ## HTTP Security Headers (pentestnet report — 07 Nov 2026)
 
-`next.config.ts` → `headers()` එකෙන් හැම route එකකටම set වේ:
+`next.config.ts` → `headers()` එකෙන් හැම route එකකටම set වේ.
+**හැර `Content-Security-Policy` එකට** — ඒක `src/middleware.ts` එකේදී **හැම request එකකටම අලුත් nonce එකක්
+සමඟ** හැදේ (එකම header එක දෙපැත්තෙන් යැව්වොත් browser එක headers දෙක intersect කරන නිසා nonce එක
+reject වේ → **CSP එක next.config.ts එකට ආපහු දාන්න එපා**).
 
 | Header | Value | තත්ත්වය |
 |---|---|---|
-| `Content-Security-Policy` | `default-src 'self'` · script/style `'unsafe-inline'` (Next app-router) · `connect-src` Supabase විතරයි · `object-src 'none'` · `frame-ancestors 'self'` | ✅ |
+| `Content-Security-Policy` | `default-src 'self'` · **`script-src 'self' 'nonce-…' 'strict-dynamic'`** (`unsafe-inline` **නෑ**) · `style-src 'self' 'unsafe-inline'` · `connect-src` Supabase විතරයි · `object-src 'none'` · `base-uri 'self'` · `frame-ancestors 'self'` | ✅ |
 | `X-Frame-Options` | `SAMEORIGIN` | ✅ |
 | `X-Content-Type-Options` | `nosniff` | ✅ |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | ✅ |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=(), usb=(), …` | ✅ |
+| `Permissions-Policy` | `camera=(self), microphone=(self), geolocation=(self), payment=(self), usb=(self), magnetometer=(self), gyroscope=(self), accelerometer=(self), fullscreen=(self), picture-in-picture=(self), interest-cohort=()` — හැම feature එකක්ම **origin එකට සීමා** කරලා (pentest warning fix) | ✅ |
 | `Cross-Origin-Opener-Policy` | `same-origin` | ✅ |
 | `X-Powered-By` | **ඉවත්** (`poweredByHeader: false`) | ✅ |
 | `Strict-Transport-Security` | Vercel auto (`max-age=63072000; includeSubDomains; preload`) | ✅ |
 
-**රන්න එපා:** `default-src *`, `script-src 'unsafe-eval'` (production), `frame-ancestors *`.
+**රන්න එපා:** `default-src *`, `script-src 'unsafe-inline'`, `script-src 'unsafe-eval'` (production), `frame-ancestors *`.
+`script-src` එකේ `'unsafe-inline'` දැම්මොත් pentest report එකේ **warning** එකක් එනවා වගේම nonce එකත්
+නිෂ්ඵල වේ. Nonce එක `x-nonce` request header එකෙන් server components වලට ලැබේ.
 `unsafe-eval` දාන්නේ development එකේදී විතරයි (`NODE_ENV !== "production"`).
 
 ## Well-known files
