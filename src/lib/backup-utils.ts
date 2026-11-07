@@ -15,6 +15,25 @@ export const ENCRYPTED_PREFIX = "MPCS-ENCRYPTED-BACKUP v1";
 /** v2 = gzip කරලා encrypt කරනවා — file එක ~4 ගුණයකින් කුඩායි (auto-backup timeout නැති වෙන්න) */
 export const ENCRYPTED_PREFIX_V2 = "MPCS-ENCRYPTED-BACKUP v2";
 
+/* -------------------------------------------------- ZIP PATH NORMALIZE --- */
+/**
+ * 🗂 ZIP entry එකක path එක → storage `site-public/…` path එක.
+ * `site-assets/public/icons/x.png`, `site-public/icons/x.png`, `icons/x.png` —
+ * තුනම එකම තැනට යයි (double-prefix `site-assets/site-assets/…` කවදාවත් හැදෙන්නේ නෑ).
+ */
+export function siteAssetArchivePath(path: string): string {
+  let p = path.replace(/^\/+/, "");
+  if (p.startsWith("site-assets/public/")) p = p.slice("site-assets/public/".length);
+  else if (p.startsWith("site-assets/")) p = p.slice("site-assets/".length);
+  if (p.startsWith("site-public/")) return p;
+  return `site-public/${p}`;
+}
+
+/** `site-source/…` entries import එකේදී code ලෙස apply නොවේ (deploy එකෙන් වේ) */
+export function isSiteSourceEntry(path: string): boolean {
+  return path.startsWith("site-source/") || path.startsWith("site_source/");
+}
+
 /* --------------------------------------------------------------- PARSE --- */
 export type ParsedInsert = { table: string; cols: string[]; values: unknown[] };
 

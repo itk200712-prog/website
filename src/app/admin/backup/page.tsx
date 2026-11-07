@@ -16,7 +16,7 @@ import { AdminTopbar, useNotice } from "@/components/admin";
 import { authedClient } from "@/lib/supabase/client";
 import {
   BACKUP_TABLES, deleteBackupHistoryEntry, generateBackupZip, getBackupHistory, getBackupSecrets, parseBackupSql, pruneBackupHistory, recordBackupHistory,
-  restoreBackup, setBackupSecret, type BackupHistoryEntry,
+  restoreBackup, setBackupSecret, verifyRestore, type BackupHistoryEntry,
 } from "@/lib/backup";
 import {
   BACKUP_FORMAT_VERSION, BACKUP_HISTORY_KEEP, decryptBackupText, isEncryptedBackupText, sha256Hex, summarizeInserts,
@@ -28,6 +28,9 @@ import {
   SCHEDULE_SECRET_KEYS, SCHEDULE_SETTING_KEYS, scheduleSettingsRows, type BackupScheduleSettings,
 } from "@/lib/scheduled-backup";
 import { logActivity } from "@/lib/activity";
+import {
+  BACKUP_COVERAGE, buildCoverageReport, type CoverageReport, type CoverageRow,
+} from "@/lib/backup-coverage";
 
 function formatFileSize(size?: number | null): string {
   if (size == null || !Number.isFinite(size)) return "—";
@@ -89,6 +92,10 @@ export default function AdminBackupPage() {
   const [safetyFirst, setSafetyFirst] = useState(true); // 🛡 import එකට කලින් auto safety-backup
   const [confirmText, setConfirmText] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  // 📋 Coverage — site එකේ හැම කොටසක්ම backup එකට එනවද (user/admin/login/images/excel…)
+  const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+  const [coverageBusy, setCoverageBusy] = useState(false);
+  const [coverageAt, setCoverageAt] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
     fileName: string;
     fileSize: number;
@@ -275,6 +282,67 @@ export default function AdminBackupPage() {
       }
     })();
   }, []);
+
+  /**
+   * 📋 LIVE Coverage check — හැම table එකේම row ගණන + storage images + public assets +
+   * site-source count කරලා "site එකේ හැම දෙයක්ම backup එකට එනවා" කියා තහවුරු කරයි.
+   * (backup එකක් හදන්නේ නැතුව — වේගවත් `head: true` count query 29ක් විතරයි)
+   */
+  async function loadCoverage() {
+    if (coverageBusy) return;
+    setCoverageBusy(true);
+    try {
+      const sb = await authedClient();
+      const tables = BACKUP_COVERAGE.flatMap((g) => g.items.filter((i) => i.kind === "table").map((i) => i.key));
+      const counts: Record<string, number> = {};
+      for (let i = 0; i < tables.length; i += 6) {
+        const batch = tables.slice(i, i + 6);
+        const res = await Promise.all(
+          batch.map((t) => sb.from(t).select("*", { count: "exact", head: true }))
+        );
+        batch.forEach((t, idx) => {
+          const c = res[idx]?.count;
+          // ⚠ count එක ගන්න බැරි වුණොත් key එක **දාන්නේ නෑ** → card එකේ "unknown" විදිහට පෙනේ
+          //   (0 කියා පෙන්නුවොත් ඇත්තටම දත්ත නැති බවට වැරදි අදහසක් එනවා)
+          if (typeof c === "number") counts[t] = c;
+        });
+      }
+      // login accounts = password තියෙන profiles ගාණ (database.sql LOGIN ACCOUNTS block එකට යන ගාණ)
+      const { count: loginCount } = await sb
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .not("password_display", "is", null)
+        .neq("password_display", "");
+
+      // storage images + public assets + source files (backup ZIP එකට යන ගාණම)
+      let meta: { images?: number; siteAssets?: number; siteSource?: number } | null = null;
+      try {
+        const { data: sess } = await sb.auth.getSession();
+        const token = sess?.session?.access_token ?? "";
+        const res = await fetch("/api/backup/coverage", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          cache: "no-store",
+        });
+        if (res.ok) meta = await res.json();
+      } catch { /* coverage meta නැතත් table counts පෙන්වයි */ }
+
+      setCoverage(
+        buildCoverageReport({
+          tables: counts,
+          images: typeof meta?.images === "number" ? meta.images : undefined,
+          siteAssets: typeof meta?.siteAssets === "number" ? meta.siteAssets : undefined,
+          siteSource: typeof meta?.siteSource === "number" ? meta.siteSource : undefined,
+          loginAccounts: typeof loginCount === "number" ? loginCount : undefined,
+          memberRows: counts["member_rows"],
+          voterRows: counts["voter_rows"],
+        })
+      );
+      setCoverageAt(new Date().toISOString());
+    } catch (e) {
+      show(`⚠ Coverage check: ${(e as Error).message}`);
+    }
+    setCoverageBusy(false);
+  }
 
   async function downloadBackup() {
     if (!secrets) return show("⚠ backup_secrets table එක නෑ — පහත SQL block එක run කරන්න");
@@ -471,6 +539,19 @@ export default function AdminBackupPage() {
         { onlyTables: chosen, siteAssets: preview.siteAssets }
       );
       const total = Object.values(restored).reduce((a, b) => a + b, 0);
+      // 🔎 Import verify — backup එකේ ගාණ vs දැන් DB එකේ ඇත්ත ගාණ
+      let verifyMsg = "";
+      try {
+        const expectedCounts: Record<string, number> = {};
+        for (const t of preview.tables) if (!chosen || chosen.includes(t.name)) expectedCounts[t.name] = t.rows;
+        const check = await verifyRestore(expectedCounts);
+        const bad = check.filter((c) => !c.ok);
+        verifyMsg = bad.length
+          ? ` · ⚠ verify: ${bad.map((b) => `${b.table} ${b.actual}/${b.expected}`).join(", ")}`
+          : ` · ✅ verify හරි (${check.length} tables)`;
+      } catch (e) {
+        verifyMsg = ` · (verify කරන්න බැරි වුණා: ${(e as Error).message})`;
+      }
       void logActivity("BACKUP_IMPORT", `${preview.fileName} — restored ${Object.keys(restored).length} tables / ${total} rows${restoredSiteAssets ? ` / site files ${restoredSiteAssets}` : ""}${partial ? " (partial)" : ""}`);
       const importEntry = await recordBackupHistory({
         action: "import",
@@ -480,13 +561,15 @@ export default function AdminBackupPage() {
         tablesCount: Object.keys(restored).length,
         rowsCount: total,
         status: errors.length ? "partial" : "success",
-        detail: `${partial ? "Partial restore" : "Full restore"}${restoredSiteAssets ? ` · site files ${restoredSiteAssets}` : ""}${errors.length ? ` · ${errors.length} issue(s)` : ""}`,
+        detail: `${partial ? "Partial restore" : "Full restore"}${restoredSiteAssets ? ` · site files ${restoredSiteAssets}` : ""}${errors.length ? ` · ${errors.length} issue(s)` : ""}${verifyMsg}`,
       });
       if (importEntry) setHistory((xs) => [importEntry, ...xs].slice(0, BACKUP_HISTORY_KEEP));
       setPreview(null);
       setAnim({ pct: 100, msg: `Restored ${total} rows ✅`, done: true });
       setTimeout(() => setAnim(null), 2200);
-      show(errors.length ? `⚠ Restored with ${errors.length} issue(s): ${errors[0]}` : `✅ සියල්ල restore කළා — ${Object.keys(restored).length} tables, ${total} rows${restoredSiteAssets ? `, 🌐 site icons/images ${restoredSiteAssets}ක්` : ""}`);
+      show(errors.length
+        ? `⚠ Restored with ${errors.length} issue(s): ${errors[0]}`
+        : `✅ සියල්ල restore කළා — ${Object.keys(restored).length} tables, ${total} rows${restoredSiteAssets ? `, 🌐 site icons/images ${restoredSiteAssets}ක්` : ""}${verifyMsg}`);
     } catch (e) {
       setAnim(null);
       show(`⚠ ${(e as Error).message}`);
@@ -862,6 +945,68 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
               );
             })}
           </div>
+        )}
+      </div>
+
+      {/* 📋 BACKUP COVERAGE — site එකේ හැම දෙයක්ම backup එකට එනවද? */}
+      <div className="card p-6 mt-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+            <ShieldCheck size={19} className="text-emerald-600" /> Backup Coverage — සියල්ල ඇතුළත්ද?
+          </h3>
+          <button
+            onClick={() => void loadCoverage()}
+            disabled={coverageBusy}
+            className="btn btn-outline !py-2 !px-3.5 !text-[11.5px]"
+          >
+            <RefreshCw size={13} className={coverageBusy ? "animate-spin" : ""} /> {coverageBusy ? "පරීක්ෂා කරමින්…" : "දැන් පරීක්ෂා කරන්න"}
+          </button>
+        </div>
+        <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
+          User විස්තර · Admin විස්තර · Login accounts (password සහිතව) · Images · Excel (Members/Voters) ·
+          Settings · Chat · Logs — <b>site එකේ තියෙන හැම දෙයක්ම</b> backup ZIP එකට එනවද කියා මෙතනින් බලන්න.
+          සංඛ්‍යා පෙන්වන්නේ <b>දැන් site එකේ තියෙන ඇත්ත ගාණ</b> — backup එකට යන්නේත් ඒවාමයි.
+        </p>
+
+        {!coverage && (
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[12px] text-slate-500">
+            තාම පරීක්ෂා කරලා නෑ — උඩ තියෙන <b>“දැන් පරීක්ෂා කරන්න”</b> ඔබන්න.
+          </div>
+        )}
+
+        {coverage && (
+          <>
+            <div className={`mt-3 rounded-2xl border p-4 text-[12px] font-bold ${coverage.complete ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+              {coverage.complete
+                ? `✅ හැම කොටසක්ම backup එකට එනවා — ${coverage.total} විතරයි බලලා තහවුරු කළා (${coverage.ok}ක දත්ත තියෙනවා${coverage.empty ? ` · ${coverage.empty}ක දත්ත තාම නෑ` : ""})`
+                : `⚠ කොටස් ${coverage.unknown}ක ගාණ ගන්න බැරි වුණා — ආයේ උත්සාහ කරන්න`}
+              {coverageAt && <span className="ml-2 font-normal text-[10.5px] opacity-70">({formatHistoryTime(coverageAt)})</span>}
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {coverage.groups.map((g) => (
+                <div key={g.title} className="rounded-2xl border border-slate-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[12.5px] font-extrabold text-slate-800">{g.icon} {g.title}</div>
+                    <span className="text-[10px] font-black text-slate-400">{g.ok}/{g.rows.length}</span>
+                  </div>
+                  <ul className="mt-2 space-y-1">
+                    {g.rows.map((r: CoverageRow) => (
+                      <li key={r.key} className="flex items-start gap-1.5 text-[11.5px] leading-snug">
+                        <span className={r.status === "ok" ? "text-emerald-600" : r.status === "empty" ? "text-slate-400" : "text-amber-500"}>
+                          {r.status === "ok" ? "✓" : r.status === "empty" ? "•" : "?"}
+                        </span>
+                        <span className="flex-1 text-slate-600">{r.label}</span>
+                        <span className="tabular-nums font-bold text-slate-500">
+                          {r.count == null ? "—" : r.count.toLocaleString("en-US")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

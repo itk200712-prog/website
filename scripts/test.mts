@@ -3,8 +3,8 @@
 //  ක්‍රියා කරවන්න: npm test   (npx tsx scripts/test.ts)
 // ============================================================================
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 let pass = 0, fail = 0;
@@ -619,6 +619,94 @@ try { await bu.decryptBackupText(encSample, "wrong-password"); } catch { wrongPw
 ok("utils: wrong encryption password rejected", wrongPwThrew);
 const sampleSql = "INSERT INTO public.news (\"id\", \"t\") VALUES ('1', 'a''b');\nINSERT INTO public.news (\"id\", \"t\") VALUES ('2', NULL);\nINSERT INTO public.profiles (\"id\") VALUES ('9');\n";
 const parsedSample = bu.parseBackupSql(sampleSql);
+// 📋 BACKUP COVERAGE — site එකේ හැම table එකක්ම backup එකට එනවද (schema.sql ↔ BACKUP_TABLES)
+const coverageLib = await import("../src/lib/backup-coverage.ts");
+const backedUp = new Set(backupTables); // (source එකෙන් parse කරපු list — browser-free)
+const coverageLibTables = coverageLib.tablesFromSchemaSql(readFileSync(join(root, "supabase/schema.sql"), "utf8"));
+ok("backup coverage: helper schema.sql tables හඳුනාගන්නවා (coverage card + tests එකට)",
+  coverageLibTables.length >= 25 && coverageLibTables.includes("profiles") && coverageLibTables.includes("member_rows"));
+
+const coverageTableKeys = coverageLib.BACKUP_COVERAGE
+  .flatMap((g) => g.items.filter((i) => i.kind === "table").map((i) => i.key));
+ok("backup coverage: coverage card එකේ හැම table key එකක්ම ඇත්තටම backup වන table එකක්",
+  coverageTableKeys.every((k) => backedUp.has(k)) &&
+  // user/admin details, login accounts, images, excel registers, secrets — ඔක්කොම list එකේ තියේ
+  ["profiles", "login_accounts", "site_images_backup", "Members-Register.xlsx", "Voters-Register.xlsx",
+   "backup_secrets", "member_rows", "voter_rows", "admin_activity_logs", "system_settings"]
+    .every((k) => coverageLib.BACKUP_COVERAGE.some((g) => g.items.some((i) => i.key === k))));
+
+const covReport = coverageLib.buildCoverageReport({
+  tables: Object.fromEntries(coverageTableKeys.map((k) => [k, k === "news" ? 0 : 3])),
+  images: 12, siteAssets: 39, siteSource: 121, loginAccounts: 2, memberRows: 53222, voterRows: 41000,
+});
+ok("backup coverage: report builder (ok/empty/unknown + complete)",
+  covReport.total >= 20 &&
+  covReport.unknown === 0 &&
+  covReport.complete === true &&
+  covReport.groups.every((g) => g.rows.length > 0) &&
+  covReport.groups.flatMap((g) => g.rows).some((r) => r.key === "news" && r.status === "empty") &&
+  covReport.groups.flatMap((g) => g.rows).find((r) => r.key === "member_rows")?.count === 3 &&
+  coverageLib.buildCoverageReport({}).complete === false);
+
+// 🗂 Import path normalization — ZIP entry → storage path (double-prefix එකක් නෑ)
+const normCases: [string, string][] = [
+  ["site-assets/public/icons/a.png", "site-public/icons/a.png"],
+  ["site-public/icons/a.png", "site-public/icons/a.png"],
+  ["icons/a.png", "site-public/icons/a.png"],
+  ["/site-assets/public/images/b.jpg", "site-public/images/b.jpg"],
+];
+ok("restore: ZIP path → site-public/… හරියට හැරවේ (double-prefix නෑ)",
+  normCases.every(([inp, exp]) => bu.siteAssetArchivePath(inp) === exp));
+ok("restore: site-source/ entries source ලෙස හඳුනාගනී (data rows නොවේ)",
+  bu.isSiteSourceEntry("site-source/src/lib/x.ts") && !bu.isSiteSourceEntry("site-assets/public/icons/a.png"));
+
+// 🔐 coverage route auth + manual/scheduled parity
+const covRoute = readFileSync(join(root, "src/app/api/backup/coverage/route.ts"), "utf8");
+ok("coverage route: admin Bearer හෝ cron secret නැත්නම් deny (401/403)",
+  covRoute.includes("userIsAdmin") && covRoute.includes("secretOk") &&
+  /return deny\(401\)|return deny\(\)|deny\(403\)/.test(covRoute) &&
+  covRoute.includes("unauthorized") && covRoute.includes("forbidden"));
+ok("coverage route: service role key එකෙන් tables/secrets ගණන් ගනී, browser එකට key එක යවන්නේ නෑ",
+  covRoute.includes("SUPABASE_SERVICE_ROLE_KEY") && !/NEXT_PUBLIC_SUPABASE_SERVICE/.test(covRoute));
+
+const schedSrc = readFileSync(join(root, "src/lib/scheduled-backup.ts"), "utf8");
+const schedRoute = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
+ok("auto-backup: manual + scheduled දෙකම එකම generateBackupZip එකෙන් ZIP හදයි (site-source ඇතුළුව)",
+  schedRoute.includes("generateBackupZip") && readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8").includes("generateBackupZip") &&
+  backupSrc.includes("await fetchSiteSourceSnapshot(") && backupSrc.includes("for (const f of siteSourceFiles) await addFile(`site-source/"));
+ok("backup ZIP: manifest එකේ site-source + site-assets ගාණ සටහන් වේ",
+  backupSrc.includes("siteSourceFileCount: siteSourceFiles.length") && backupSrc.includes("siteAssetCount: siteAssets.length"));
+
+// 🆕 හැම අලුත් update එකක්ම backup එකට අපේම එකතු වෙනවද — src/ + public/ සම්පූර්ණ coverage test
+{
+  const { SITE_SOURCE_FILES } = await import("../src/lib/site-source.generated.ts");
+  const { PUBLIC_ASSET_FILES } = await import("../src/lib/public-assets.generated.ts");
+  const snapPaths = new Set(SITE_SOURCE_FILES.map((f: { path: string }) => f.path));
+  const walk = (dir: string, out: string[]) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walk(full, out);
+      else out.push(relative(root, full).split("\\").join("/"));
+    }
+  };
+  const srcAll: string[] = [];
+  walk(join(root, "src"), srcAll);
+  const srcExpected = srcAll.filter(
+    (f) => /\.(tsx?|css|mjs)$/.test(f) && !/\.generated\.ts$/.test(f) && !/\.d\.ts$/.test(f)
+  );
+  const missingSrc = srcExpected.filter((f) => !snapPaths.has(f));
+  ok(`site-source: src/ එකේ හැම source file එකක්ම snapshot එකේ (අලුත් update auto-include) — missing: ${missingSrc.length}`,
+    missingSrc.length === 0);
+
+  const pubAll: string[] = [];
+  walk(join(root, "public"), pubAll);
+  const pubExpected = pubAll.map((f) => f.replace(/^public\//, ""));
+  const missingPub = pubExpected.filter((f) => !PUBLIC_ASSET_FILES.includes(f as never));
+  ok(`public assets: public/ එකේ හැම file එකක්ම manifest එකේ — missing: ${missingPub.length}`,
+    missingPub.length === 0);
+  console.log(`     (src ${srcExpected.length} files · public ${pubExpected.length} files · snapshot ${snapPaths.size} · assets ${PUBLIC_ASSET_FILES.length})`);
+}
+
 ok("utils: parseBackupSql 3 inserts + escaped quote + NULL", parsedSample.length === 3 && parsedSample[0].values[1] === "a'b" && parsedSample[1].values[1] === null);
 const sampleSummary = bu.summarizeInserts(parsedSample);
 ok("utils: summarizeInserts per-table counts", sampleSummary.totalRows === 3 && sampleSummary.tables.find((t) => t.name === "news")?.rows === 2);
@@ -1009,7 +1097,7 @@ ok("backup auto-covers future updates: site-source + public assets are auto-disc
   !/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(readFileSync(join(root, "src/lib/site-source.generated.ts"), "utf8")) &&
   readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8").includes("SECRET_PATTERNS") &&
   backupSrc.includes('import { PUBLIC_ASSET_FILES } from "@/lib/public-assets.generated"') &&
-  backupSrc.includes("...PUBLIC_ASSET_FILES,") &&
+  backupSrc.includes("[...PUBLIC_ASSET_FILES]") &&
   readFileSync(join(root, "src/lib/public-assets.generated.ts"), "utf8").includes('"icons/phone-call.png"'));
 
 ok("security: no plaintext default passwords left in client-side source",
@@ -1443,14 +1531,14 @@ ok("perf: businesses ၅ම එකවර + cache() dedupe + targeted detail + se
   nextConfigSrc.includes("optimizePackageImports"));
 
 // 🌐 Backup Format v3: site design/update package (CSS + cursor + icons) in Download AND Import
-const siteSourceSrc = readFileSync(join(root, "src/lib/site-source-assets.ts"), "utf8");
 const genSiteSourceSrc = readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8");
 const packageJsonSrc = readFileSync(join(root, "package.json"), "utf8");
 ok("backup v3: public icons/images + CSS/cursor source in ZIP, manifest-hashed, import-verified, restored to storage, scheduled = manual",
   bu.BACKUP_FORMAT_VERSION === 3 &&
   backupSrc.includes("PUBLIC_ASSET_PATHS") &&
-  backupSrc.includes('"icons/phone-call.png"') &&
-  backupSrc.includes('"icons/location.png"') &&
+  backupSrc.includes("[...PUBLIC_ASSET_FILES]") &&
+  readFileSync(join(root, "src/lib/public-assets.generated.ts"), "utf8").includes('"icons/phone-call.png"') &&
+  readFileSync(join(root, "src/lib/public-assets.generated.ts"), "utf8").includes('"icons/location.png"') &&
   backupSrc.includes("fetchPublicAssets(assetBaseUrl)") &&
   backupSrc.includes("site-public/") &&
   backupSrc.includes("site-assets/public/") &&
@@ -1459,8 +1547,7 @@ ok("backup v3: public icons/images + CSS/cursor source in ZIP, manifest-hashed, 
   backupSrc.includes("siteSourceFileCount: siteSourceFiles.length") &&
   backupSrc.includes("siteAssets: siteAssetCount") &&
   backupSrc.includes('byTable.get("site_images_backup")!.push(row)') &&
-  siteSourceSrc.includes("SITE_PACKAGE_VERSION") &&
-  siteSourceSrc.includes("site-source.generated") &&
+  backupSrc.includes("/api/backup/site-source") &&
   genSiteSourceSrc.includes('"src/app/globals.css"') &&
   genSiteSourceSrc.includes('"src/components/cursor-follower.tsx"') &&
   genSiteSourceSrc.includes('"src/components/site-icons.tsx"') &&
@@ -1538,7 +1625,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
+  genSiteSourceSrc.includes("2026-11-07-full-coverage-v28"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1606,7 +1693,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
+  genSiteSourceSrc.includes("2026-11-07-full-coverage-v28"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1641,10 +1728,9 @@ const latestBackupUpdateFiles = [
   "src/lib/pdf-register.ts",
   "src/lib/register-notice.ts",
   "src/lib/motion-compat.ts",
-  "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files + professional glass auth pages",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-07-production-security-v27" &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-07-full-coverage-v28" &&
   generatedSiteSource.SITE_SOURCE_FILES.length >= 48 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
@@ -1673,7 +1759,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
+  genSiteSourceSrc.includes("2026-11-07-full-coverage-v28"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1702,7 +1788,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
+  genSiteSourceSrc.includes("2026-11-07-full-coverage-v28"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1756,11 +1842,11 @@ ok("member/voter register PDF: visual page keeps a real invisible Unicode text l
   adminDataSrc.includes('await import("@/lib/pdf-register")') &&
   searchFontBytes.length > 500_000 &&
   searchFontBytes.subarray(0, 4).equals(Buffer.from([0, 1, 0, 0])) &&
-  backupSrc.includes('"fonts/AbhayaLibre-Regular.ttf"') &&
+  readFileSync(join(root, "src/lib/public-assets.generated.ts"), "utf8").includes('"fonts/AbhayaLibre-Regular.ttf"') &&
   genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
   genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
   genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
+  genSiteSourceSrc.includes("2026-11-07-full-coverage-v28"));
 const signinPageSrc = readFileSync(join(root, "src/app/signin/page.tsx"), "utf8");
 const registerPageSrc = readFileSync(join(root, "src/app/register/page.tsx"), "utf8");
 const authShellSrc = readFileSync(join(root, "src/components/auth-shell.tsx"), "utf8");
@@ -1792,7 +1878,7 @@ ok("Sign In + Register professional glass experience: gradient glass shell (no p
   genSiteSourceSrc.includes('"src/app/signin/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/register/page.tsx"') &&
   genSiteSourceSrc.includes('"src/components/auth-shell.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
+  genSiteSourceSrc.includes("2026-11-07-full-coverage-v28"));
 
 const registerNoticeLib = await import("../src/lib/register-notice.ts");
 const noticeDefaults = registerNoticeLib.defaultRegisterNotice();
@@ -1837,7 +1923,7 @@ ok("member/voter register update notice: default text + phone, admin show/hide p
   genSiteSourceSrc.includes('"src/app/admin/settings/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/members/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/voters/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
+  genSiteSourceSrc.includes("2026-11-07-full-coverage-v28"));
 
 // ── Download With Special (admin-granted access + search-only PDF) ──────────
 const specialLibSrc = readFileSync(join(root, "src/lib/special-access.ts"), "utf8");

@@ -6,7 +6,7 @@
 
 ## පියවර 1 — Supabase දත්ත සමුදාය
 
-1. https://supabase.com → sign in → **New Project** (හෝ දැනට ඇති project එක භාවිතා කරන්න — ref: `rayxoujhocvfzlzufdtm`)
+1. https://supabase.com → sign in → **New Project** (හෝ දැනට ඇති project එක භාවිතා කරන්න — ref: `gdablxopbyzyqdyphtib`)
 2. වම් පස **SQL Editor** → **New query**
 3. **`supabase/schema.sql`** file එකේ මුළු අන්තර්ගතයම copy කර paste කර **Run** කරන්න
    (එකම SQL file එකයි — tables + සියලු දත්ත + image storage ඔක්කොම ඇතුළත්)
@@ -85,6 +85,79 @@ where email = 'nic@members.mpcs.lk';
 
 **admin පිටුවට යන්න බැරි නම්:** Middleware එකෙන් admin/superadmin පමණයි ඇතුළු වෙන්නේ. පිවිසීමෙන් පස්සේ role එක `admin` හෝ `superadmin` දැයි බලන්න.
 
+## 💾 Backup එකේ **සියල්ලම** තියෙනවද කියා බලන විදිහ
+
+Admin → **Backup & Restore** → උඩම තියෙන **📋 Backup Coverage — සියල්ල ඇතුළත්ද?** card එකේ
+**"දැන් පරීක්ෂා කරන්න"** button එක ඔබන්න. එතකොට මේවා ගණන් කරලා පෙන්වයි:
+
+| කාණ්ඩය | ඇතුළත් දේ |
+|---|---|
+| 👤 ගිණුම් · Admin · රහස් | Admin/සාමාජික login ගිණුම් (password සමඟ), roles, backup රහස්, site settings |
+| 📊 සාමාජික · ඡන්ද හිමි · Excel | member_rows / voter_rows (52,000+), Members/Voters-Register.xlsx, applications, F28 |
+| 🖼️ Images · Files · Design | Storage bucket එකේ හැම image එකක්ම, public/ icons/images/fonts, site design source files |
+| 🌐 Site අන්තර්ගතය | Board members, businesses, news, gallery, fuel prices, notify emails |
+| 💬 සන්නිවේදනය · Logs | messages, live chat, activity logs, backup history |
+
+හරිත ✅ = දත්ත තියෙනවා · කහ ⚠ = හිස් (ඒක වැරැද්දක් නොවේ) · රතු ✗ = ගණන් ගන්න බැරි වුණා.
+
+> 🔁 **හැම අලුත් update එකක්ම backup එකට අපේම එකතු වේ** — `src/` එකේ අලුතෙන් හදන
+> file එකක් හෝ `public/` එකට දාන icon/image/font එකක් වුණත් `npm run build` එකේදී
+> self-regenerate වෙනවා. (`scripts/test.mts` එකේ test 2කින් ඒක සෑම build එකකදීම තහවුරු කරයි.)
+
 ---
 
 Designed By Induwara Thathsara · පඳුවස්නුවර නව බහු අරමුණු සමූපකාර සමිතිය
+
+---
+
+## 🔄 Update එකක් ආවම (GitHub → Vercel)
+> මම (AI එක) update එකක් හදලා commit කළාම, ඔයාගේ site එකට (GitHub → Vercel) යන විදිහ.
+
+---
+
+### 🅰️ හැඩය A — සරලම ක්‍රමය (නිර්දේශිත ✅)
+
+**ඔයා කිසිවක් කරන්න ඕන නෑ!** මට කියන්න "update එක push කරන්න" කියලා —
+මම මෙතන ඉඳන්ම GitHub repo එකට push කරන්නම් → **Vercel එක auto deploy වෙනවා** 🚀
+
+ඊළඟ වතාවට token එකක් ඕන වෙනවා:
+1. github.com → Settings → Developer settings → **Personal access tokens → Tokens (classic)**
+2. **Generate new token** → ✅ **repo** tick → Generate → `ghp_...` copy
+3. මට එවන්න (මම push කරලා කියන්නම් — ඉවරයි!)
+4. ⚠️ දවසකට පස්සේ github.com එකේ ගිහින් ඒ token එක **Delete** කරන්න (ආරක්ෂාවට)
+
+---
+
+### 🅱️ හැඩය B — ඔයාම Push කරනවා නම්
+
+#### 1️⃣ අලුත් code එක ගන්න
+1. **Arena එකෙන් workspace එක නැවත Download කරන්න**
+2. Download එක **extract** කරලා **`coop-web`** folder එක අරින්න
+3. ඇතුළේ තියෙන **හැම දෙයක්ම** (Ctrl+A → Ctrl+C) copy කරන්න
+
+#### 2️⃣ පරණ project folder එකට දාන්න
+1. ඔයාගේ project folder එක අරින්න  
+   (උදා: `C:\Users\computer\Downloads\workspace-xxxx\coop-web`)
+2. **Ctrl + V** → **"Replace the files in the destination"** ✅
+3. ⚠️ **`.git` folder එක replace කරන්න එපා** (එන dialog එකේ තිබුණොත් **Skip** කරන්න)  
+   — නැත්නම් ඔයාගේ GitHub connection එක නැති වෙනවා
+
+#### 3️⃣ Push කරන්න (cmd එකේ)
+```
+cd C:\Users\computer\Downloads\workspace-xxxx\coop-web
+git add -A
+git commit -m "update"
+git push
+```
+> login ඇසුවොත්: Username = ඔයාගේ GitHub username · Password = `ghp_...` token එක
+
+#### 4️⃣ Deploy
+- ඔයාගේ repo එක **Vercel එකට connect කරලා ඇත්නම්** → push එකෙන් **ස්වයංක්‍රීයව deploy වෙනවා** ✅
+- නැත්නම් → vercel.com → project එක → **Deployments → ⋮ → Redeploy**
+
+---
+
+### 💡 පොඩි උපදෙස්
+- Project folder එක **Downloads එකේ නෙවෙයි**, නිතර මකෙන්නේ නැති තැනක (උදා: `C:\mpcs-site`) තියාගන්න — එතකොට හැම update එකකදීම අලුත් folder හොයන්න ඕන නෑ
+- පරණ `.env.local` file එක **කිසිවිටෙක GitHub එකට push කරන්න එපා** ⚠️
+- අවුලක් ආවොත්: `git status` කියලා screenshot එකක් මට එවන්න

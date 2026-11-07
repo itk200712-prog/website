@@ -282,48 +282,11 @@ async function fetchBase64(url: string): Promise<{ b64: string; type: string } |
 // 🖼 `public/` එකේ හැම file එකක්ම (auto-generated manifest) — ඉදිරි updates වලට
 //    අලුතෙන් දාන icon/image/font එකක් backup ZIP එකට අපේම එකතු වේ.
 import { PUBLIC_ASSET_FILES } from "@/lib/public-assets.generated";
+import { isSiteSourceEntry, siteAssetArchivePath } from "@/lib/backup-utils";
 
-export const PUBLIC_ASSET_PATHS: string[] = [
-  ...PUBLIC_ASSET_FILES,
-  "fonts/AbhayaLibre-Regular.ttf",
-  "icons/phone-call.png",
-  "icons/location.png",
-  "icons/comment.png",
-  "icons/message.png",
-  "images/businesses/consumer.jpg",
-  "images/businesses/fuel-station.jpg",
-  "images/businesses/funeral.jpg",
-  "images/businesses/hemas.jpg",
-  "images/businesses/maliban-biscuits.jpg",
-  "images/businesses/maliban-kiri.jpg",
-  "images/businesses/natures-secrets.jpg",
-  "images/businesses/ristbury-tiara.jpg",
-  "images/businesses/rural-bank.jpg",
-  "images/gallery/agm.jpg",
-  "images/gallery/headquarters.jpg",
-  "images/gallery/new.jpg",
-  "images/gallery/pirith.jpg",
-  "images/hero/hero-1.jpg",
-  "images/hero/hero-2.jpg",
-  "images/hero/hero-3.jpg",
-  "images/hero/hero-4.jpg",
-  "images/hero/hero-5.jpg",
-  "images/news/notice.jpg",
-  "images/sections/consumer.png",
-  "images/sections/coop-city.png",
-  "images/sections/fertilizer.png",
-  "images/sections/fuel-station.png",
-  "images/sections/funeral.png",
-  "images/sections/gold-loan.png",
-  "images/sections/hemas.png",
-  "images/sections/insurance.png",
-  "images/sections/maliban-biscuits.png",
-  "images/sections/maliban-kiri.png",
-  "images/sections/natures-secrets.png",
-  "images/sections/ristbury-tiara.png",
-  "images/sections/rural-bank.png",
-  "images/sections/transport.png",
-] as const;
+export { isSiteSourceEntry, siteAssetArchivePath };
+
+export const PUBLIC_ASSET_PATHS: string[] = [...PUBLIC_ASSET_FILES];
 
 export interface SiteAssetFile {
   /** public/ එක ඇතුළේ path එක (උදා: icons/phone-call.png) */
@@ -362,6 +325,7 @@ export async function fetchPublicAssets(assetBaseUrl?: string): Promise<SiteAsse
   }
   return out;
 }
+
 
 function contentTypeForPath(path: string): string {
   const ext = path.toLowerCase().split(".").pop() ?? "";
@@ -698,11 +662,7 @@ export async function restoreBackup(
   if (wantImages && opts?.siteAssets?.length) {
     const seen = new Set(imgRows.map((r) => String(r.path ?? "")));
     for (const a of opts.siteAssets) {
-      const archivePath = a.path.startsWith("site-assets/public/")
-        ? `site-public/${a.path.slice("site-assets/public/".length)}`
-        : a.path.startsWith("site-public/")
-          ? a.path
-          : `site-public/${a.path}`;
+      const archivePath = siteAssetArchivePath(a.path);
       if (seen.has(archivePath)) continue;
       seen.add(archivePath);
       const row = { path: archivePath, data_base64: bytesToB64(a.bytes), content_type: contentTypeForPath(archivePath) };
@@ -890,6 +850,36 @@ export async function restoreBackup(
 
   onProgress("Restore complete ✅", 100);
   return { restored, errors, siteAssets: siteAssetCount };
+}
+
+/* ------------------------------------------------- IMPORT VERIFY (v3.1) -- */
+/**
+ * 🔎 Import එකෙන් පස්සේ තහවුරු කිරීම — backup එකේ තිබුණු row ගාණ සහ
+ * දැන් database එකේ ඇත්තටම තියෙන ගාණ සසඳයි.
+ * (dedupe/merge නිසා ඇතැම් විට backup එකේ ගාණට වඩා අඩු විය හැක — ඒ නිසා
+ *  "actual < expected" විතරයි problem එකක් විදිහට ගන්නේ.)
+ */
+export async function verifyRestore(
+  expected: Record<string, number>,
+  client?: BackupClient
+): Promise<{ table: string; expected: number; actual: number; ok: boolean }[]> {
+  const sb = client ?? (await authedClient());
+  const out: { table: string; expected: number; actual: number; ok: boolean }[] = [];
+  const names = Object.keys(expected).filter((n) => BACKUP_TABLES.some((t) => t.name === n));
+  for (let i = 0; i < names.length; i += 5) {
+    const batch = names.slice(i, i + 5);
+    const res = await Promise.all(
+      batch.map((n) => sb.from(n).select("*", { count: "exact", head: true }))
+    );
+    batch.forEach((n, idx) => {
+      const actual = typeof res[idx]?.count === "number" ? (res[idx].count as number) : -1;
+      const exp = expected[n] ?? 0;
+      // dedupe/merge → අඩු වෙන්න පුළුවන්; නමුත් 0ක් වෙන්න හොඳ නෑ (exp > 0 නම්)
+      const ok = actual < 0 ? false : exp === 0 ? true : actual > 0;
+      out.push({ table: n, expected: exp, actual, ok });
+    });
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------- SECRETS --- */

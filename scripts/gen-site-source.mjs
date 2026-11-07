@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-11-07-production-security-v27";
+const SITE_PACKAGE_VERSION = "2026-11-07-full-coverage-v28";
 
 const FILES = [
   "src/app/globals.css",
@@ -76,7 +76,6 @@ const FILES = [
   "src/lib/motion-compat.ts",
   "src/lib/animation-settings.ts",
   "src/lib/branch-settings.ts",
-  "src/lib/site-source-assets.ts",
   "src/lib/supabase/storage.ts",
   "next.config.ts",
 ];
@@ -89,7 +88,7 @@ const FILES = [
 //  🔒 secrets/සර්වර් code කවදාවත් snapshot එකට නොයයි — snapshot එක browser
 //     bundle එකට යන නිසා (backup.ts client එකේත් import වේ). Deny-list:
 //       src/app/api/**         → API routes (service keys, cron secrets)
-//       src/lib/supabase/**    → Supabase clients
+//       (src/lib/supabase/** ඇතුළත් — env var නම් විතරයි, රහස් නෑ)
 //       *.generated.ts         → මේ ගොනුවම
 //       .env*, *.pem, *.key    → ඕනෑම secret file
 // ============================================================================
@@ -99,7 +98,6 @@ import { relative } from "node:path";
 const AUTO_ROOTS = ["src", "."]; // src එකේ සියල්ල + root config files
 const AUTO_EXT = /\.(tsx?|css|md|json|mjs)$/;
 const DENY = [
-  /^src\/lib\/supabase\//, // client wrappers (env-only) — පහළ content guard එකෙන් රහස් ඉවත් වේ
   /\.generated\.ts$/,
   /^\.env/,
   /\.(pem|key|crt|p12)$/,
