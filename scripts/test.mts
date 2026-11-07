@@ -805,6 +805,44 @@ ok("root: password reset is server-only (service role + Auth Admin API + display
   resetRouteSrc.includes("password_display") &&
   resetRouteSrc.includes("self_reset_use_profile") &&
   membersSrc.includes('fetch("/api/admin-reset-password"'));
+// ── Admin account guards (pure helpers — "add admin" එකෙන් පරණ ගිණුමක් වෙනස් නොවීම) ──
+const adminAccount = await import("../src/lib/admin-account");
+ok("admin-account: NIC variants + clash detection",
+  adminAccount.nicVariants(" itk200712 ").join("|") === "itk200712|ITK200712" &&
+  adminAccount.nicVariants("931234567v").join("|") === "931234567v|931234567V" &&
+  adminAccount.nicVariants("   ").length === 0 &&
+  adminAccount.accountClashMessage(null, "X") === null &&
+  (adminAccount.accountClashMessage({ full_name: "ITK OFFICIAL", nic: "ITKOFFICIAL", role: "admin" }, "ITKOFFICIAL") || "").includes("ITK OFFICIAL") &&
+  (adminAccount.accountClashMessage({ full_name: "ITK OFFICIAL", nic: "ITKOFFICIAL", role: "admin" }, "x") || "").includes("කිසි දෙයක් වෙනස් කළේ නෑ"));
+
+ok("admin-account: signUp response never counts an existing account as new",
+  adminAccount.signupAlreadyExists({ id: "u1", identities: [] }) === true &&            // ← obfuscated (පරණ ගිණුම)
+  adminAccount.signupAlreadyExists({ id: "u1", identities: [{ id: "i" }] }) === false && // ← ඇත්තටම අලුත්
+  adminAccount.signupAlreadyExists(null) === true &&
+  adminAccount.signupAlreadyExists({ id: "u1", identities: [{ id: "i" }] }, "User already registered") === true);
+
+ok("admin-account: existing profile rows are never overwritten, delete refusals never fall back",
+  adminAccount.profileWriteBlocker(null) === null &&
+  adminAccount.profileWriteBlocker({ nic: "", full_name: "" }) === null &&
+  (adminAccount.profileWriteBlocker({ nic: "ITKOFFICIAL", full_name: "ITK OFFICIAL" }) || "").includes("දැනටමත් profile") &&
+  adminAccount.isEmptyProfileStub({ nic: " ", full_name: "" }) === true &&
+  adminAccount.isProtectedDeleteRefusal("Only the original superadmin can delete an administrator account") === true &&
+  adminAccount.isProtectedDeleteRefusal("The original superadmin account cannot be deleted") === true &&
+  adminAccount.isProtectedDeleteRefusal("You cannot delete your own account") === true &&
+  adminAccount.isProtectedDeleteRefusal("relation does not exist") === false);
+
+ok("administrators: adding an admin can never overwrite/delete an existing account",
+  readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes("const clashQuery = await Promise.all([") &&
+  readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes("signupAlreadyExists(created, error?.message)") &&
+  readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes("profileWriteBlocker(existingProfile") &&
+  readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes("const clashMsg = accountClashMessage(clash, nicRaw)") &&
+  // මකන්න බැරි වුණාම fallback delete එකක් යන්නේ නෑ (admin + members pages දෙකේම)
+  readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes("if (isProtectedDeleteRefusal(rpcMsg))") &&
+  membersSrc.includes("if (isProtectedDeleteRefusal(msg))") &&
+  membersSrc.includes("මේ row එකට id/NIC නෑ — මකන්න බෑ") &&
+  // backup restore එකේ stale cleanup එකෙන් admin ගිණුම් මකන්නේ නෑ
+  backupSrc.includes('in("role", ["admin", "superadmin"])'));
+
 ok("login: NIC login retries the real auth email + admin reset creates a missing login account", 
   readFileSync(join(root, "src/lib/auth.ts"), "utf8").includes("login_email_for_nic") &&
   readFileSync(join(root, "src/lib/auth.ts"), "utf8").includes("const candidates: string[] = []") &&

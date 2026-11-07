@@ -736,6 +736,14 @@ export async function restoreBackup(
     try {
       const { data: u } = await sb.auth.getUser();
       if (u?.user?.id) backupProfileIds.add(u.user.id);
+      // 🛡 admin / superadmin ගිණුම් stale cleanup එකෙන් කවදාවත් මකන්නේ නෑ —
+      //    backup එකක් import කළාම ඊට පස්සේ හදපු admin කෙනෙක් නැති වෙන එක නවත්තනවා.
+      try {
+        const { data: adminRows } = await sb.from("profiles").select("id,role").in("role", ["admin", "superadmin"]);
+        for (const r of (adminRows ?? []) as { id?: string }[]) {
+          if (r?.id) backupProfileIds.add(String(r.id));
+        }
+      } catch { /* column/policy නැත්නම් skip */ }
       const stale: string[] = [];
       for (let from = 0; from < 200000; from += 1000) {
         const { data, error } = await sb.from("profiles").select("id").range(from, from + 999);

@@ -66,6 +66,7 @@ const FILES = [
   "src/lib/register-rows.ts",
   "src/lib/member-update.ts",
   "src/lib/special-access.ts",
+  "src/lib/admin-account.ts",
   "src/lib/register-notice.ts",
   "src/lib/motion-compat.ts",
   "src/lib/animation-settings.ts",

@@ -8,13 +8,16 @@ import { useEffect, useState } from "react";
 import { Lock, Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { logActivity } from "@/lib/activity";
 import { AdminModal, AdminTopbar, dbDelete, dbUpdate, useNotice, SECTION_KEYS } from "@/components/admin";
-import { authedClient, createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { authedClient, createClient, isSupabaseConfigured, storeTokens } from "@/lib/supabase/client";
 import { nicToEmail } from "@/lib/auth";
 import { encodePw } from "@/lib/auth";
 import {
   canChangeRole, canDeleteAccount, canEditAccount, isRootAdmin, pickRootAdminId,
 } from "@/lib/root-admin";
 import { REGISTERED_USERS } from "@/lib/seed";
+import {
+  accountClashMessage, isProtectedDeleteRefusal, nicVariants, profileWriteBlocker, signupAlreadyExists,
+} from "@/lib/admin-account";
 
 type AdminRow = {
   id: string;
@@ -149,47 +152,98 @@ export default function AdminAdministratorsPage() {
       return;
     }
     const password = String(fd.get("password"));
+    const nicRaw = String(fd.get("nic") ?? "").trim();
+    const fullName = String(fd.get("full_name") ?? "").trim();
+    const roleValue = String(fd.get("role") ?? "admin");
+    const newRole = roleValue === "superadmin" ? "superadmin" : "admin";
+    // ✅ LOGIN FIX: account එක හැදිය යුත්තේ nic@members.mpcs.lk එකෙන් (loginWithNic එකට ගැලපෙන්න)
+    const email = nicToEmail(nicRaw);
+    const guardSb = await authedClient();
+
+    // 🛑 ① මුලින්ම බලනවා මේ NIC / login email එකෙන් ගිණුමක් දැනටමත් තියෙනවද කියලා.
+    //    තියෙනවා නම් අලුත් admin කෙනෙක් හදන්නේ නෑ — ඒක නොකළොත් Supabase signUp එක
+    //    "ඒ දැනටමත් ඉන්න user ගේම id එක" ආපහු දෙන නිසා ඒ admin ගේ profile row එක
+    //    නව විස්තර වලින් overwrite වෙලා පරණ admin කෙනෙක් නැති වෙනවා (හෝ member කෙනෙක්
+    //    නොදැනුවත්ව admin වෙනවා).
+    const clashQuery = await Promise.all([
+      ...nicVariants(nicRaw).map((v) => guardSb.from("profiles").select("id,full_name,nic,role").eq("nic", v).limit(1)),
+      guardSb.from("profiles").select("id,full_name,auth_email,role").eq("auth_email", email).limit(1),
+    ]);
+    const clash = clashQuery.map((r) => (r.data ?? [])[0]).find(Boolean) as Parameters<typeof accountClashMessage>[0];
+    const clashMsg = accountClashMessage(clash, nicRaw);
+    if (clashMsg) {
+      show(clashMsg);
+      return;
+    }
+
     // signUp එකකින් browser session එක අලුත් user ට මාරු විය හැක — profile එක
     // දාන්න කලින් නිර්මාණය කරන admin ගේ session එක ආපසු ගන්නයි මේක තියාගන්නේ.
-    const creatorSb = await authedClient();
+    const creatorSb = guardSb;
     const { data: creatorSession } = await creatorSb.auth.getSession();
     const savedSession = creatorSession.session
       ? { access_token: creatorSession.session.access_token, refresh_token: creatorSession.session.refresh_token }
       : null;
-    // ✅ LOGIN FIX: account එක හැදිය යුත්තේ nic@members.mpcs.lk එකෙන් (loginWithNic එකට ගැලපෙන්න)
-    const email = nicToEmail(String(fd.get("nic")));
+    if (!savedSession) {
+      show("⚠ Session එක නැති වෙලා — නැවත sign in වෙලා try කරන්න");
+      return;
+    }
+
     const sb = createClient();
     const { data, error } = await sb.auth.signUp({ email, password });
+    const created = (data?.user ?? null) as
+      | { id?: string; identities?: unknown[]; email_confirmed_at?: string | null }
+      | null;
     if (error && !/already registered/i.test(error.message || "")) {
       show(`⚠ ${error.message}`);
       return;
     }
-    let uid = data?.user?.id;
-    if (!uid && error && /already registered/i.test(error.message || "")) {
-      show(`⚠ මේ email එකෙන් account එකක් තියෙනවා — වෙන email එකක් දාන්න`);
+    // 🛑 ② Supabase, email එක දැනටමත් තියෙන විට error එකක් නොදී ඒ පරණ user එකම
+    //    (identities: []) ආපහු දෙනවා — ඒක අලුත් ගිණුමක් විදිහට ගන්නේ නෑ.
+    if (signupAlreadyExists(created, error?.message) || !created?.id) {
+      show("⚠ මේ email/NIC එකෙන් ගිණුමක් දැනටමත් තියෙනවා — කිසි දෙයක් වෙනස් කළේ නෑ");
       return;
     }
-    if (uid) {
-      // නිර්මාණය කරන admin විදිහටම profile එක දාන්න session එක restore කරනවා
-      const adminSb = await authedClient();
-      if (savedSession) await adminSb.auth.setSession(savedSession);
-      // ✅ direct upsert (AUTHED) — profile row නැත්නම් හැදෙනවා, තියෙනවා නම් update වෙනවා
-      const { error: upErr } = await adminSb.from("profiles").upsert({
-        id: uid,
-        full_name: String(fd.get("full_name")),
-        nic: String(fd.get("nic")),
-        phone: String(fd.get("phone")),
-        auth_email: email, // nic@members.mpcs.lk (login එක මේකෙන් වැඩ කරනවා)
-        role: String(fd.get("role")),
-        sections: csv,
-        password_display: encodePw(password),
-      }, { onConflict: "id" });
-      if (!upErr) void logActivity("INSERT", `administrator created — ${String(fd.get("full_name"))} (${String(fd.get("role"))}) sections=${csv || "all"}`);
-      if (upErr) show(`⚠ ${upErr.message}`);
-      else if (data.user && !data.user.email_confirmed_at) {
-        show("⚠ Admin එක හැදුණා — නමුත් Supabase \"Confirm email\" ON නිසා login නැවතෙනවා! Dashboard: Authentication → Providers → Email → Confirm email OFF කරන්න");
-      } else {
+    const uid = created.id;
+
+    // නිර්මාණය කරන admin විදිහටම profile එක දාන්න session එක restore කරනවා
+    const adminSb = await authedClient();
+    await adminSb.auth.setSession(savedSession);
+    // Supabase client session එක swap වුණත් localStorage tokens ආයෙ ලියනවා (reload එකේදී වැඩ කරන්න)
+    storeTokens(savedSession);
+
+    // 🛑 ③ මේ id එකට දැනටමත් profile row එකක් තියෙනවා නම් (හිස් stub එකක් මිස) කවදාවත්
+    //    overwrite කරන්නේ නෑ — පරණ ගිණුමක් වෙනස් වීම නවත්තනවා.
+    const { data: existingProfile } = await adminSb
+      .from("profiles")
+      .select("id,nic,full_name")
+      .eq("id", uid)
+      .maybeSingle();
+    const writeBlock = profileWriteBlocker(existingProfile as Parameters<typeof profileWriteBlocker>[0]);
+    if (writeBlock) {
+      show(writeBlock);
+      return;
+    }
+
+    // ✅ direct upsert (AUTHED) — හිස් profile stub එකක් තිබ්බොත් ඒක පුරවනවා, නැත්නම් අලුත් row එකක්
+    const { error: upErr } = await adminSb.from("profiles").upsert({
+      id: uid,
+      full_name: fullName,
+      nic: nicRaw,
+      phone: String(fd.get("phone") ?? ""),
+      auth_email: email, // nic@members.mpcs.lk (login එක මේකෙන් වැඩ කරනවා)
+      role: newRole,
+      sections: csv,
+      password_display: encodePw(password),
+    }, { onConflict: "id" });
+    if (upErr) {
+      void logActivity("ERROR", `administrator profile save failed — ${email}: ${upErr.message}`);
+      show(`⚠ Login account එක හැදුණා, නමුත් profile එක save වුණේ නෑ: ${upErr.message}`);
+    } else {
+      void logActivity("INSERT", `administrator created — ${fullName} (${newRole}) sections=${csv || "all"}`);
+      if (created.email_confirmed_at) {
         show("✅ Administrator created — දැන් NIC + password එකෙන් login වෙනවා!");
+      } else {
+        show("⚠ Admin එක හැදුණා — නමුත් Supabase \"Confirm email\" ON නිසා login නැවතෙනවා! Dashboard: Authentication → Providers → Email → Confirm email OFF කරන්න");
       }
     }
     setModal(false);
@@ -212,8 +266,15 @@ export default function AdminAdministratorsPage() {
       show("✅ Removed — login account එකත් ඉවත් කළා");
       return;
     }
+    // 🛑 DB එක root නීතිය නිසා "මකන්න බෑ" කිව්වොත් fallback එකට යන්නේ නෑ
+    const rpcMsg = rpcErr.message || "";
+    if (isProtectedDeleteRefusal(rpcMsg)) {
+      await load();
+      show(`⚠ ${rpcMsg}`);
+      return;
+    }
     // fallback: profiles row එක විතරක් (SQL function එක නැත්නම්)
-    const err = await dbDelete("profiles", { id: r.id });
+    const err = r.id ? await dbDelete("profiles", { id: r.id }) : "මේ row එකට id නෑ — මකන්න බෑ";
     if (!err) void logActivity("DELETE", `administrator profile removed — ${r.full_name} (${r.role})`);
     await load();
     show(err

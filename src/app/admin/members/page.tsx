@@ -14,6 +14,7 @@ import {
   canChangeRole, canDeleteAccount, canEditAccount, canResetPassword, canViewPassword, pickRootAdminId,
 } from "@/lib/root-admin";
 import { REGISTERED_USERS } from "@/lib/seed";
+import { isProtectedDeleteRefusal } from "@/lib/admin-account";
 import type { RegisteredUser } from "@/lib/types";
 
 type UserRow = RegisteredUser;
@@ -220,9 +221,24 @@ export default function AdminMembersPage() {
                               const sb = await authedClient();
                               const { error: rpcErr } = await sb.rpc("delete_admin", { uid: r.id });
                               if (!rpcErr) loginRemoved = true;
-                              else err = await dbDelete("profiles", { id: r.id });
+                              else {
+                                // 🛑 DB එක "මකන්න බෑ" කිව්වොත් (root නීතිය) ඒ පණිවිඩයම පෙන්නනවා —
+                                //    profile fallback එකට යන්නේ නෑ (එතකොට RLS හරහා වෙනත් ගිණුමක්
+                                //    මැකී යා හැකි අවස්ථා ඇති නිසා).
+                                const msg = rpcErr.message || "";
+                                if (isProtectedDeleteRefusal(msg)) {
+                                  await load();
+                                  show(`⚠ ${msg}`);
+                                  return;
+                                }
+                                err = await dbDelete("profiles", { id: r.id });
+                              }
+                            } else if (String(r.nic ?? "").trim()) {
+                              // NIC එකක් නැති row එකක් නම් කවදාවත් delete-by-nic යවන්නේ නෑ
+                              // (හිස් NIC එකකින් `.eq("nic","")` ගියොත් ගොඩක් ගිණුම් මැකෙනවා)
+                              err = await dbDelete("profiles", { nic: String(r.nic).trim() });
                             } else {
-                              err = await dbDelete("profiles", { nic: r.nic });
+                              err = "මේ row එකට id/NIC නෑ — මකන්න බෑ";
                             }
                             await load();
                             show(err
