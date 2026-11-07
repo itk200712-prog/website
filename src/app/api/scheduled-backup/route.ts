@@ -448,6 +448,7 @@ export async function POST(req: NextRequest) {
       return json({ ok: true, skipped: true, reason: decision.reason, nextDate: decision.nextDate });
     }
   } else if (!settings.toSupabase && !settings.toMega) {
+    await clearRunLock(); // lock එක දාලා ආපහු නවත්තන නිසා lock එක ඉවත් කරයි
     return json({ ok: false, reason: "no_destination" }, 400);
   }
 
