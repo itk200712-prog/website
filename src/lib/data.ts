@@ -150,20 +150,52 @@ export const getBusiness = cache(async (slug: string): Promise<BusinessUnit | nu
   return all.find((b) => b.slug === slug) ?? null;
 });
 
+/**
+ * 📛 නම අනුව duplicate ඉවත් කිරීම — email key එකක් විදිහට ගැනීම වැරදියි:
+ * admin එකෙන් photo upload කරපු row එකේ email හිස් වෙනවා, seed row එකේ email
+ * තියෙනවා → එතකොට එකම පුද්ගලයා දෙපාරක් පේනවා. දැන් නම normalize කරලා එකයි.
+ * තියෙන rows දෙකෙන් වඩාත් සම්පූර්ණ එක (photo + qualification තියෙන එක) තියාගන්නවා.
+ */
+export function dedupeBoard(rows: BoardMember[]): BoardMember[] {
+  const norm = (v: unknown) =>
+    String(v ?? "")
+      .toLowerCase()
+      .replace(/[\s.\-_/\\,'"]+/g, "");
+  const score = (p: BoardMember) =>
+    (p.photo ? 4 : 0) + (p.qualification ? 2 : 0) + (p.phone ? 1 : 0) + (p.email ? 1 : 0);
+  const best = new Map<string, BoardMember>();
+  const order: string[] = [];
+  for (const p of rows) {
+    const key = norm(p.name_en) || norm(p.email);
+    if (!key) continue;
+    const prev = best.get(key);
+    if (!prev) {
+      best.set(key, p);
+      order.push(key);
+      continue;
+    }
+    const merged: BoardMember = {
+      ...prev,
+      photo: prev.photo || p.photo,
+      qualification: prev.qualification || p.qualification,
+      phone: prev.phone || p.phone,
+      email: prev.email || p.email,
+      name_si: prev.name_si || p.name_si,
+      position_en: prev.position_en || p.position_en,
+      position_si: prev.position_si || p.position_si,
+      address: prev.address || p.address,
+    };
+    best.set(key, score(p) > score(prev) ? { ...merged, category: p.category } : merged);
+  }
+  return order.map((k) => best.get(k)!).filter(Boolean);
+}
+
 export async function getBoard(): Promise<BoardMember[]> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("board_members").select("*").order("order");
     if (error || !data) return BOARD;
-    // ✅ seed දෙපාරක් run වුණත් duplicate persons site එකේ නොපෙන්වන්න (email/name අනුව unique)
-    const seen = new Set<string>();
-    const rows = (data as unknown as BoardMember[]).filter((p) => {
-      const k = (p.email || p.name_en || "").toLowerCase();
-      if (!k || seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-    return rows;
+    return dedupeBoard(data as unknown as BoardMember[]);
   }, BOARD);
 }
 
@@ -188,7 +220,16 @@ export const getGallery = cache(async (): Promise<GalleryItem[]> => {
     if (error || !data) return GALLERY;
     // ✅ comments gallery_comments table එකෙන් එකතු කරන්න (bug fix)
     const cm = commentsRes.data;
-    return (data as unknown as GalleryItem[]).map((g) => ({
+    // 🔁 seed එක දෙපාරක් run වුණොත් එකම image එක දෙපාරක් පෙනෙනවා — image path එකෙන් unique
+    const seenImg = new Set<string>();
+    const uniqueItems = (data as unknown as GalleryItem[]).filter((g) => {
+      const k = String(g.image ?? "").trim();
+      if (!k) return true;
+      if (seenImg.has(k)) return false;
+      seenImg.add(k);
+      return true;
+    });
+    return uniqueItems.map((g) => ({
       ...g,
       comments: (cm ?? [])
         .filter((c: { item_id: string }) => c.item_id === g.id)
@@ -235,27 +276,61 @@ const SITE_SETTING_KEYS = [
 ];
 
 export const getSettings = cache(async (): Promise<SiteSettings> => {
+  const live = await liveRegisterTotals();
   return safe(async () => {
     const sb = createAnonClient();
     // ⚡ ඕන keys විතරයි — මුළු system_settings එකම (branch/animation JSON සහිතව) ඇද්දේ නෑ
     const { data, error } = await sb.from("system_settings").select("key,value").in("key", SITE_SETTING_KEYS);
-    if (error || !data) return SETTINGS;
+    if (error || !data) return { ...SETTINGS, ...live };
     const map = new Map(data.map((r: { key: string; value: string }) => [r.key, r.value]));
     return {
       whatsapp_number: map.get("whatsapp_number") ?? SETTINGS.whatsapp_number,
       years_of_service: Number(map.get("years_of_service") ?? SETTINGS.years_of_service),
       contact_email_1: map.get("contact_email_1") ?? SETTINGS.contact_email_1,
       contact_email_2: map.get("contact_email_2") ?? SETTINGS.contact_email_2,
-      members_total: Number(map.get("members_total") ?? SETTINGS.members_total),
-      voters_total: Number(map.get("voters_total") ?? SETTINGS.voters_total),
-      members_files_count: Number(map.get("members_files_count") ?? SETTINGS.members_files_count),
-      voters_files_count: Number(map.get("voters_files_count") ?? SETTINGS.voters_files_count),
+      // ✅ හැම වෙලාවෙම ඇත්ත ගණන් — settings එකේ පරණ අගය නොවෙයි (live DB counts)
+      members_total: live.members ?? Number(map.get("members_total") ?? SETTINGS.members_total),
+      voters_total: live.voters ?? Number(map.get("voters_total") ?? SETTINGS.voters_total),
+      members_files_count: live.memberFiles ?? Number(map.get("members_files_count") ?? SETTINGS.members_files_count),
+      voters_files_count: live.voterFiles ?? Number(map.get("voters_files_count") ?? SETTINGS.voters_files_count),
       hero_images: parseHeroImages(map.get("hero_images")),
       board_bg: map.get("board_bg") ?? "",
       register_notice: parseRegisterNotice(map.get("register_update_notice")),
     };
-  }, SETTINGS);
+  }, { ...SETTINGS, ...live });
 });
+
+/**
+ * 📊 ලේඛනවල ඇත්ත ගණන් — `system_settings.members_total` වගේ අගයන් අතින්
+ * update වෙන නිසා පරණ වෙනවා (උදා: DB එකේ 53,222 තියෙද්දී page එකේ 53,210).
+ * ඒ නිසා හැම තැනකම DB එකේ count එකම පෙන්වයි.
+ */
+async function liveRegisterTotals(): Promise<{
+  members?: number;
+  voters?: number;
+  memberFiles?: number;
+  voterFiles?: number;
+}> {
+  try {
+    const sb = createAnonClient();
+    const [m, v, mf, vf] = await Promise.all([
+      sb.from("member_rows").select("id", { count: "exact", head: true }),
+      sb.from("voter_rows").select("id", { count: "exact", head: true }),
+      sb.from("data_files").select("file_name").eq("kind", "member"),
+      sb.from("data_files").select("file_name").eq("kind", "voter"),
+    ]);
+    const uniq = (rows: { file_name?: string }[] | null) =>
+      new Set((rows ?? []).map((r) => String(r.file_name ?? "").trim()).filter(Boolean)).size;
+    return {
+      members: typeof m.count === "number" ? m.count : undefined,
+      voters: typeof v.count === "number" ? v.count : undefined,
+      memberFiles: mf.error ? undefined : uniq(mf.data as { file_name?: string }[] | null),
+      voterFiles: vf.error ? undefined : uniq(vf.data as { file_name?: string }[] | null),
+    };
+  } catch {
+    return {};
+  }
+}
 
 /** system_settings.hero_images = JSON string[] (max 10) */
 function parseHeroImages(raw: string | undefined): string[] {

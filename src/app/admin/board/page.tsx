@@ -108,7 +108,25 @@ export default function AdminBoardPage() {
       const match = editFor.id ? { id: editFor.id } : { name_en: editFor.name_en };
       err = await dbUpdate("board_members", match, row);
     } else {
-      err = await dbInsert("board_members", row as unknown as Record<string, unknown>);
+      // 🛡 එකම නම තියෙන කෙනෙක් දැනටමත් ඉන්නවා නම් අලුත් row එකක් හදන්නේ නෑ (duplicate!)
+      //    → ඒ කෙනාගේ row එක update කරනවා.
+      const norm = (v: string) => v.toLowerCase().replace(/[\s.\-_/\\,'"]+/g, "");
+      let existing: Row | null = null;
+      try {
+        const sb = await authedClient();
+        const { data: rows } = await sb.from("board_members").select("*");
+        existing =
+          ((rows ?? []) as unknown as Row[]).find((m) => norm(String(m.name_en ?? "")) === norm(row.name_en)) ?? null;
+      } catch { /* offline */ }
+      err = existing?.id
+        ? await dbUpdate("board_members", { id: existing.id }, row)
+        : await dbInsert("board_members", row as unknown as Record<string, unknown>);
+      if (existing?.id && !err) {
+        setModal(false);
+        await load();
+        show("✅ ඒ නමින් දැනටමත් කෙනෙක් ඉන්නවා — duplicate එකක් හැදෙන්නේ නැතුව ඒ row එක update කළා");
+        return;
+      }
     }
     setModal(false);
     await load();

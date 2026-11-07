@@ -581,31 +581,43 @@ on conflict (key) do update set value = excluded.value;
 -- ---------------------------------------------------------------------------
 -- fuel prices
 -- ---------------------------------------------------------------------------
-insert into public.fuel_prices (type, price) values
-  ('petrol92', 414),
-  ('super_diesel', 528),
-  ('kerosene', 285)
-on conflict (type) do update set price = excluded.price;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.fuel_prices) then
+  insert into public.fuel_prices (type, price) values
+    ('petrol92', 414),
+    ('super_diesel', 528),
+    ('kerosene', 285)
+  on conflict (type) do update set price = excluded.price;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- business units (14)
 -- ---------------------------------------------------------------------------
-insert into public.business_units (slug, "order", name_en, name_si, category_en, category_si, tagline_en, tagline_si, desc_en, desc_si, logo, cover, is_new, active, special) values
-('ristbury-tiara', 1, 'Ristbury Tiara Agency', 'රිස්බරි ටියාරා නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Official Ristbury Tiara distribution', 'රිස්බරි ටියාරා නිල බෙදාහැරීම් සේවාව', 'Official agency for Ristbury and Tiara confectionery products — fresh stock supply for retail shops and special events.', 'රිස්බරි සහ ටියාරා රසකැවිලි නිෂ්පාදන සඳහා නිල නියෝජිතායතනය — සිල්ලර කඩ සහ විශේෂ අවස්ථා සඳහා නැවුම් තොග සැපයුමක් සපයයි.', '/images/sections/ristbury-tiara.png', null, true, true, 'default'),
-('coop-city', 2, 'Co-op City Supermarket', 'කෝ-ඔප් සිටි සුපිරි වෙළඳසැල', 'Retail & Consumer', 'සිල්ලර හා පාරිභෝගික', '', '', '', '', '/images/sections/coop-city.png', null, false, true, 'default'),
-('transport', 3, 'Transport & Distribution Division', 'ප්‍රවාහන හා බෙදාහැරීම් අංශය', 'Community Welfare', 'ප්‍රජා සුභසාධන', '', '', '', '', '/images/sections/transport.png', null, false, true, 'default'),
-('fertilizer', 4, 'Agricultural Fertilizer Depot', 'කෘෂි පොහොර ගබඩාව', 'Business Division', 'ව්‍යාපාර අංශය', '', '', '', '', '/images/sections/fertilizer.png', null, true, false, 'default'),
-('insurance', 5, 'Co-op Insurance Agency', 'සමූපකාර රක්ෂණ නියෝජිතායතනය', 'Business Division', 'ව්‍යාපාර අංශය', '', '', '', '', '/images/sections/insurance.png', null, true, true, 'default'),
-('rural-bank', 6, 'Rural Bank', 'ග්‍රාමීය බැංකුව', 'Banking & Finance', 'බැංකු කටයුතු හා මූල්‍ය', 'Trusted savings & fast loans for our community', 'අපේ ප්‍රජාවට විශ්වාසනීය ඉතුරුම් සහ වේගවත් ණය', 'The Rural Bank is the heart of our society — safe, member-focused banking right in your village. Deposit with confidence and grow with us.', 'අපේ සමිතියේ හදවත වන්නේ ග්‍රාමීය බැංකුවයි — ඔබේ ගමේදීම ආරක්ෂිත, සාමාජික කේන්ද්‍රීය බැංකු සේවාවක්.', '/images/sections/rural-bank.png', null, false, true, 'rural-bank'),
-('consumer', 7, 'Consumer Section', 'පාරිභෝගික අංශය', 'Retail & Consumer', 'සිල්ලර හා පාරිභෝගික', 'Quality goods at fair prices for members', 'සාමාජිකයින් සඳහා සාධාරණ මිල ගණන්වලට ගුණාත්මක භාණ්ඩ', 'From rice and dhal to soaps and stationery — the Consumer Section supplies quality essential goods at fair prices.', 'බත් සහ පරිප්පු සිට සබන් සහ ලිපි ද්‍රව්‍ය දක්වා — පාරිභෝගික අංශය සාධාරණ මිල ගණන්වලට ගුණාත්මක අත්‍යවශ්‍ය භාණ්ඩ සපයයි.', '/images/sections/consumer.png', null, false, true, 'consumer'),
-('maliban-biscuits', 8, 'Maliban Biscuits Agency', 'මාලිබන් බිස්කට් නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Authorized Maliban biscuits distribution', 'බලයලත් මාලිබන් බිස්කට් බෙදාහැරීම', 'Official agency for Maliban biscuits — supplying shops, retailers, and wholesalers at competitive agency rates.', 'මාලිබන් බිස්කට් සඳහා නිල නියෝජිතායතනය — කඩ, සිල්ලර වෙළෙන්දන් සහ තොග වෙළෙන්දන් තරඟකාරී නියෝජිත ගාස්තුවලට සපයයි.', '/images/sections/maliban-biscuits.png', null, false, true, 'default'),
-('maliban-kiri', 9, 'Maliban Milk Agency', 'මාලිබන් කිරි නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Trusted Maliban milk powder distribution', 'විශ්වාසනීය මාලිබන් කිරි පිටි බෙදාහැරීම', 'Official distributor for Maliban milk powder products — from daily milk powder to infant milk formulas.', 'මාලිබන් කිරි පිටි නිෂ්පාදන සඳහා නිල බෙදාහරින්නා — දෛනික කිරි පිටි සිට ළදරු කිරි මිශ්‍රණ දක්වා.', '/images/sections/maliban-kiri.png', null, false, true, 'default'),
-('natures-secrets', 10, 'Nature''s Secrets Agency', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Herbal beauty products agency', 'ශාකසාර සුන්දරත්ව නිෂ්පාදන නියෝජිතායතනය', 'Official agency for Nature''s Secrets herbal beauty products — supplying Aloe Vera, White Sandalwood, and herbal care ranges.', 'නේචර්ස් සීක්‍රට්ස් ශාකසාර සුන්දරත්ව නිෂ්පාදන සඳහා නිල නියෝජිතායතනය.', '/images/sections/natures-secrets.png', null, false, true, 'default'),
-('hemas', 11, 'Hemas Agency', 'හෙමාස් නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Trusted Hemas brands distribution', 'විශ්වාසනීය හෙමාස් වෙළඳ නාම බෙදාහැරීම', 'Hemas products agency — supplying Baby Cheramy baby care, Kumarika hair care, personal care, and household items.', 'හෙමාස් නිෂ්පාදන නියෝජිතායතනය — බේබි චෙරමි ළදරු රැකවරණ, කුමාරිකා කෙස් රැකවරණ සහ නිවාස භාණ්ඩ සපයයි.', '/images/sections/hemas.png', null, false, true, 'default'),
-('fuel-station', 12, 'Fuel Station', 'ඉන්ධන පිරවුම්හල', 'Energy & Fuel', 'බලශක්ති හා ඉන්ධන', 'Our newest venture — open daily from 6.00 AM', 'අපේ නවතම ව්‍යාපාරය — හැමදාම පෙ.ව 6.00 සිට විවෘතයි', 'Full service fuel filling station providing petrol and diesel; priority lines and fuel pass facilities for society members. Includes air, water, and convenience shop.', 'පෙට්‍රල් සහ ඩීසල් සපයන සම්පූර්ණ සේවා ඉන්ධන පිරවුම්හලක්.', '/images/sections/fuel-station.png', null, true, true, 'fuel-station'),
-('funeral', 13, 'Funeral Services Section', 'අන්තිම කටයුතු සේවා අංශය', 'Community Welfare', 'ප්‍රජා සුභසාධන', 'Compassionate & affordable funeral care services', 'කරුණාවන්ත හා දැරිය හැකි අන්තිම කටයුතු රැකවරණ සේවා', 'Co-operative funeral care section providing financial assistance and compassionate funeral services for member families.', 'සමූපකාර අන්තිම කටයුතු රැකවරණ අංශයකි.', '/images/sections/funeral.png', null, false, true, 'default'),
-('gold-loan-service', 14, 'Gold Loan Service', 'රත්‍රන් ණය සේවාව', 'Finance & Loan', 'මූල්‍ය හා ණය', 'Reliable gold loan service for members', 'සාමාජිකයින් සඳහා විශ්වාසනීය රත්‍රන් ණය සේවාව', 'Affordable and reliable gold loan service with transparent valuations and flexible repayment options.', 'විනිවිද පෙනෙන ඇගයීම් සහ නම්‍යශීලී ගෙවීම් විකල්ප සහිත දැරිය හැකි හා විශ්වාසනීය රත්‍රන් ණය සේවාවකි.', '/images/sections/gold-loan.png', null, false, true, 'default')
-on conflict (slug) do nothing;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.business_units) then
+  insert into public.business_units (slug, "order", name_en, name_si, category_en, category_si, tagline_en, tagline_si, desc_en, desc_si, logo, cover, is_new, active, special) values
+  ('ristbury-tiara', 1, 'Ristbury Tiara Agency', 'රිස්බරි ටියාරා නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Official Ristbury Tiara distribution', 'රිස්බරි ටියාරා නිල බෙදාහැරීම් සේවාව', 'Official agency for Ristbury and Tiara confectionery products — fresh stock supply for retail shops and special events.', 'රිස්බරි සහ ටියාරා රසකැවිලි නිෂ්පාදන සඳහා නිල නියෝජිතායතනය — සිල්ලර කඩ සහ විශේෂ අවස්ථා සඳහා නැවුම් තොග සැපයුමක් සපයයි.', '/images/sections/ristbury-tiara.png', null, true, true, 'default'),
+  ('coop-city', 2, 'Co-op City Supermarket', 'කෝ-ඔප් සිටි සුපිරි වෙළඳසැල', 'Retail & Consumer', 'සිල්ලර හා පාරිභෝගික', '', '', '', '', '/images/sections/coop-city.png', null, false, true, 'default'),
+  ('transport', 3, 'Transport & Distribution Division', 'ප්‍රවාහන හා බෙදාහැරීම් අංශය', 'Community Welfare', 'ප්‍රජා සුභසාධන', '', '', '', '', '/images/sections/transport.png', null, false, true, 'default'),
+  ('fertilizer', 4, 'Agricultural Fertilizer Depot', 'කෘෂි පොහොර ගබඩාව', 'Business Division', 'ව්‍යාපාර අංශය', '', '', '', '', '/images/sections/fertilizer.png', null, true, false, 'default'),
+  ('insurance', 5, 'Co-op Insurance Agency', 'සමූපකාර රක්ෂණ නියෝජිතායතනය', 'Business Division', 'ව්‍යාපාර අංශය', '', '', '', '', '/images/sections/insurance.png', null, true, true, 'default'),
+  ('rural-bank', 6, 'Rural Bank', 'ග්‍රාමීය බැංකුව', 'Banking & Finance', 'බැංකු කටයුතු හා මූල්‍ය', 'Trusted savings & fast loans for our community', 'අපේ ප්‍රජාවට විශ්වාසනීය ඉතුරුම් සහ වේගවත් ණය', 'The Rural Bank is the heart of our society — safe, member-focused banking right in your village. Deposit with confidence and grow with us.', 'අපේ සමිතියේ හදවත වන්නේ ග්‍රාමීය බැංකුවයි — ඔබේ ගමේදීම ආරක්ෂිත, සාමාජික කේන්ද්‍රීය බැංකු සේවාවක්.', '/images/sections/rural-bank.png', null, false, true, 'rural-bank'),
+  ('consumer', 7, 'Consumer Section', 'පාරිභෝගික අංශය', 'Retail & Consumer', 'සිල්ලර හා පාරිභෝගික', 'Quality goods at fair prices for members', 'සාමාජිකයින් සඳහා සාධාරණ මිල ගණන්වලට ගුණාත්මක භාණ්ඩ', 'From rice and dhal to soaps and stationery — the Consumer Section supplies quality essential goods at fair prices.', 'බත් සහ පරිප්පු සිට සබන් සහ ලිපි ද්‍රව්‍ය දක්වා — පාරිභෝගික අංශය සාධාරණ මිල ගණන්වලට ගුණාත්මක අත්‍යවශ්‍ය භාණ්ඩ සපයයි.', '/images/sections/consumer.png', null, false, true, 'consumer'),
+  ('maliban-biscuits', 8, 'Maliban Biscuits Agency', 'මාලිබන් බිස්කට් නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Authorized Maliban biscuits distribution', 'බලයලත් මාලිබන් බිස්කට් බෙදාහැරීම', 'Official agency for Maliban biscuits — supplying shops, retailers, and wholesalers at competitive agency rates.', 'මාලිබන් බිස්කට් සඳහා නිල නියෝජිතායතනය — කඩ, සිල්ලර වෙළෙන්දන් සහ තොග වෙළෙන්දන් තරඟකාරී නියෝජිත ගාස්තුවලට සපයයි.', '/images/sections/maliban-biscuits.png', null, false, true, 'default'),
+  ('maliban-kiri', 9, 'Maliban Milk Agency', 'මාලිබන් කිරි නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Trusted Maliban milk powder distribution', 'විශ්වාසනීය මාලිබන් කිරි පිටි බෙදාහැරීම', 'Official distributor for Maliban milk powder products — from daily milk powder to infant milk formulas.', 'මාලිබන් කිරි පිටි නිෂ්පාදන සඳහා නිල බෙදාහරින්නා — දෛනික කිරි පිටි සිට ළදරු කිරි මිශ්‍රණ දක්වා.', '/images/sections/maliban-kiri.png', null, false, true, 'default'),
+  ('natures-secrets', 10, 'Nature''s Secrets Agency', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Herbal beauty products agency', 'ශාකසාර සුන්දරත්ව නිෂ්පාදන නියෝජිතායතනය', 'Official agency for Nature''s Secrets herbal beauty products — supplying Aloe Vera, White Sandalwood, and herbal care ranges.', 'නේචර්ස් සීක්‍රට්ස් ශාකසාර සුන්දරත්ව නිෂ්පාදන සඳහා නිල නියෝජිතායතනය.', '/images/sections/natures-secrets.png', null, false, true, 'default'),
+  ('hemas', 11, 'Hemas Agency', 'හෙමාස් නියෝජිතායතනය', 'Commercial Distribution', 'වාණිජ බෙදාහැරීම්', 'Trusted Hemas brands distribution', 'විශ්වාසනීය හෙමාස් වෙළඳ නාම බෙදාහැරීම', 'Hemas products agency — supplying Baby Cheramy baby care, Kumarika hair care, personal care, and household items.', 'හෙමාස් නිෂ්පාදන නියෝජිතායතනය — බේබි චෙරමි ළදරු රැකවරණ, කුමාරිකා කෙස් රැකවරණ සහ නිවාස භාණ්ඩ සපයයි.', '/images/sections/hemas.png', null, false, true, 'default'),
+  ('fuel-station', 12, 'Fuel Station', 'ඉන්ධන පිරවුම්හල', 'Energy & Fuel', 'බලශක්ති හා ඉන්ධන', 'Our newest venture — open daily from 6.00 AM', 'අපේ නවතම ව්‍යාපාරය — හැමදාම පෙ.ව 6.00 සිට විවෘතයි', 'Full service fuel filling station providing petrol and diesel; priority lines and fuel pass facilities for society members. Includes air, water, and convenience shop.', 'පෙට්‍රල් සහ ඩීසල් සපයන සම්පූර්ණ සේවා ඉන්ධන පිරවුම්හලක්.', '/images/sections/fuel-station.png', null, true, true, 'fuel-station'),
+  ('funeral', 13, 'Funeral Services Section', 'අන්තිම කටයුතු සේවා අංශය', 'Community Welfare', 'ප්‍රජා සුභසාධන', 'Compassionate & affordable funeral care services', 'කරුණාවන්ත හා දැරිය හැකි අන්තිම කටයුතු රැකවරණ සේවා', 'Co-operative funeral care section providing financial assistance and compassionate funeral services for member families.', 'සමූපකාර අන්තිම කටයුතු රැකවරණ අංශයකි.', '/images/sections/funeral.png', null, false, true, 'default'),
+  ('gold-loan-service', 14, 'Gold Loan Service', 'රත්‍රන් ණය සේවාව', 'Finance & Loan', 'මූල්‍ය හා ණය', 'Reliable gold loan service for members', 'සාමාජිකයින් සඳහා විශ්වාසනීය රත්‍රන් ණය සේවාව', 'Affordable and reliable gold loan service with transparent valuations and flexible repayment options.', 'විනිවිද පෙනෙන ඇගයීම් සහ නම්‍යශීලී ගෙවීම් විකල්ප සහිත දැරිය හැකි හා විශ්වාසනීය රත්‍රන් ණය සේවාවකි.', '/images/sections/gold-loan.png', null, false, true, 'default')
+  on conflict (slug) do nothing;
+  end if;
+end $$;
 
 -- business contacts
 -- ✅ idempotent seed: demo rows දෙපාරක් insert නොවන ලෙස unique indexes
@@ -614,165 +626,219 @@ create unique index if not exists business_services_uniq on public.business_serv
 create unique index if not exists business_branches_uniq on public.business_branches (business_slug, name);
 create unique index if not exists board_members_email_uniq on public.board_members (lower(email)) where email <> '';
 
-insert into public.business_contacts (business_slug, role_en, role_si, name, location, phone, note_en, note_si) values
-('ristbury-tiara', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ඇම්. රණසිංහ (Manager)', 'ජයන්තිපුර මාවත, බණ්ඩාරගම පාර, හෙට්ටිපොල', '037 229 1018', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('coop-city', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ද සිල්වා (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1017', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('transport', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. සෙනවිරත්න (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1018', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('fertilizer', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඇම්. ඩී. බණ්ඩාරසිංහ (Manager)', 'හෙට්ටිපොල', '037 229 1019', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('insurance', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. පෙරේරා (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1021', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('rural-bank', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. එම්. පෙරේරා (Manager)', 'සමූපකාර මාවත, හෙට්ටිපොල, පඬුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('consumer', 'Sales Development Manager', 'විකුණුම් සංවර්ධන කළමනාකරු', 'එච්. බී. රණසිංහ (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1013', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('consumer', 'Store Manager', 'ගබඩා කළමනාකරු', 'ජේ. අමිල ද සිල්වා (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '070 526 8848', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('maliban-biscuits', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ප්‍රේමරත්න (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1014', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('maliban-kiri', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. ජයසිංහ (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1015', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('natures-secrets', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ප්‍රේමරත්න (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1016', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('hemas', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ජී. කුමාර (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1017', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('fuel-station', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ජී. කුමාර (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1019', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('funeral', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. සිසිර කුමාර (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1020', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
-('gold-loan-service', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'කළමනාකරු (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු')
-on conflict (business_slug, role_en, name) do nothing;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.business_contacts) then
+  insert into public.business_contacts (business_slug, role_en, role_si, name, location, phone, note_en, note_si) values
+  ('ristbury-tiara', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ඇම්. රණසිංහ (Manager)', 'ජයන්තිපුර මාවත, බණ්ඩාරගම පාර, හෙට්ටිපොල', '037 229 1018', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('coop-city', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ද සිල්වා (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1017', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('transport', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. සෙනවිරත්න (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1018', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('fertilizer', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඇම්. ඩී. බණ්ඩාරසිංහ (Manager)', 'හෙට්ටිපොල', '037 229 1019', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('insurance', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. පෙරේරා (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1021', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('rural-bank', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. එම්. පෙරේරා (Manager)', 'සමූපකාර මාවත, හෙට්ටිපොල, පඬුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('consumer', 'Sales Development Manager', 'විකුණුම් සංවර්ධන කළමනාකරු', 'එච්. බී. රණසිංහ (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1013', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('consumer', 'Store Manager', 'ගබඩා කළමනාකරු', 'ජේ. අමිල ද සිල්වා (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '070 526 8848', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('maliban-biscuits', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ප්‍රේමරත්න (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1014', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('maliban-kiri', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'එම්. ජී. ජයසිංහ (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1015', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('natures-secrets', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. ප්‍රේමරත්න (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1016', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('hemas', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ජී. කුමාර (Manager)', 'බුලත්කුඹුර මංසන්ධිය, හෙට්ටිපොල', '037 229 1017', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('fuel-station', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ඩී. ජී. කුමාර (Manager)', 'කුරුණෑගල පාර, හෙට්ටිපොල', '037 229 1019', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('funeral', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'ආර්. ජී. සිසිර කුමාර (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1020', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු'),
+  ('gold-loan-service', 'Contact Manager', 'සම්බන්ධතා කළමනාකරු', 'කළමනාකරු (Manager)', 'සමූපකාර මාවත, පඬුවස්නුවර', '037 229 1012', 'Department Operations', 'දෙපාර්තමේන්තු කටයුතු')
+  on conflict (business_slug, role_en, name) do nothing;
+  end if;
+end $$;
 
 -- consumer regional branch
-insert into public.business_branches (business_slug, name, manager, location, phone) values
-('consumer', 'Mandapola', 'Wasantha Kumara', 'Mandapola', '037 229 2045')
-on conflict (business_slug, name) do nothing;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.business_branches) then
+  insert into public.business_branches (business_slug, name, manager, location, phone) values
+  ('consumer', 'Mandapola', 'Wasantha Kumara', 'Mandapola', '037 229 2045')
+  on conflict (business_slug, name) do nothing;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- business services (50) — key units full detail, others default template
 -- ---------------------------------------------------------------------------
-insert into public.business_services (business_slug, "order", title_en, title_si, desc_en, desc_si, features_en, features_si, active) values
-('ristbury-tiara', 1, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('ristbury-tiara', 2, 'Retail Distribution', 'සිල්ලර බෙදාහැරීම', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('ristbury-tiara', 3, 'Bulk Event Orders', 'විශාල උත්සව ඇණවුම්', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('ristbury-tiara', 4, 'Credit Facilities', 'ණය පහසුකම්', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('ristbury-tiara', 5, 'Timely Delivery', 'නියමිත වේලාවට බෙදාහැරීම', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('rural-bank', 1, 'Savings Accounts', 'ඉතුරුම් ගිණුම්', 'Flexible regular savings accounts with competitive interest rates and seamless withdrawals for daily needs.', 'තරඟකාරී පොලි අනුපාත සහ දෛනික අවශ්‍යතා සඳහා පහසු මුදල් ගැනීම් සහිත නම්‍යශීලී ඉතුරුම් ගිණුම්.', array['Instant account opening','High annual interest','Passbook facilities'], array['ක්ෂණික ගිණුම් විවෘත කිරීම','ඉහළ වාර්ෂික පොලිය','පාස්බුක් පහසුකම්'], true),
-('rural-bank', 2, 'Fixed Deposits', 'ස්ථිර තැන්පතු (නියමිත තැන්පතු)', 'Guaranteed high-yield investment options with flexible tenure terms ranging from 3 months to 5 years.', 'මාස 3 සිට අවුරුදු 5 දක්වා නම්‍යශීලී කාල සීමා සහිත සහතික කළ ඉහළ ආදායම් ආයෝජන විකල්ප.', array['Higher interest for seniors','Monthly/maturity payout','100% security guarantee'], array['වැඩිහිටියන්ට ඉහළ පොලිය','මාසික/කල්පිරීම් ගෙවීම්','100% ආරක්ෂක සහතිකය'], true),
-('rural-bank', 3, 'Daily Loan Schemes', 'දෛනික ණය යෝජනා', 'Accessible working capital loans for self-employed individuals, retail vendors, and small agricultural enterprises.', 'ස්වයං රැකියාකරුවන්, සිල්ලර වෙළෙන්දන් සහ කුඩා කෘෂි ව්‍යාපාර සඳහා ප්‍රවේශ විය හැකි ක්‍රියාකාරී ප්‍රාග්ධන ණය.', array['Fast approval within 24h','Minimal documentation','Flexible daily repayments'], array['පැය 24ක් ඇතුළත වේගවත් අනුමැතිය','අවම ලේඛන','නම්‍යශීලී දෛනික ගෙවීම්'], true),
-('rural-bank', 4, 'Gold Pawning & Jewellery Loans', 'රන් උකස් සහ ආභරණ ණය', 'Confidential and highly secure gold pawning facilities with maximum valuation and lowest approved interest rates.', 'උපරිම ඇගයීම් සහ අඩුම අනුමත පොලි අනුපාත සහිත රහස්‍ය හා අතිශය ආරක්ෂිත රන් උකස් පහසුකම්.', array['Highest advance per sovereign','Vault security guarantee','Part payment options'], array['සොවරින් එකකට උපරිම අත්තිකාරම','තැන්පතු ආරක්ෂක සහතිකය','කොටස් ගෙවීම් විකල්ප'], true),
-('rural-bank', 5, 'Children''s Savings Schemes', 'ළමා ඉතුරුම් යෝජනා', 'Dedicated savings plans to build a bright future for children with bonus interest and educational rewards.', 'බෝනස් පොලිය සහ අධ්‍යාපන ත්‍යාග සහිතව ළමයින් සඳහා දීප්තිමත් අනාගතයක් ගොඩනැගීමට කැපවූ ඉතුරුම් සැලසුම්.', array['Attractive annual gifts','Educational grant bonuses','Parental standing orders'], array['ආකර්ෂණීය වාර්ෂික තෑගි','අධ්‍යාපන අනුදැනුම් බෝනස්','දෙමාපිය ස්ථිර නියෝග'], true),
-('rural-bank', 6, 'Loan Repayment Orders & Transfers', 'ණය ගෙවීම් නියෝග හා මාරු', 'Automated inter-branch transfers, standing orders, and institutional payroll deductions for smooth loan servicing.', 'සුමට ණය සේවාකරණය සඳහා ස්වයංක්‍රීය අතරමැදි ශාඛා මාරු, ස්ථිර නියෝග සහ ආයතනික වැටුප් කප්පාදු.', array['Network-wide inter-branch access','Zero hidden service fees','SMS payment updates'], array['ජාලය පුරා අතරමැදි ශාඛා ප්‍රවේශය','සැඟවුණු සේවා ගාස්තු නැත','SMS ගෙවීම් යාවත්කාලීන'], true),
-('consumer', 1, 'Wholesale & Retail Sales', 'තොග හා සිල්ලර විකුණුම්', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('consumer', 2, 'Member Discount Schemes', 'සාමාජික වට්ටම් යෝජනා', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('consumer', 3, 'Festive Season Promotions', 'මංගල්‍ය කාල ප්‍රවර්ධන', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('consumer', 4, 'Bulk Orders for Events', 'උත්සව සඳහා තොග ඇණවුම්', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('consumer', 5, 'Home Delivery Service', 'නිවසට බෙදාහැරීම් සේවාව', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('consumer', 6, 'Fair-priced Essential Goods', 'සාධාරණ මිලෙන් අත්‍යවශ්‍ය භාණ්ඩ', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('fuel-station', 1, 'Petrol 92 / 95', 'පෙට්‍රල් 92 / 95', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('fuel-station', 2, 'Auto Diesel & Super Diesel', 'ඔටෝ ඩීසල් සහ සුපර් ඩීසල්', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('fuel-station', 3, 'Fuel Pass Scheme for Members', 'සාමාජිකයින් සඳහා ඉන්ධන පාස් යෝජනා', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('fuel-station', 4, 'Priority Queue for Members', 'සාමාජිකයින් සඳහා ප්‍රමුඛතා පෝලිම', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('fuel-station', 5, 'Air & Water Services', 'වාතය සහ ජල සේවා', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('hemas', 1, 'Baby Care Products (Baby Cheramy)', 'ළදරු රැකවරණ නිෂ්පාදන (බේබි චෙරමි)', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('hemas', 2, 'Personal Care', 'පුද්ගලික රැකවරණ', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('hemas', 3, 'Hair Care (Kumarika)', 'කෙස් රැකවරණ (කුමාරිකා)', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('hemas', 4, 'Household Items', 'නිවාස භාණ්ඩ', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('hemas', 5, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('hemas', 6, 'Member Special Offers', 'සාමාජික විශේෂ දීමනා', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-biscuits', 1, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-biscuits', 2, 'Retail Distribution', 'සිල්ලර බෙදාහැරීම', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-biscuits', 3, 'Fresh Stock Delivery', 'නැවුම් තොග බෙදාහැරීම', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-biscuits', 4, 'Bulk Event Orders', 'විශාල උත්සව ඇණවුම්', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-biscuits', 5, 'Credit Facilities', 'ණය පහසුකම්', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-biscuits', 6, 'Promotional Schemes', 'ප්‍රවර්ධන යෝජනා', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-kiri', 1, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-kiri', 2, 'Retail Distribution', 'සිල්ලර බෙදාහැරීම', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-kiri', 3, 'Infant Formula Supply', 'ළදරු කිරි මිශ්‍රණ සැපයුම', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-kiri', 4, 'Bulk Event Orders', 'විශාල උත්සව ඇණවුම්', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-kiri', 5, 'Credit Facilities', 'ණය පහසුකම්', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('maliban-kiri', 6, 'Regular Delivery Schedules', 'නිතිපතා බෙදාහැරීම් කාලසටහන්', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('natures-secrets', 1, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('natures-secrets', 2, 'Retail Distribution', 'සිල්ලර බෙදාහැරීම', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('natures-secrets', 3, 'Aloe Vera Range', 'ඇලෝවෙරා පෙළ', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('natures-secrets', 4, 'White Sandalwood Range', 'සුදු හඳුන් පෙළ', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('natures-secrets', 5, 'Herbal Care Products', 'ශාකසාර රැකවරණ නිෂ්පාදන', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('natures-secrets', 6, 'Member Special Offers', 'සාමාජික විශේෂ දීමනා', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('funeral', 1, 'Funeral Financial Assistance', 'අන්තිම කටයුතු මූල්‍ය සහාය', 'Premier service offered by Funeral Services Section.', 'අන්තිම කටයුතු සේවා අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('funeral', 2, 'Coffin & Logistics Support', 'දේහ පෙට්ටි හා ලොජිස්ටික් සහාය', 'Premier service offered by Funeral Services Section.', 'අන්තිම කටයුතු සේවා අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('funeral', 3, 'Member Family Guidance', 'සාමාජික පවුල් මඟපෙන්වීම', 'Premier service offered by Funeral Services Section.', 'අන්තිම කටයුතු සේවා අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('funeral', 4, 'Compassionate Home Visits', 'කරුණාවන්ත නිවාස සංචාර', 'Premier service offered by Funeral Services Section.', 'අන්තිම කටයුතු සේවා අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('gold-loan-service', 1, 'Gold Valuation', 'රත්‍රන් ඇගයීම', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('gold-loan-service', 2, 'Instant Loan Approval', 'ක්ෂණික ණය අනුමැතිය', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('gold-loan-service', 3, 'Flexible Repayment Plans', 'නම්‍යශීලී ගෙවීම් සැලසුම්', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
-('gold-loan-service', 4, 'Secure Jewellery Storage', 'ආරක්ෂිත ආභරණ ගබඩා කිරීම', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true)
-on conflict (business_slug, "order") do nothing;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.business_services) then
+  insert into public.business_services (business_slug, "order", title_en, title_si, desc_en, desc_si, features_en, features_si, active) values
+  ('ristbury-tiara', 1, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('ristbury-tiara', 2, 'Retail Distribution', 'සිල්ලර බෙදාහැරීම', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('ristbury-tiara', 3, 'Bulk Event Orders', 'විශාල උත්සව ඇණවුම්', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('ristbury-tiara', 4, 'Credit Facilities', 'ණය පහසුකම්', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('ristbury-tiara', 5, 'Timely Delivery', 'නියමිත වේලාවට බෙදාහැරීම', 'Premier service offered by Ristbury Tiara Agency.', 'රිස්බරි ටියාරා නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('rural-bank', 1, 'Savings Accounts', 'ඉතුරුම් ගිණුම්', 'Flexible regular savings accounts with competitive interest rates and seamless withdrawals for daily needs.', 'තරඟකාරී පොලි අනුපාත සහ දෛනික අවශ්‍යතා සඳහා පහසු මුදල් ගැනීම් සහිත නම්‍යශීලී ඉතුරුම් ගිණුම්.', array['Instant account opening','High annual interest','Passbook facilities'], array['ක්ෂණික ගිණුම් විවෘත කිරීම','ඉහළ වාර්ෂික පොලිය','පාස්බුක් පහසුකම්'], true),
+  ('rural-bank', 2, 'Fixed Deposits', 'ස්ථිර තැන්පතු (නියමිත තැන්පතු)', 'Guaranteed high-yield investment options with flexible tenure terms ranging from 3 months to 5 years.', 'මාස 3 සිට අවුරුදු 5 දක්වා නම්‍යශීලී කාල සීමා සහිත සහතික කළ ඉහළ ආදායම් ආයෝජන විකල්ප.', array['Higher interest for seniors','Monthly/maturity payout','100% security guarantee'], array['වැඩිහිටියන්ට ඉහළ පොලිය','මාසික/කල්පිරීම් ගෙවීම්','100% ආරක්ෂක සහතිකය'], true),
+  ('rural-bank', 3, 'Daily Loan Schemes', 'දෛනික ණය යෝජනා', 'Accessible working capital loans for self-employed individuals, retail vendors, and small agricultural enterprises.', 'ස්වයං රැකියාකරුවන්, සිල්ලර වෙළෙන්දන් සහ කුඩා කෘෂි ව්‍යාපාර සඳහා ප්‍රවේශ විය හැකි ක්‍රියාකාරී ප්‍රාග්ධන ණය.', array['Fast approval within 24h','Minimal documentation','Flexible daily repayments'], array['පැය 24ක් ඇතුළත වේගවත් අනුමැතිය','අවම ලේඛන','නම්‍යශීලී දෛනික ගෙවීම්'], true),
+  ('rural-bank', 4, 'Gold Pawning & Jewellery Loans', 'රන් උකස් සහ ආභරණ ණය', 'Confidential and highly secure gold pawning facilities with maximum valuation and lowest approved interest rates.', 'උපරිම ඇගයීම් සහ අඩුම අනුමත පොලි අනුපාත සහිත රහස්‍ය හා අතිශය ආරක්ෂිත රන් උකස් පහසුකම්.', array['Highest advance per sovereign','Vault security guarantee','Part payment options'], array['සොවරින් එකකට උපරිම අත්තිකාරම','තැන්පතු ආරක්ෂක සහතිකය','කොටස් ගෙවීම් විකල්ප'], true),
+  ('rural-bank', 5, 'Children''s Savings Schemes', 'ළමා ඉතුරුම් යෝජනා', 'Dedicated savings plans to build a bright future for children with bonus interest and educational rewards.', 'බෝනස් පොලිය සහ අධ්‍යාපන ත්‍යාග සහිතව ළමයින් සඳහා දීප්තිමත් අනාගතයක් ගොඩනැගීමට කැපවූ ඉතුරුම් සැලසුම්.', array['Attractive annual gifts','Educational grant bonuses','Parental standing orders'], array['ආකර්ෂණීය වාර්ෂික තෑගි','අධ්‍යාපන අනුදැනුම් බෝනස්','දෙමාපිය ස්ථිර නියෝග'], true),
+  ('rural-bank', 6, 'Loan Repayment Orders & Transfers', 'ණය ගෙවීම් නියෝග හා මාරු', 'Automated inter-branch transfers, standing orders, and institutional payroll deductions for smooth loan servicing.', 'සුමට ණය සේවාකරණය සඳහා ස්වයංක්‍රීය අතරමැදි ශාඛා මාරු, ස්ථිර නියෝග සහ ආයතනික වැටුප් කප්පාදු.', array['Network-wide inter-branch access','Zero hidden service fees','SMS payment updates'], array['ජාලය පුරා අතරමැදි ශාඛා ප්‍රවේශය','සැඟවුණු සේවා ගාස්තු නැත','SMS ගෙවීම් යාවත්කාලීන'], true),
+  ('consumer', 1, 'Wholesale & Retail Sales', 'තොග හා සිල්ලර විකුණුම්', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('consumer', 2, 'Member Discount Schemes', 'සාමාජික වට්ටම් යෝජනා', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('consumer', 3, 'Festive Season Promotions', 'මංගල්‍ය කාල ප්‍රවර්ධන', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('consumer', 4, 'Bulk Orders for Events', 'උත්සව සඳහා තොග ඇණවුම්', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('consumer', 5, 'Home Delivery Service', 'නිවසට බෙදාහැරීම් සේවාව', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('consumer', 6, 'Fair-priced Essential Goods', 'සාධාරණ මිලෙන් අත්‍යවශ්‍ය භාණ්ඩ', 'Premier service offered by Consumer Section.', 'පාරිභෝගික අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('fuel-station', 1, 'Petrol 92 / 95', 'පෙට්‍රල් 92 / 95', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('fuel-station', 2, 'Auto Diesel & Super Diesel', 'ඔටෝ ඩීසල් සහ සුපර් ඩීසල්', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('fuel-station', 3, 'Fuel Pass Scheme for Members', 'සාමාජිකයින් සඳහා ඉන්ධන පාස් යෝජනා', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('fuel-station', 4, 'Priority Queue for Members', 'සාමාජිකයින් සඳහා ප්‍රමුඛතා පෝලිම', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('fuel-station', 5, 'Air & Water Services', 'වාතය සහ ජල සේවා', 'Premier service offered by Fuel Station.', 'ඉන්ධන පිරවුම්හල විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('hemas', 1, 'Baby Care Products (Baby Cheramy)', 'ළදරු රැකවරණ නිෂ්පාදන (බේබි චෙරමි)', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('hemas', 2, 'Personal Care', 'පුද්ගලික රැකවරණ', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('hemas', 3, 'Hair Care (Kumarika)', 'කෙස් රැකවරණ (කුමාරිකා)', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('hemas', 4, 'Household Items', 'නිවාස භාණ්ඩ', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('hemas', 5, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('hemas', 6, 'Member Special Offers', 'සාමාජික විශේෂ දීමනා', 'Premier service offered by Hemas Agency.', 'හෙමාස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-biscuits', 1, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-biscuits', 2, 'Retail Distribution', 'සිල්ලර බෙදාහැරීම', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-biscuits', 3, 'Fresh Stock Delivery', 'නැවුම් තොග බෙදාහැරීම', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-biscuits', 4, 'Bulk Event Orders', 'විශාල උත්සව ඇණවුම්', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-biscuits', 5, 'Credit Facilities', 'ණය පහසුකම්', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-biscuits', 6, 'Promotional Schemes', 'ප්‍රවර්ධන යෝජනා', 'Premier service offered by Maliban Biscuits Agency.', 'මාලිබන් බිස්කට් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-kiri', 1, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-kiri', 2, 'Retail Distribution', 'සිල්ලර බෙදාහැරීම', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-kiri', 3, 'Infant Formula Supply', 'ළදරු කිරි මිශ්‍රණ සැපයුම', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-kiri', 4, 'Bulk Event Orders', 'විශාල උත්සව ඇණවුම්', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-kiri', 5, 'Credit Facilities', 'ණය පහසුකම්', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('maliban-kiri', 6, 'Regular Delivery Schedules', 'නිතිපතා බෙදාහැරීම් කාලසටහන්', 'Premier service offered by Maliban Milk Agency.', 'මාලිබන් කිරි නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('natures-secrets', 1, 'Wholesale Supply', 'තොග සැපයුම', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('natures-secrets', 2, 'Retail Distribution', 'සිල්ලර බෙදාහැරීම', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('natures-secrets', 3, 'Aloe Vera Range', 'ඇලෝවෙරා පෙළ', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('natures-secrets', 4, 'White Sandalwood Range', 'සුදු හඳුන් පෙළ', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('natures-secrets', 5, 'Herbal Care Products', 'ශාකසාර රැකවරණ නිෂ්පාදන', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('natures-secrets', 6, 'Member Special Offers', 'සාමාජික විශේෂ දීමනා', 'Premier service offered by Nature''s Secrets Agency.', 'නේචර්ස් සීක්‍රට්ස් නියෝජිතායතනය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('funeral', 1, 'Funeral Financial Assistance', 'අන්තිම කටයුතු මූල්‍ය සහාය', 'Premier service offered by Funeral Services Section.', 'අන්තිම කටයුතු සේවා අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('funeral', 2, 'Coffin & Logistics Support', 'දේහ පෙට්ටි හා ලොජිස්ටික් සහාය', 'Premier service offered by Funeral Services Section.', 'අන්තිම කටයුතු සේවා අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('funeral', 3, 'Member Family Guidance', 'සාමාජික පවුල් මඟපෙන්වීම', 'Premier service offered by Funeral Services Section.', 'අන්තිම කටයුතු සේවා අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('funeral', 4, 'Compassionate Home Visits', 'කරුණාවන්ත නිවාස සංචාර', 'Premier service offered by Funeral Services Section.', 'අන්තිම කටයුතු සේවා අංශය විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('gold-loan-service', 1, 'Gold Valuation', 'රත්‍රන් ඇගයීම', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('gold-loan-service', 2, 'Instant Loan Approval', 'ක්ෂණික ණය අනුමැතිය', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('gold-loan-service', 3, 'Flexible Repayment Plans', 'නම්‍යශීලී ගෙවීම් සැලසුම්', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true),
+  ('gold-loan-service', 4, 'Secure Jewellery Storage', 'ආරක්ෂිත ආභරණ ගබඩා කිරීම', 'Premier service offered by Gold Loan Service.', 'රත්‍රන් ණය සේවාව විසින් සපයනු ලබන ප්‍රමුඛ සේවාවකි.', array['Trusted quality','Member privileges','Certified standard'], array['විශ්වාසනීය ගුණාත්මකභාවය','සාමාජික වරප්‍රසාද','සහතික කළ ප්‍රමිතිය'], true)
+  on conflict (business_slug, "order") do nothing;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- board members (9)
 -- ---------------------------------------------------------------------------
-insert into public.board_members ("order", category, name_en, name_si, position_en, position_si, qualification, phone, email, address, photo) values
-(1, 'chairman', 'Emal Priyantha Herath', 'එමාල් ප්‍රියන්ත හේරත්', 'Chairman', 'සභාපති', 'B.Com. (Hons) — University of Kelaniya', '071 229 1011', 'member1@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(2, 'vice-chairman', 'Malith Priyankara Edirisinghe', 'මලිත් ප්‍රියංකාර එදිරිසිංහ', 'Vice Chairman', 'උප සභාපති', 'B.Sc. Business Administration — USJP', '072 229 1012', 'member2@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(3, 'director', 'Palitha Priyadarshana Perera', 'පලිත ප්‍රියදර්ශන පෙරේරා', 'Director', 'අධ්‍යක්ෂ', 'Dip. in Co-operative Management', '073 229 1013', 'member3@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(4, 'director', 'Lakmal Sanjeewa Premathilake', 'ලක්මාල් සංජීව ප්‍රේමතිලක', 'Director', 'අධ්‍යක්ෂ', 'B.A. (Hons) Economics — University of Peradeniya', '074 229 1014', 'member4@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(5, 'director', 'S.H.M. Bandarasekera', 'එස්.එච්.එම්. බණ්ඩාරසේකර', 'Director', 'අධ්‍යක්ෂ', 'MBA — PIM, USJP', '075 229 1015', 'member5@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(6, 'director', 'S. Ranjith Dharmasiri', 'එස්. රංජිත් ධර්මසිරි', 'Director', 'අධ්‍යක්ෂ', 'Higher Dip. in Accountancy (AAT)', '076 229 1016', 'member6@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(7, 'director', 'R.M. Chaminda Sandaruwan Rathnayake', 'ආර්.එම්. චමින්ද සන්දරුවන් රත්නායක', 'Director', 'අධ්‍යක්ෂ', 'B.Sc. Agriculture — Wayamba University', '077 229 1017', 'member7@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(8, 'officer', 'M.P.N.I. Gunathilake', 'එම්.පී.එන්.අයි. ගුණතිලක', 'Regional Co-op Officer', 'කලාපීය සමූපකාර නිලධාරී', 'Dip. in Public Administration', '078 229 1018', 'member8@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
-(9, 'officer', 'D.K.P.P.D. Dikwella', 'ඩී.කේ.පී.පී.ඩී. දික්වැල්ල', 'General Manager', 'සාමාන්‍ය කළමනාකරු', 'M.Sc. Management — University of Colombo', '079 229 1019', 'member9@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null)
-on conflict (lower(email)) where email <> '' do nothing;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.board_members) then
+  insert into public.board_members ("order", category, name_en, name_si, position_en, position_si, qualification, phone, email, address, photo) values
+  (1, 'chairman', 'Emal Priyantha Herath', 'එමාල් ප්‍රියන්ත හේරත්', 'Chairman', 'සභාපති', 'B.Com. (Hons) — University of Kelaniya', '071 229 1011', 'member1@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
+  (2, 'vice-chairman', 'Malith Priyankara Edirisinghe', 'මලිත් ප්‍රියංකාර එදිරිසිංහ', 'Vice Chairman', 'උප සභාපති', 'B.Sc. Business Administration — USJP', '072 229 1012', 'member2@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
+  (3, 'director', 'Palitha Priyadarshana Perera', 'පලිත ප්‍රියදර්ශන පෙරේරා', 'Director', 'අධ්‍යක්ෂ', 'Dip. in Co-operative Management', '073 229 1013', 'member3@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
+  (4, 'director', 'Lakmal Sanjeewa Premathilake', 'ලක්මාල් සංජීව ප්‍රේමතිලක', 'Director', 'අධ්‍යක්ෂ', 'B.A. (Hons) Economics — University of Peradeniya', '074 229 1014', 'member4@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
+  (5, 'director', 'S.H.M. Bandarasekera', 'එස්.එච්.එම්. බණ්ඩාරසේකර', 'Director', 'අධ්‍යක්ෂ', 'MBA — PIM, USJP', '075 229 1015', 'member5@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
+  (6, 'director', 'S. Ranjith Dharmasiri', 'එස්. රංජිත් ධර්මසිරි', 'Director', 'අධ්‍යක්ෂ', 'Higher Dip. in Accountancy (AAT)', '076 229 1016', 'member6@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
+  (7, 'director', 'R.M. Chaminda Sandaruwan Rathnayake', 'ආර්.එම්. චමින්ද සන්දරුවන් රත්නායක', 'Director', 'අධ්‍යක්ෂ', 'B.Sc. Agriculture — Wayamba University', '077 229 1017', 'member7@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
+  (8, 'officer', 'M.P.N.I. Gunathilake', 'එම්.පී.එන්.අයි. ගුණතිලක', 'Regional Co-op Officer', 'කලාපීය සමූපකාර නිලධාරී', 'Dip. in Public Administration', '078 229 1018', 'member8@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null),
+  (9, 'officer', 'D.K.P.P.D. Dikwella', 'ඩී.කේ.පී.පී.ඩී. දික්වැල්ල', 'General Manager', 'සාමාන්‍ය කළමනාකරු', 'M.Sc. Management — University of Colombo', '079 229 1019', 'member9@mpcs.lk', 'කුරුණෑගල පාර, හෙට්ටිපොල, ශ්‍රී ලංකා', null)
+  on conflict (lower(email)) where email <> '' do nothing;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- news (3)
 -- ---------------------------------------------------------------------------
-insert into public.news (id, category, badge_text, title_en, title_si, desc_en, desc_si, date, image, pinned, published) values
-('news-driver-vacancies', 'vacancy', 'Job Vacancy', 'Call for Applications: Heavy Vehicle & Logistics Driver Vacancies', 'බර වාහන හා ලොජිස්ටික් රියදුරන් බඳවා ගැනීම පිළිබඳ අයදුම්පත් කැඳවීම', 'Panduwasnuwara Multi-Purpose Co-operative Society (MPCS) invites applications from energetic, experienced, and qualified Sri Lankan citizens for the post of Heavy Vehicle & Distribution Drivers. Key Requirements: • Valid Sri Lankan Heavy Vehicle Driving License • Minimum 2 years experience • Clean driving record.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතිය (MPCS) විසින් බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි.', '2026-09-15', '/images/news/notice.jpg', true, true),
-('news-paddy-procurement', 'notice', 'Special Notice', 'Procurement of 2026 Yala Season Paddy & Agricultural Crops at Guaranteed Prices', '2026 යල කන්නයේ වී සහ කෘෂි බෝග සහතික මිලට මිලදී ගැනීම', 'Panduwasnuwara MPCS has officially commenced direct procurement of Yala season paddy harvest and agricultural produce through designated cooperative storage centres to protect farming families against middlemen exploitation.', 'පඬුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් ආරක්ෂා කිරීම සඳහා යල කන්නයේ වී අස්වැන්න සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත.', '2026-09-15', '/images/gallery/new.jpg', false, true),
-('news-agm-48', 'notice', 'Special Notice', 'Notice of 48th Annual General Meeting & Member Dividend Distribution', '48 වන වාර්ෂික මහා සභා රැස්වීම සහ සාමාජික ලාභාංශ බෙදාහැරීම පිළිබඳ නිවේදනය', 'The 48th Annual General Meeting of the Panduwasnuwara Multi-Purpose Co-operative Society will be held at the MPCS Main Auditorium, Hettipola. Key Agenda: • Presentation of Audited Annual Financial Accounts • Member dividend distribution • Election of office bearers.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ.', '2026-09-15', '/images/gallery/agm.jpg', false, true)
-on conflict (id) do nothing;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.news) then
+  insert into public.news (id, category, badge_text, title_en, title_si, desc_en, desc_si, date, image, pinned, published) values
+  ('news-driver-vacancies', 'vacancy', 'Job Vacancy', 'Call for Applications: Heavy Vehicle & Logistics Driver Vacancies', 'බර වාහන හා ලොජිස්ටික් රියදුරන් බඳවා ගැනීම පිළිබඳ අයදුම්පත් කැඳවීම', 'Panduwasnuwara Multi-Purpose Co-operative Society (MPCS) invites applications from energetic, experienced, and qualified Sri Lankan citizens for the post of Heavy Vehicle & Distribution Drivers. Key Requirements: • Valid Sri Lankan Heavy Vehicle Driving License • Minimum 2 years experience • Clean driving record.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතිය (MPCS) විසින් බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි.', '2026-09-15', '/images/news/notice.jpg', true, true),
+  ('news-paddy-procurement', 'notice', 'Special Notice', 'Procurement of 2026 Yala Season Paddy & Agricultural Crops at Guaranteed Prices', '2026 යල කන්නයේ වී සහ කෘෂි බෝග සහතික මිලට මිලදී ගැනීම', 'Panduwasnuwara MPCS has officially commenced direct procurement of Yala season paddy harvest and agricultural produce through designated cooperative storage centres to protect farming families against middlemen exploitation.', 'පඬුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් ආරක්ෂා කිරීම සඳහා යල කන්නයේ වී අස්වැන්න සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත.', '2026-09-15', '/images/gallery/new.jpg', false, true),
+  ('news-agm-48', 'notice', 'Special Notice', 'Notice of 48th Annual General Meeting & Member Dividend Distribution', '48 වන වාර්ෂික මහා සභා රැස්වීම සහ සාමාජික ලාභාංශ බෙදාහැරීම පිළිබඳ නිවේදනය', 'The 48th Annual General Meeting of the Panduwasnuwara Multi-Purpose Co-operative Society will be held at the MPCS Main Auditorium, Hettipola. Key Agenda: • Presentation of Audited Annual Financial Accounts • Member dividend distribution • Election of office bearers.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ.', '2026-09-15', '/images/gallery/agm.jpg', false, true)
+  on conflict (id) do nothing;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- gallery
 -- ---------------------------------------------------------------------------
-insert into public.gallery_items (id, title, description, aspect, image, likes) values
-('gal-pirith', 'An all-night Pirith chanting ceremony', 'සමිතියේ වාර්ෂික සර්ව රාත්‍රී පිරිත් පිංකම — සාමාජිකයින් සහ පවුල් එක්ව සහභාගී වූ අවස්ථාව.', '4:3', '/images/gallery/pirith.jpg', 1),
-('gal-agm', '48th Annual General Meeting', '48 වන වාර්ෂික මහා සභා රැස්වීම — MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල.', '16:9', '/images/gallery/agm.jpg', 3),
-('gal-hq', 'Main Headquarters', 'සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතියේ ප්‍රධාන කාර්යාලය, හෙට්ටිපොල.', '3:2', '/images/gallery/headquarters.jpg', 2)
-on conflict (id) do nothing;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.gallery_items) then
+  insert into public.gallery_items (id, title, description, aspect, image, likes) values
+  ('gal-pirith', 'An all-night Pirith chanting ceremony', 'සමිතියේ වාර්ෂික සර්ව රාත්‍රී පිරිත් පිංකම — සාමාජිකයින් සහ පවුල් එක්ව සහභාගී වූ අවස්ථාව.', '4:3', '/images/gallery/pirith.jpg', 1),
+  ('gal-agm', '48th Annual General Meeting', '48 වන වාර්ෂික මහා සභා රැස්වීම — MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල.', '16:9', '/images/gallery/agm.jpg', 3),
+  ('gal-hq', 'Main Headquarters', 'සී/ස පඬුවස්නුවර නව විවිධ සේවා සමූපකාර සමිතියේ ප්‍රධාන කාර්යාලය, හෙට්ටිපොල.', '3:2', '/images/gallery/headquarters.jpg', 2)
+  on conflict (id) do nothing;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- data files (member Excel groups + voter file)
 -- ---------------------------------------------------------------------------
-insert into public.data_files (file_name, rows, kind) values
-('Hettipola.xlsx', 3600, 'member'),
-('Panduwasnuwara.xlsx', 2363, 'member'),
-('Diyulwawa.xlsx', 2166, 'member'),
-('Barampola.xlsx', 2073, 'member'),
-('Kanogama.xlsx', 2001, 'member'),
-('Madulla.xlsx', 1989, 'member'),
-('Panduwasnuwara.xls', 2359, 'voter')
-on conflict do nothing;
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.data_files) then
+  insert into public.data_files (file_name, rows, kind) values
+  ('Hettipola.xlsx', 3600, 'member'),
+  ('Panduwasnuwara.xlsx', 2363, 'member'),
+  ('Diyulwawa.xlsx', 2166, 'member'),
+  ('Barampola.xlsx', 2073, 'member'),
+  ('Kanogama.xlsx', 2001, 'member'),
+  ('Madulla.xlsx', 1989, 'member'),
+  ('Panduwasnuwara.xls', 2359, 'voter')
+  on conflict do nothing;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- sample member / voter rows (screenshots වලින් — real data Admin → Data එකෙන් upload කරන්න)
 -- ---------------------------------------------------------------------------
-insert into public.member_rows (member_no, nic, full_name, address, postal_address, gender, file_name) values
-('41/01','0000000000','මුදිත ලියනආරච්චි','බෝගමුවාගොඩ','බෝගමුවාගොඩ','කාන්තා','Panduwasnuwara.xlsx'),
-('41/02','0000000000','නි. සේ. සිසිර','හෙට්ටිපොල','හෙට්ටිපොල','පිරිමි','Panduwasnuwara.xlsx'),
-('41/03','0000000000','ඩී. එම්. ඩී. සිල්වා බණ්ඩාර','ගිරිඋල්ල','ගිරිඋල්ල','පිරිමි','Panduwasnuwara.xlsx'),
-('41/04','430500139v','චන්ද්‍රසේන ගුණසේන','පල්ලේනුවර','පල්ලේනුවර','පිරිමි','Hettipola.xlsx'),
-('41/209','0000000000','කේ. එම්. පෙරේරා','පන්නිල්ගොඩ','පන්නිල්ගොඩ','කාන්තා','Hettipola.xlsx'),
-('41/210','0000000000','මුදිත ලියනආරච්චි','අඹන්කුඹුර','අඹන්කුඹුර','කාන්තා','Hettipola.xlsx'),
-('41/211','312490072v','චන්ද්‍රසේන ජයසිංහ මුදියන්සේලා ගුණසිංහ','ගිරිඋල්ල','ගිරිඋල්ල','පිරිමි','Diyulwawa.xlsx'),
-('41/212','0000000000','නි. කේ. පී. රණසිංහ දිසානායක','බෝගමුවාගොඩ','බෝගමුවාගොඩ','පිරිමි','Diyulwawa.xlsx'),
-('41/213','600164589v','චන්ද්‍රසේන ජයසිංහ මුදියන්සේලා ජයසූරිය','හෙට්ටිපොල','හෙට්ටිපොල','පිරිමි','Barampola.xlsx'),
-('41/214','0000000000','නි. කේ. පී. ආර්. මුණසිංහ','පල්ලේනුවර','පල්ලේනුවර','පිරිමි','Barampola.xlsx'),
-('41/215','0000000000','ජෝතිපාල ලියනආරච්චි','පන්නිල්ගොඩ','පන්නිල්ගොඩ','කාන්තා','Kanogama.xlsx'),
-('41/216','0000000000','ඩී. කේ. පී. ආර්. ජයසිංහ','අඹන්කුඹුර','අඹන්කුඹුර','පිරිමි','Kanogama.xlsx');
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.member_rows) then
+  insert into public.member_rows (member_no, nic, full_name, address, postal_address, gender, file_name) values
+  ('41/01','0000000000','මුදිත ලියනආරච්චි','බෝගමුවාගොඩ','බෝගමුවාගොඩ','කාන්තා','Panduwasnuwara.xlsx'),
+  ('41/02','0000000000','නි. සේ. සිසිර','හෙට්ටිපොල','හෙට්ටිපොල','පිරිමි','Panduwasnuwara.xlsx'),
+  ('41/03','0000000000','ඩී. එම්. ඩී. සිල්වා බණ්ඩාර','ගිරිඋල්ල','ගිරිඋල්ල','පිරිමි','Panduwasnuwara.xlsx'),
+  ('41/04','430500139v','චන්ද්‍රසේන ගුණසේන','පල්ලේනුවර','පල්ලේනුවර','පිරිමි','Hettipola.xlsx'),
+  ('41/209','0000000000','කේ. එම්. පෙරේරා','පන්නිල්ගොඩ','පන්නිල්ගොඩ','කාන්තා','Hettipola.xlsx'),
+  ('41/210','0000000000','මුදිත ලියනආරච්චි','අඹන්කුඹුර','අඹන්කුඹුර','කාන්තා','Hettipola.xlsx'),
+  ('41/211','312490072v','චන්ද්‍රසේන ජයසිංහ මුදියන්සේලා ගුණසිංහ','ගිරිඋල්ල','ගිරිඋල්ල','පිරිමි','Diyulwawa.xlsx'),
+  ('41/212','0000000000','නි. කේ. පී. රණසිංහ දිසානායක','බෝගමුවාගොඩ','බෝගමුවාගොඩ','පිරිමි','Diyulwawa.xlsx'),
+  ('41/213','600164589v','චන්ද්‍රසේන ජයසිංහ මුදියන්සේලා ජයසූරිය','හෙට්ටිපොල','හෙට්ටිපොල','පිරිමි','Barampola.xlsx'),
+  ('41/214','0000000000','නි. කේ. පී. ආර්. මුණසිංහ','පල්ලේනුවර','පල්ලේනුවර','පිරිමි','Barampola.xlsx'),
+  ('41/215','0000000000','ජෝතිපාල ලියනආරච්චි','පන්නිල්ගොඩ','පන්නිල්ගොඩ','කාන්තා','Kanogama.xlsx'),
+  ('41/216','0000000000','ඩී. කේ. පී. ආර්. ජයසිංහ','අඹන්කුඹුර','අඹන්කුඹුර','පිරිමි','Kanogama.xlsx');
+  end if;
+end $$;
 
-insert into public.voter_rows (voter_no, nic, full_name, address, postal_address, gender, file_name) values
-('01/01','0000000000','ඩබ්.බී. රණසිංහ','ගිරිඋල්ල','ගිරිඋල්ල','පිරිමි','Panduwasnuwara.xls'),
-('01/03','0000000000','කේ. එම්. අබ්දුල්','පල්ලේනුවර','පල්ලේනුවර','පිරිමි','Panduwasnuwara.xls'),
-('01/05','0000000000','අනු. අබේරත්න','පන්නිල්ගොඩ','පන්නිල්ගොඩ','කාන්තා','Panduwasnuwara.xls'),
-('01/06','0000000000','ලී. පී. ප්‍රේමසිරි','අඹන්කුඹුර','අඹන්කුඹුර','පිරිමි','Panduwasnuwara.xls'),
-('01/07','0000000000','ආර්. පී. සේනා','මැදබුලත්වැව','මැදබුලත්වැව','පිරිමි','Panduwasnuwara.xls'),
-('01/08','0000000000','ඇම්. ඇම්. සිසිර කුමාර ලියනආරච්චි','කුඹුක්කුඹුර, වීරබුලත්වැව','වීරබුලත්වැව','පිරිමි','Panduwasnuwara.xls'),
-('01/09','0000000000','ඇම්. ඇම්. ඇම්. ජයන්ති බණ්ඩාර.','වීරබුලත්වැව','වීරබුලත්වැව','කාන්තා','Panduwasnuwara.xls'),
-('01/10','0000000000','ඇම්. ඇම්. උපුල් කුමාරි','වීරබුලත්වැව','වීරබුලත්වැව','කාන්තා','Panduwasnuwara.xls'),
-('01/11','0000000000','ඇම්. ඇම්. ඇම්. ඇම්. ඇම්. බණ්ඩාර','වීරබුලත්වැව','වීරබුලත්වැව','පිරිමි','Panduwasnuwara.xls'),
-('01/12','0000000000','ඇම්. ඇම්. තිලක්','වීරබුලත්වැව','වීරබුලත්වැව','පිරිමි','Panduwasnuwara.xls'),
-('01/13','0000000000','ඇම්. ඇම්. චන්ද්‍රා බණ්ඩාර','ගිරිඋල්ල','ගිරිඋල්ල','කාන්තා','Panduwasnuwara.xls'),
-('01/14','0000000000','ජී. ඇම්. උපුල් කුමාර','ගිරිඋල්ල','ගිරිඋල්ල','පිරිමි','Panduwasnuwara.xls');
+-- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
+do $$
+begin
+  if not exists (select 1 from public.voter_rows) then
+  insert into public.voter_rows (voter_no, nic, full_name, address, postal_address, gender, file_name) values
+  ('01/01','0000000000','ඩබ්.බී. රණසිංහ','ගිරිඋල්ල','ගිරිඋල්ල','පිරිමි','Panduwasnuwara.xls'),
+  ('01/03','0000000000','කේ. එම්. අබ්දුල්','පල්ලේනුවර','පල්ලේනුවර','පිරිමි','Panduwasnuwara.xls'),
+  ('01/05','0000000000','අනු. අබේරත්න','පන්නිල්ගොඩ','පන්නිල්ගොඩ','කාන්තා','Panduwasnuwara.xls'),
+  ('01/06','0000000000','ලී. පී. ප්‍රේමසිරි','අඹන්කුඹුර','අඹන්කුඹුර','පිරිමි','Panduwasnuwara.xls'),
+  ('01/07','0000000000','ආර්. පී. සේනා','මැදබුලත්වැව','මැදබුලත්වැව','පිරිමි','Panduwasnuwara.xls'),
+  ('01/08','0000000000','ඇම්. ඇම්. සිසිර කුමාර ලියනආරච්චි','කුඹුක්කුඹුර, වීරබුලත්වැව','වීරබුලත්වැව','පිරිමි','Panduwasnuwara.xls'),
+  ('01/09','0000000000','ඇම්. ඇම්. ඇම්. ජයන්ති බණ්ඩාර.','වීරබුලත්වැව','වීරබුලත්වැව','කාන්තා','Panduwasnuwara.xls'),
+  ('01/10','0000000000','ඇම්. ඇම්. උපුල් කුමාරි','වීරබුලත්වැව','වීරබුලත්වැව','කාන්තා','Panduwasnuwara.xls'),
+  ('01/11','0000000000','ඇම්. ඇම්. ඇම්. ඇම්. ඇම්. බණ්ඩාර','වීරබුලත්වැව','වීරබුලත්වැව','පිරිමි','Panduwasnuwara.xls'),
+  ('01/12','0000000000','ඇම්. ඇම්. තිලක්','වීරබුලත්වැව','වීරබුලත්වැව','පිරිමි','Panduwasnuwara.xls'),
+  ('01/13','0000000000','ඇම්. ඇම්. චන්ද්‍රා බණ්ඩාර','ගිරිඋල්ල','ගිරිඋල්ල','කාන්තා','Panduwasnuwara.xls'),
+  ('01/14','0000000000','ජී. ඇම්. උපුල් කුමාර','ගිරිඋල්ල','ගිරිඋල්ල','පිරිමි','Panduwasnuwara.xls');
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- Superadmin account (NIC: SUPERADMIN / password: Admin@123)

@@ -872,6 +872,36 @@ ok("backup: auto/scheduled ZIP still embeds schema.sql (server auth with x-backu
   scheduledRouteSrc.includes("cronSecret: cronSecret || undefined") &&
   backupSrc.includes("fetchSchemaSql(opts?.assetBaseUrl, opts?.cronSecret)"));
 
+// ── Duplicate board/officers + seed re-run + live counts (2026-11-07) ────────
+const adminBoardSrc = readFileSync(join(root, "src/app/admin/board/page.tsx"), "utf8");
+
+const dataLibSrc = readFileSync(join(root, "src/lib/data.ts"), "utf8");
+const schemaSqlFile = readFileSync(join(root, "supabase/schema.sql"), "utf8");
+
+ok("board: duplicates never reach the site (name-based dedupe, not email)",
+  dataLibSrc.includes("export function dedupeBoard") &&
+  dataLibSrc.includes('replace(/[\\s.\\-_/\\\\,\'"]+/g, "")') &&
+  dataLibSrc.includes("return dedupeBoard(data as unknown as BoardMember[])") &&
+  !dataLibSrc.includes('const k = (p.email || p.name_en || "").toLowerCase()'));
+
+ok("gallery: same image never shows twice",
+  dataLibSrc.includes("const seenImg = new Set<string>()") && dataLibSrc.includes("return uniqueItems.map((g) => ({"));
+
+ok("admin board: adding an existing person updates that row instead of duplicating",
+  adminBoardSrc.includes("duplicate එකක් හැදෙන්නේ නැතුව ඒ row එක update කළා"));
+
+ok("seed SQL is idempotent — re-running schema.sql never duplicates board/gallery/news/rows",
+  schemaSqlFile.includes("if not exists (select 1 from public.board_members) then") &&
+  schemaSqlFile.includes("if not exists (select 1 from public.gallery_items) then") &&
+  schemaSqlFile.includes("if not exists (select 1 from public.news) then") &&
+  schemaSqlFile.includes("if not exists (select 1 from public.member_rows) then") &&
+  schemaSqlFile.includes("if not exists (select 1 from public.voter_rows) then"));
+
+ok("live counts: members/voters totals come from the DB, not a stale setting",
+  dataLibSrc.includes("async function liveRegisterTotals") &&
+  dataLibSrc.includes('sb.from("member_rows").select("id", { count: "exact", head: true })') &&
+  dataLibSrc.includes("members_total: live.members ??") && dataLibSrc.includes("voters_total: live.voters ??"));
+
 ok("security: no plaintext default passwords left in client-side source",
   !readdirSync(join(root, "src/lib"), { recursive: true } as never)
     .filter((f) => String(f).endsWith(".ts") && !String(f).includes("generated"))
