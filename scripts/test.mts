@@ -909,7 +909,9 @@ ok("backup import: member/voter counters re-synced from the restored rows",
 ok("seed SQL is idempotent — re-running schema.sql never duplicates board/gallery/news/rows",
   schemaSqlFile.includes("if not exists (select 1 from public.board_members) then") &&
   schemaSqlFile.includes("if not exists (select 1 from public.gallery_items) then") &&
-  schemaSqlFile.includes("if not exists (select 1 from public.news) then") &&
+  // news seed එක සම්පූර්ණයෙන්ම ඉවත් කළා — පරණ demo news ආයේ කවදාවත් එන්නේ නෑ
+  !schemaSqlFile.includes("insert into public.news") &&
+  schemaSqlFile.includes("demo/seed news ඉවත් කළා") &&
   schemaSqlFile.includes("if not exists (select 1 from public.member_rows) then") &&
   schemaSqlFile.includes("if not exists (select 1 from public.voter_rows) then"));
 
@@ -917,6 +919,55 @@ ok("live counts: members/voters totals come from the DB, not a stale setting",
   dataLibSrc.includes("async function liveRegisterTotals") &&
   dataLibSrc.includes('sb.from("member_rows").select("id", { count: "exact", head: true })') &&
   dataLibSrc.includes("members_total: live.members ??") && dataLibSrc.includes("voters_total: live.voters ??"));
+
+// ── Production security hardening (pentestnet report 2026-11-07) ────────────
+const nextConfigSrc = readFileSync(join(root, "next.config.ts"), "utf8");
+const robotsFileSrc = readFileSync(join(root, "src/app/robots.ts"), "utf8");
+const sitemapFileSrc = readFileSync(join(root, "src/app/sitemap.ts"), "utf8");
+const securityTxtSrc = readFileSync(join(root, "src/app/.well-known/security.txt/route.ts"), "utf8");
+
+ok("security: all pentest-reported headers are sent (CSP, XFO, nosniff, referrer, permissions)",
+  nextConfigSrc.includes('{ key: "Content-Security-Policy", value: buildCsp(isDev) }') &&
+  nextConfigSrc.includes('{ key: "X-Frame-Options", value: "SAMEORIGIN" }') &&
+  nextConfigSrc.includes('{ key: "X-Content-Type-Options", value: "nosniff" }') &&
+  nextConfigSrc.includes('{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" }') &&
+  nextConfigSrc.includes('key: "Permissions-Policy"') &&
+  nextConfigSrc.includes("async headers()") &&
+  // CSP එකේ අනිවාර්ය කොටස්
+  nextConfigSrc.includes('"default-src \'self\'"') &&
+  nextConfigSrc.includes('"object-src \'none\'"') &&
+  nextConfigSrc.includes('"base-uri \'self\'"') &&
+  nextConfigSrc.includes('"frame-ancestors \'self\'"') &&
+  nextConfigSrc.includes("connect-src 'self' ${SUPABASE_ORIGIN}") &&
+  // data exfiltration වළක්වන connect-src (අපේ Supabase විතරයි)
+
+  !nextConfigSrc.includes('default-src *'));
+
+ok("security: framework fingerprint hidden + robots.txt + sitemap + security.txt present",
+  nextConfigSrc.includes("poweredByHeader: false") &&
+  robotsFileSrc.includes("MetadataRoute.Robots") &&
+  robotsFileSrc.includes('"/admin"') && robotsFileSrc.includes('"/api/"') &&
+  robotsFileSrc.includes("sitemap:") &&
+  sitemapFileSrc.includes("MetadataRoute.Sitemap") &&
+  securityTxtSrc.includes("Contact: mailto:") &&
+  securityTxtSrc.includes("Expires:") &&
+  // security files backup/restore එකටත් යනවා (ඉදිරි updates වලට රැඳේ)
+  readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8").includes('"next.config.ts"') &&
+  readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8").includes('"src/app/robots.ts"') &&
+  readFileSync(join(root, "scripts/gen-site-source.mjs"), "utf8").includes('"src/app/.well-known/security.txt/route.ts"'));
+
+ok("counts: site shows register_counts() real numbers (6 columns filled + de-duplicated)",
+  dataLibSrc.includes('sb.rpc("register_counts")') &&
+  readFileSync(join(root, "src/components/home-sections.tsx"), "utf8").includes('sb.rpc("register_counts")') &&
+  readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8").includes('sb.rpc("register_counts")') &&
+  schemaSqlFile.includes("create or replace function public.register_counts()") &&
+  schemaSqlFile.includes("grant execute on function public.register_counts() to anon, authenticated"));
+
+ok("excel import: strictly manual — runs only on the Upload button, destructive modes confirm",
+  readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8").includes("async function upload()") &&
+  readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8").includes("🛡 MANUAL ONLY") &&
+  readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8").includes('if (mode !== "append")') &&
+  readFileSync(join(root, "src/app/admin/data/page.tsx"), "utf8").includes("window.confirm(msg)"));
 
 ok("security: no plaintext default passwords left in client-side source",
   !readdirSync(join(root, "src/lib"), { recursive: true } as never)
@@ -1273,7 +1324,6 @@ const slugPageSrc = readFileSync(join(root, "src/app/businesses/[slug]/page.tsx"
 const rootLoadingSrc = readFileSync(join(root, "src/app/loading.tsx"), "utf8");
 const slugLoadingSrc = readFileSync(join(root, "src/app/businesses/[slug]/loading.tsx"), "utf8");
 const adminLoadingSrc = readFileSync(join(root, "src/app/admin/loading.tsx"), "utf8");
-const nextConfigSrc = readFileSync(join(root, "next.config.ts"), "utf8");
 ok("perf: businesses ၅ම එකවර + cache() dedupe + targeted detail + settings keys + loading UIs",
   siteDataSrc.includes('import { cache } from "react"') &&
   siteDataSrc.includes("export const getBusinesses = cache(") &&
@@ -1385,7 +1435,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
+  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1453,7 +1503,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
+  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1491,7 +1541,7 @@ const latestBackupUpdateFiles = [
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files + professional glass auth pages",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-07-security-backup-fix-v26" &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-07-production-security-v27" &&
   generatedSiteSource.SITE_SOURCE_FILES.length >= 48 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
@@ -1519,7 +1569,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
+  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1548,7 +1598,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
+  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1606,7 +1656,7 @@ ok("member/voter register PDF: visual page keeps a real invisible Unicode text l
   genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
   genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
   genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
+  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
 const signinPageSrc = readFileSync(join(root, "src/app/signin/page.tsx"), "utf8");
 const registerPageSrc = readFileSync(join(root, "src/app/register/page.tsx"), "utf8");
 const authShellSrc = readFileSync(join(root, "src/components/auth-shell.tsx"), "utf8");
@@ -1638,7 +1688,7 @@ ok("Sign In + Register professional glass experience: gradient glass shell (no p
   genSiteSourceSrc.includes('"src/app/signin/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/register/page.tsx"') &&
   genSiteSourceSrc.includes('"src/components/auth-shell.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
+  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
 
 const registerNoticeLib = await import("../src/lib/register-notice.ts");
 const noticeDefaults = registerNoticeLib.defaultRegisterNotice();
@@ -1683,7 +1733,7 @@ ok("member/voter register update notice: default text + phone, admin show/hide p
   genSiteSourceSrc.includes('"src/app/admin/settings/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/members/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/voters/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
+  genSiteSourceSrc.includes("2026-11-07-production-security-v27"));
 
 // ── Download With Special (admin-granted access + search-only PDF) ──────────
 const specialLibSrc = readFileSync(join(root, "src/lib/special-access.ts"), "utf8");
@@ -1868,11 +1918,19 @@ ok("register rows: only Excel rows where ALL 6 columns are filled reach the site
   registerRowsSrc.includes('String(r.member_no ?? r.voter_no ?? "")') &&
   adminDataSrc.includes('import { isCompleteRegisterRow } from "@/lib/register-rows";') &&
   adminDataSrc.includes("return isCompleteRegisterRow(r);") &&
-  directorySrc.includes('import { filterCompleteRegisterRows, isCompleteRegisterRow } from "@/lib/register-rows";') &&
-  directorySrc.includes("out.push(...filterCompleteRegisterRows(got));") &&
+  directorySrc.includes('import { displayRegisterRows, filterCompleteRegisterRows, isCompleteRegisterRow } from "@/lib/register-rows";') &&
+  directorySrc.includes("out.push(...displayRegisterRows(got));") &&
   directorySrc.includes("acc.push(...got.filter(isCompleteRegisterRow));") &&
-  pdfRegisterSrc.includes('import { filterCompleteRegisterRows } from "@/lib/register-rows";') &&
-  pdfRegisterSrc.includes("const rows = filterCompleteRegisterRows(opts.rows);"));
+  // ලැයිස්තුවේ ගණන = ඇත්තටම පෙන්වන (තීරු 6 පිරුණු + duplicate රහිත) පේළි ගණන
+  directorySrc.includes("const displayTotal = allRows.length > 0 ? allRows.length : totalRows || filesTotal;") &&
+  pdfRegisterSrc.includes('import { displayRegisterRows } from "@/lib/register-rows";') &&
+  pdfRegisterSrc.includes("const rows = displayRegisterRows(opts.rows);"));
+
+ok("register rows: duplicates (same person uploaded twice) never counted twice",
+  registerRowsSrc.includes("export function registerRowKey") &&
+  registerRowsSrc.includes("export function dedupeRegisterRows") &&
+  registerRowsSrc.includes("export function displayRegisterRows") &&
+  registerRowsSrc.includes("return dedupeRegisterRows(filterCompleteRegisterRows(rows));"));
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

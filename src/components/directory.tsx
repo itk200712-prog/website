@@ -18,7 +18,7 @@ import {
   type SpecialAccessState,
 } from "@/lib/special-access";
 import { authedClient } from "@/lib/supabase/client";
-import { filterCompleteRegisterRows, isCompleteRegisterRow } from "@/lib/register-rows";
+import { displayRegisterRows, filterCompleteRegisterRows, isCompleteRegisterRow } from "@/lib/register-rows";
 import type { DataFile, MemberRow, RegisterNoticeSetting, VoterRow } from "@/lib/types";
 
 type AnyRow = (MemberRow | VoterRow) & { member_no?: string; voter_no?: string; postal_address?: string; file_name?: string };
@@ -57,7 +57,7 @@ async function fetchAllRows(table: "member_rows" | "voter_rows"): Promise<AnyRow
     const { data, error } = await sb.from(table).select("*").range(from, from + BATCH - 1);
     if (error) break;
     const got = (data ?? []) as unknown as AnyRow[];
-    out.push(...filterCompleteRegisterRows(got));
+    out.push(...displayRegisterRows(got));
     if (got.length < BATCH) break;
   }
   return out;
@@ -220,7 +220,8 @@ export function DirectoryTable({
   const to = Math.min(page * perPage, filtered.length);
   const filesTotal = files.reduce((a, b) => a + Number(b.rows || 0), 0);
   // ✅ මුළු ගණන = DB/settings එකේ සැබෑ ගණන (load වෙන ගමන් වැඩි වන ගණන නෙමෙයි)
-  const displayTotal = totalRows || filesTotal || allRows.length;
+  // ✅ REAL total — rows load වුණාට පස්සේ ඇත්තටම පෙන්වන (තීරු 6 පිරුණු, duplicate රහිත) ගණන
+  const displayTotal = allRows.length > 0 ? allRows.length : totalRows || filesTotal;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">

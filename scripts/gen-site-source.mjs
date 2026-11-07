@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-11-07-security-backup-fix-v26";
+const SITE_PACKAGE_VERSION = "2026-11-07-production-security-v27";
 
 const FILES = [
   "src/app/globals.css",
@@ -38,6 +38,11 @@ const FILES = [
   "src/app/signin/page.tsx",
   "src/app/register/page.tsx",
   "src/middleware.ts",
+  "next.config.ts",
+  "src/app/robots.ts",
+  "src/app/sitemap.ts",
+  "src/app/.well-known/security.txt/route.ts",
+  "SECURITY.md",
   "src/components/cursor-follower.tsx",
   "src/components/hero-slideshow.tsx",
   "src/components/floating-lang.tsx",

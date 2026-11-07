@@ -11,6 +11,26 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
 const BARE_PREFIXES = ["/admin", "/signin", "/register", "/api", "/auth", "/hub"];
 
+/**
+ * 🌐 Locale prefix එකක් නොදා යා යුතු root-level files — pentest/SEO tools කෙලින්ම
+ * `/robots.txt`, `/sitemap.xml`, `/.well-known/security.txt` ඉල්ලන නිසා ඒවා /en/... වලට
+ * redirect කළොත් හමු නොවේ (pentest report: "robots.txt Not found").
+ */
+const ROOT_FILES = [
+  "/robots.txt",
+  "/sitemap.xml",
+  "/security.txt",
+  "/.well-known",
+  "/manifest.webmanifest",
+  "/manifest.json",
+  "/icon.svg",
+  "/apple-icon.svg",
+  "/favicon.ico",
+];
+function isRootFile(pathname: string): boolean {
+  return ROOT_FILES.some((f) => pathname === f || pathname.startsWith(`${f}/`));
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -88,6 +108,9 @@ export async function middleware(request: NextRequest) {
     res.cookies.set("lang", locale, { path: "/", maxAge: 31536000, sameSite: "lax" });
     return res;
   }
+
+  // ---- root-level files (robots/sitemap/security.txt) -> redirect නොකර පිටත් කරයි ----
+  if (isRootFile(stripped)) return response;
 
   // ---- bare public paths -> /si/... or /en/... (cookie එක අනුව) ----------
   if (!isBareKept) {

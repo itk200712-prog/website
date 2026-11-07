@@ -178,11 +178,25 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
   }
 
   async function syncCounters(sb: Awaited<ReturnType<typeof authedClient>>) {
-    const { data: all, error: countErr } = await sb.from("data_files").select("rows").eq("kind", kind);
+    const [{ data: all, error: countErr }, counts, tableCount] = await Promise.all([
+      sb.from("data_files").select("rows").eq("kind", kind),
+      // 🎯 ඇත්ත ගණන — තීරු 6ම පිරුණු, duplicate රහිත rows (register_counts)
+      sb.rpc("register_counts"),
+      sb.from(table).select("id", { count: "exact", head: true }),
+    ]);
     if (countErr) throw new Error(countErr.message);
     const list = ((all as { rows: number }[]) ?? []);
-    const sum = list.reduce((a, b) => a + Number(b.rows), 0);
+    const fileRows = list.reduce((a, b) => a + Number(b.rows), 0);
     const count = list.length;
+    const real = (counts.data ?? null) as { members?: number; voters?: number } | null;
+    const realCount =
+      !counts.error && typeof (kind === "member" ? real?.members : real?.voters) === "number"
+        ? Number(kind === "member" ? real?.members : real?.voters)
+        : typeof tableCount.count === "number"
+          ? tableCount.count
+          : fileRows;
+    // settings වල ලියවෙන්නේ ඇත්ත DB ගණනයි (Excel row sum එක නොවේ)
+    const sum = realCount;
     const settings =
       kind === "member"
         ? [
@@ -205,6 +219,15 @@ function ImportPanel({ kind, title }: { kind: "member" | "voter"; title: string 
 
   async function upload() {
     if (!chosen.length) return show("⚠ කරුණාකර file එකක් තෝරන්න");
+    // 🛡 MANUAL ONLY — file එක තේරුවම කිසිම දෙයක් auto upload වෙන්නේ නෑ.
+    //    මේ button එක එබූ විට විතරයි. Destructive modes වලට අතින් තහවුරු කිරීමක් ඕනේ.
+    if (mode !== "append") {
+      const msg =
+        mode === "replace-all"
+          ? `⚠ මුළු ${kind === "member" ? "සාමාජික" : "ඡන්ද දායක"} ලැයිස්තුවම මකා අලුත් file එකෙන් පුරවන්නද?`
+          : "⚠ එකම නම තියෙන file(s) මකා අලුත් ඒවා දාන්නද?";
+      if (typeof window !== "undefined" && !window.confirm(msg)) return;
+    }
     setBusy(true);
     try {
       const sb = await authedClient();

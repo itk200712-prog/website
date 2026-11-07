@@ -165,7 +165,9 @@ export async function getBoard(): Promise<BoardMember[]> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("board_members").select("*").order("order");
-    if (error || !data) return BOARD;
+    // 🚫 DB error වුණොත් seed දත්ත ආපහු පෙන්නන්නේ නෑ — demo rows site එකට එන එක නවත්වයි.
+    //    (Supabase configure කරලා නැති demo mode එකේදී විතරයි seed fallback)
+    if (error || !data) return isSupabaseConfigured() ? [] : BOARD;
     return dedupeBoard(data as unknown as BoardMember[]);
   }, BOARD);
 }
@@ -174,7 +176,7 @@ export async function getNews(): Promise<NewsItem[]> {
   return safe(async () => {
     const sb = createAnonClient();
     const { data, error } = await sb.from("news").select("*").eq("published", true);
-    if (error || !data) return NEWS;
+    if (error || !data) return isSupabaseConfigured() ? [] : NEWS;
     return (data as unknown as NewsItem[]).sort((a, b) => Number(b.pinned) - Number(a.pinned));
   }, NEWS);
 }
@@ -188,7 +190,7 @@ export const getGallery = cache(async (): Promise<GalleryItem[]> => {
       sb.from("gallery_comments").select("*").order("created_at", { ascending: true }),
     ]);
     const { data, error } = itemsRes;
-    if (error || !data) return GALLERY;
+    if (error || !data) return isSupabaseConfigured() ? [] : GALLERY;
     // ✅ comments gallery_comments table එකෙන් එකතු කරන්න (bug fix)
     const cm = commentsRes.data;
     // 🔁 seed එක දෙපාරක් run වුණොත් එකම image එක දෙපාරක් පෙනෙනවා — image path එකෙන් unique
@@ -278,14 +280,30 @@ async function liveRegisterTotals(): Promise<{
 }> {
   try {
     const sb = createAnonClient();
-    const [m, v, mf, vf] = await Promise.all([
-      sb.from("member_rows").select("id", { count: "exact", head: true }),
-      sb.from("voter_rows").select("id", { count: "exact", head: true }),
+    const [counts, mf, vf] = await Promise.all([
+      // 🎯 1) Postgres RPC — තීරු 6ම පිරුණු, duplicate රහිත ඇත්ත ගණන (register_counts)
+      sb.rpc("register_counts"),
       sb.from("data_files").select("file_name").eq("kind", "member"),
       sb.from("data_files").select("file_name").eq("kind", "voter"),
     ]);
     const uniq = (rows: { file_name?: string }[] | null) =>
       new Set((rows ?? []).map((r) => String(r.file_name ?? "").trim()).filter(Boolean)).size;
+
+    const payload = counts.data as { members?: number; voters?: number } | null;
+    if (!counts.error && payload && typeof payload.members === "number") {
+      return {
+        members: payload.members,
+        voters: typeof payload.voters === "number" ? payload.voters : undefined,
+        memberFiles: mf.error ? undefined : uniq(mf.data as { file_name?: string }[] | null),
+        voterFiles: vf.error ? undefined : uniq(vf.data as { file_name?: string }[] | null),
+      };
+    }
+
+    // 2) RPC එක තවම install වී නැත්නම් — raw rows ගණන (duplicate guard එකක් සමඟ)
+    const [m, v] = await Promise.all([
+      sb.from("member_rows").select("id", { count: "exact", head: true }),
+      sb.from("voter_rows").select("id", { count: "exact", head: true }),
+    ]);
     return {
       members: typeof m.count === "number" ? m.count : undefined,
       voters: typeof v.count === "number" ? v.count : undefined,

@@ -903,7 +903,9 @@ function useLiveStats(init: { members: number; voters: number; divisions: number
     async function pull() {
       try {
         const sb = createClient();
-        const [m, v, b, st] = await Promise.all([
+        const [counts, m, v, b, st] = await Promise.all([
+          // 🎯 REAL counts — register_counts() = තීරු 6ම පිරුණු + duplicate රහිත ගණන
+          sb.rpc("register_counts"),
           sb.from("member_rows").select("id", { count: "exact", head: true }),
           sb.from("voter_rows").select("id", { count: "exact", head: true }),
           sb.from("business_units").select("slug,active"),
@@ -912,9 +914,20 @@ function useLiveStats(init: { members: number; voters: number; divisions: number
         if (!alive) return;
         const divisions = (b.data ?? []).filter((r: { active?: unknown }) => r.active === true || r.active === "true").length;
         const y = Number(st.data?.[0]?.value);
+        const real = (counts.data ?? null) as { members?: number; voters?: number } | null;
         setStats((s) => ({
-          members: typeof m.count === "number" ? m.count : s.members,
-          voters: typeof v.count === "number" ? v.count : s.voters,
+          members:
+            !counts.error && typeof real?.members === "number"
+              ? real.members
+              : typeof m.count === "number"
+                ? m.count
+                : s.members,
+          voters:
+            !counts.error && typeof real?.voters === "number"
+              ? real.voters
+              : typeof v.count === "number"
+                ? v.count
+                : s.voters,
           divisions,
           years: Number.isNaN(y) ? s.years : y,
         }));

@@ -751,17 +751,8 @@ end $$;
 -- ---------------------------------------------------------------------------
 -- news (3)
 -- ---------------------------------------------------------------------------
--- 🔒 idempotent seed — කලින් rows තියෙනවා නම් ආයේ insert කරන්නේ නෑ (duplicate / delete කරපු දේ ආපහු ඒම නවත්වයි)
-do $$
-begin
-  if not exists (select 1 from public.news) then
-  insert into public.news (id, category, badge_text, title_en, title_si, desc_en, desc_si, date, image, pinned, published) values
-  ('news-driver-vacancies', 'vacancy', 'Job Vacancy', 'Call for Applications: Heavy Vehicle & Logistics Driver Vacancies', 'බර වාහන හා ලොජිස්ටික් රියදුරන් බඳවා ගැනීම පිළිබඳ අයදුම්පත් කැඳවීම', 'Panduwasnuwara Multi-Purpose Co-operative Society (MPCS) invites applications from energetic, experienced, and qualified Sri Lankan citizens for the post of Heavy Vehicle & Distribution Drivers. Key Requirements: • Valid Sri Lankan Heavy Vehicle Driving License • Minimum 2 years experience • Clean driving record.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතිය (MPCS) විසින් බර වාහන හා බෙදාහැරීම් රියදුරන් ධූරය සඳහා සුදුසුකම් ලත් ශ්‍රී ලාංකික පුරවැසියන්ගෙන් අයදුම්පත් කැඳවයි.', '2026-09-15', '/images/news/notice.jpg', true, true),
-  ('news-paddy-procurement', 'notice', 'Special Notice', 'Procurement of 2026 Yala Season Paddy & Agricultural Crops at Guaranteed Prices', '2026 යල කන්නයේ වී සහ කෘෂි බෝග සහතික මිලට මිලදී ගැනීම', 'Panduwasnuwara MPCS has officially commenced direct procurement of Yala season paddy harvest and agricultural produce through designated cooperative storage centres to protect farming families against middlemen exploitation.', 'පඬුවස්නුවර MPCS සමිතිය විසින් ගොවි පවුල් ආරක්ෂා කිරීම සඳහා යල කන්නයේ වී අස්වැන්න සෘජුව මිලදී ගැනීම ආරම්භ කර ඇත.', '2026-09-15', '/images/gallery/new.jpg', false, true),
-  ('news-agm-48', 'notice', 'Special Notice', 'Notice of 48th Annual General Meeting & Member Dividend Distribution', '48 වන වාර්ෂික මහා සභා රැස්වීම සහ සාමාජික ලාභාංශ බෙදාහැරීම පිළිබඳ නිවේදනය', 'The 48th Annual General Meeting of the Panduwasnuwara Multi-Purpose Co-operative Society will be held at the MPCS Main Auditorium, Hettipola. Key Agenda: • Presentation of Audited Annual Financial Accounts • Member dividend distribution • Election of office bearers.', 'සී/ස පඬුවස්නුවර විවිධ සේවා සමූපකාර සමිතියේ 48 වන වාර්ෂික මහා සභා රැස්වීම MPCS ප්‍රධාන ශ්‍රවණාගාරය, හෙට්ටිපොල දී පැවැත්වේ.', '2026-09-15', '/images/gallery/agm.jpg', false, true)
-  on conflict (id) do nothing;
-  end if;
-end $$;
+-- 📰 news — demo/seed news ඉවත් කළා (site එකේ පරණ news ආයේ එන්නේ නෑ).
+--    Admin → News එකෙන් අලුත් news එකතු කරන්න.
 
 -- ---------------------------------------------------------------------------
 -- gallery
@@ -1388,6 +1379,60 @@ $$;
 grant execute on function public.chat_sync(text, timestamptz) to anon, authenticated;
 
 -- PostgREST schema cache reload (new tables/functions එකපාරටම හඳුනාගන්න)
+-- ---------------------------------------------------------------------------
+-- 📊 register_counts() — site එකේ පෙන්වන "ඇත්ත" ගණන
+--    · තීරු 6ම (අංකය · NIC · නම · ලිපිනය · තැපැල් ලිපිනය · ස්ත්‍රී/පුරුෂ) පිරුණු පේළි පමණයි
+--    · එකම පුද්ගලයා දෙපාරක් තිබුණත් එක වරක් විතරයි (DISTINCT)
+--    · site එකේ හැම තැනකම (home / members / voters / admin) මේකෙන් ගණන් ගනී
+-- ---------------------------------------------------------------------------
+create or replace function public.register_counts()
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  with m as (
+    select distinct
+      btrim(member_no)              as no_,
+      btrim(nic)                    as nic_,
+      lower(btrim(full_name))       as name_,
+      btrim(address)                as addr_,
+      btrim(postal_address)         as post_,
+      lower(btrim(gender))          as gen_
+    from public.member_rows
+    where nullif(btrim(member_no), '')      is not null
+      and nullif(btrim(nic), '')            is not null
+      and nullif(btrim(full_name), '')      is not null
+      and nullif(btrim(address), '')        is not null
+      and nullif(btrim(postal_address), '') is not null
+      and nullif(btrim(gender), '')         is not null
+  ), v as (
+    select distinct
+      btrim(voter_no)               as no_,
+      btrim(nic)                    as nic_,
+      lower(btrim(full_name))       as name_,
+      btrim(address)                as addr_,
+      btrim(postal_address)         as post_,
+      lower(btrim(gender))          as gen_
+    from public.voter_rows
+    where nullif(btrim(voter_no), '')       is not null
+      and nullif(btrim(nic), '')            is not null
+      and nullif(btrim(full_name), '')      is not null
+      and nullif(btrim(address), '')        is not null
+      and nullif(btrim(postal_address), '') is not null
+      and nullif(btrim(gender), '')         is not null
+  )
+  select jsonb_build_object(
+    'members', (select count(*) from m),
+    'voters',  (select count(*) from v),
+    'member_rows_raw', (select count(*) from public.member_rows),
+    'voter_rows_raw',  (select count(*) from public.voter_rows)
+  );
+$$;
+
+grant execute on function public.register_counts() to anon, authenticated;
+
 notify pgrst, 'reload schema';
 
 -- ---------------------------------------------------------------------------

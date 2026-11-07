@@ -8,7 +8,7 @@
 //    එකකින් NIC / සාමාජික අංකය / නම / ලිපිනය search කළාම results පේනවා.
 // ============================================================================
 
-import { filterCompleteRegisterRows } from "@/lib/register-rows";
+import { displayRegisterRows } from "@/lib/register-rows";
 
 /** PDF generate වෙන ගමන් UI එකට යන තොරතුරු — "ඉතිරි වෙලාව" (ETA) ඇතුළුව */
 export type RegisterPdfProgress = {
@@ -252,7 +252,7 @@ export async function buildRegisterPdf(opts: {
     onProgress?.({ pct: Math.max(0, Math.min(100, pct)), page: renderedPages, totalPages, elapsedMs, etaMs });
   };
   // ✅ Excel එකේ තීරු 6ම පිරුණු පේළි පමණයි PDF එකටත් යන්නේ (පිළිවෙල එහෙමම)
-  const rows = filterCompleteRegisterRows(opts.rows);
+  const rows = displayRegisterRows(opts.rows); // තීරු 6ම පිරුණු + duplicate රහිත (real count)
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import("jspdf"), import("html2canvas")]);
   // ✅ "ඉස්කෝල පොත" font එක load වනතුරු ඉන්නවා (නැත්නම් fallback වේ)
   try {
