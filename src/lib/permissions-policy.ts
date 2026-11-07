@@ -40,9 +40,9 @@ export function buildPermissionsPolicy(origins: string[]): string {
   const allow = origins.map((o) => `"${o}"`).join(" ");
   const feature = (name: string) => (allow ? `${name}=(${allow})` : `${name}=()`);
   return [
-    feature("camera"),
-    feature("microphone"),
     feature("geolocation"),
+    feature("microphone"),
+    feature("camera"),
     feature("payment"),
     feature("usb"),
     feature("magnetometer"),
