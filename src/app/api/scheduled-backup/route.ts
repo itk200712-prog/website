@@ -580,18 +580,8 @@ export async function POST(req: NextRequest) {
     .filter(Boolean)
     .join(" · ");
 
-  await recordHistory({
-    fileName,
-    fileSize: built.zip.length,
-    tables: built.tables,
-    rows: built.totalRows,
-    status,
-    detail,
-    encrypted,
-  });
-  if (done.length) await storeLastScheduledSuccessDate(new Date().toISOString());
-
   // 📧 වාර්තා email — file නම · වර්ගය · ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස
+  //    (History එකට කලින් යවන්නේ යැවුණාද නැද්ද කියා history detail එකේ සටහන් කරන්න)
   let reportSent = 0;
   try {
     const emails = await loadBackupReportEmails();
@@ -620,6 +610,18 @@ export async function POST(req: NextRequest) {
   } catch {
     /* email report එක අසාර්ථක වුණත් backup එක සාර්ථකයි — response එකට බලපෑමක් නෑ */
   }
+
+  const reportDetail = reportSent > 0 ? `Email report: ✅ sent (${reportSent})` : "Email report: ⚠ not sent";
+  await recordHistory({
+    fileName,
+    fileSize: built.zip.length,
+    tables: built.tables,
+    rows: built.totalRows,
+    status,
+    detail: `${detail} · ${reportDetail}`,
+    encrypted,
+  });
+  if (done.length) await storeLastScheduledSuccessDate(new Date().toISOString());
 
   await clearRunLock();
 

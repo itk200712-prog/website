@@ -203,23 +203,28 @@ export function buildBackupReportEmail(input: BackupReportInput): {
  */
 export async function postFormSubmit(to: string, payload: Record<string, unknown>): Promise<boolean> {
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to.trim())) return false;
-  try {
-    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to.trim())}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(payload),
-    });
-    let sent = res.ok;
+  // 🔁 FormSubmit එක වහාම fail වුණොත් (522/timeout) තව එක වරක් උත්සාහ කරයි
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const j = (await res.json()) as { success?: boolean | string } | null;
-      if (j && typeof j.success !== "undefined") sent = res.ok && (j.success === true || j.success === "true");
+      const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to.trim())}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+      let sent = res.ok;
+      try {
+        const j = (await res.json()) as { success?: boolean | string } | null;
+        if (j && typeof j.success !== "undefined") sent = res.ok && (j.success === true || j.success === "true");
+      } catch {
+        /* JSON නෙවෙයි නම් HTTP status එකම ඇති */
+      }
+      if (sent) return true;
     } catch {
-      /* JSON නෙවෙයි නම් HTTP status එකම ඇති */
+      /* ඊළඟ උත්සාහයට යයි */
     }
-    return sent;
-  } catch {
-    return false;
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 1200));
   }
+  return false;
 }
 
 /** හැම ලිපිනයකටම වාර්තාව යවයි — @returns යැවූ ගණන */
