@@ -165,11 +165,42 @@ export async function getRouteEmailsCached(route: MailRouteKey): Promise<string[
  * @returns යැවූ ගණන
  */
 /**
- * 🌐 මුලින්ම **server route** එකෙන් යවන්න බලයි (`/api/mail/send`, SMTP).
- * FormSubmit down වුණත් (522) SMTP configure කරලා තියෙනවා නම් email යනවා.
- * Server එකෙන් යැවීම අසාර්ථක නම් පමණක් පරණ FormSubmit ක්‍රමයට යයි.
+ * 🚦 FormSubmit “down” මතක තබා ගැනීම — එක වරක් fail වුණාම ඊළඟ විනාඩි 15 තුළ
+ * FormSubmit එක ආයේ උත්සාහ නොකර කෙලින්ම SMTP එකට යනවා (පරිශීලකයා තත්පර 20ක්
+ * රැඳී ඉන්නේ නැති වෙන්න). සේවාව හොඳ වුණාම ඉබේම ආයේ FormSubmit එකට මාරු වේ.
  */
-async function sendViaServerRoute(route: MailRouteKey, payload: Record<string, unknown>): Promise<number> {
+const FS_DOWN_KEY = "mpcs_formsubmit_down_until";
+const FS_DOWN_FOR_MS = 15 * 60 * 1000;
+const FS_TIMEOUT_MS = 8_000;
+
+function formSubmitDown(): boolean {
+  try {
+    return Number(globalThis.localStorage?.getItem(FS_DOWN_KEY) ?? 0) > Date.now();
+  } catch {
+    return false;
+  }
+}
+function markFormSubmitDown(): void {
+  try {
+    globalThis.localStorage?.setItem(FS_DOWN_KEY, String(Date.now() + FS_DOWN_FOR_MS));
+  } catch {
+    /* private mode — මතක නොතිබ්බත් කමක් නෑ */
+  }
+}
+function clearFormSubmitDown(): void {
+  try {
+    globalThis.localStorage?.removeItem(FS_DOWN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 🌐 server route එකෙන් යවයි (SMTP). `only` දුන්නොත් ඒ ලිපින වලට විතරයි. */
+async function sendViaServerRoute(
+  route: MailRouteKey,
+  payload: Record<string, unknown>,
+  only?: string[]
+): Promise<number> {
   try {
     const subject = String(payload._subject ?? "MPCS — පණිවිඩයක්");
     const skip = new Set(["_subject", "_template", "_autoresponse", "_captcha", "Message"]);
@@ -185,7 +216,7 @@ async function sendViaServerRoute(route: MailRouteKey, payload: Record<string, u
     const res = await fetch("/api/mail/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ route, subject, text: lines.join("\n") }),
+      body: JSON.stringify({ route, subject, text: lines.join("\n"), only: only && only.length ? only : undefined }),
     });
     if (!res.ok) return 0;
     const j = (await res.json().catch(() => ({}))) as { sent?: number };
@@ -195,41 +226,74 @@ async function sendViaServerRoute(route: MailRouteKey, payload: Record<string, u
   }
 }
 
+/** FormSubmit එකෙන් ලිපිනයකට යවයි — 8 තත්පරයක් ඇතුළත පිළිතුරක් නැත්නම් අත්හැරෙයි */
+async function postFormSubmitOnce(to: string, payload: Record<string, unknown>): Promise<boolean> {
+  try {
+    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(FS_TIMEOUT_MS),
+    });
+    // FormSubmit එක HTTP 200 දුන්නත් confirm නොකළ ලිපිනයකට success:"false" එයි —
+    // ඒක "යැවුණා" කියලා ගණන් ගන්නේ නෑ
+    let sent = res.ok;
+    try {
+      const j = (await res.json()) as { success?: boolean | string } | null;
+      if (j && typeof j.success !== "undefined") sent = res.ok && (j.success === true || j.success === "true");
+    } catch {
+      /* JSON නෙවෙයි නම් HTTP status එකම ඇති */
+    }
+    return sent;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 📨 route එකක ලිපින වලට email යවයි.
+ *
+ *  ① **FormSubmit** (කලින් විදිහටම — contact form submit එක) උත්සාහ කරයි
+ *  ② ඒක වැඩ නොකළොත් (522 / timeout / success:false) **ඉබේම SMTP එකට මාරු වේ**
+ *     — යැවීමට ඉතුරු වුණු ලිපින වලට විතරයි (දෙපාරක් යන්නේ නෑ)
+ *  ③ FormSubmit down බව විනාඩි 15ක් මතක තබා ගනී — ඒ අතර කෙලින්ම SMTP
+ */
 export async function sendToRoute(route: MailRouteKey, payload: Record<string, unknown>): Promise<number> {
-  // ① SMTP (server) — configure කරලා නම් / FormSubmit down නම් වැඩ කරයි
-  const viaServer = await sendViaServerRoute(route, payload);
-  if (viaServer > 0) return viaServer;
-  // ② පරණ FormSubmit ක්‍රමය (fallback)
   const list = await getRouteEmails(route);
   if (!list.length) return 0;
+
   let ok = 0;
-  await Promise.all(
-    list.map(async (to, i) => {
-      try {
-        // Visitor confirmation (_autoresponse) එක පළමු ලිපිනයෙන් පමණයි —
-        // නැත්නම් ලිපින ගණනටම confirmation mail යයි
+  /** FormSubmit එකෙන් යැවීමට ඉතුරු වුණු ලිපින */
+  const remaining: string[] = [];
+
+  if (formSubmitDown()) {
+    remaining.push(...list); // ⏭ FormSubmit දැනටමත් down — කෙලින්ම SMTP
+  } else {
+    const results = await Promise.all(
+      list.map(async (to, i) => {
         const body: Record<string, unknown> = { ...payload };
+        // Visitor confirmation (_autoresponse) එක පළමු ලිපිනයෙන් පමණයි
         if (i > 0) delete body._autoresponse;
-        const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify(body),
-        });
-        // FormSubmit එක HTTP 200 දුන්නත් confirm නොකළ ලිපිනයකට success:"false" එයි —
-        // ඒක "යැවුණා" කියලා ගණන් ගන්නේ නෑ
-        let sent = res.ok;
-        try {
-          const j = (await res.json()) as { success?: boolean | string } | null;
-          if (j && typeof j.success !== "undefined") sent = res.ok && (j.success === true || j.success === "true");
-        } catch {
-          /* JSON නෙවෙයි නම් HTTP status එකම ඇති */
-        }
-        if (sent) ok++;
-      } catch {
-        /* ignore */
+        const sent = await postFormSubmitOnce(to, body);
+        return { to, sent };
+      })
+    );
+    for (const r of results) {
+      if (r.sent) {
+        ok += 1;
+        clearFormSubmitDown();
+      } else {
+        remaining.push(r.to);
       }
-    })
-  );
+    }
+    if (ok === 0 && remaining.length) markFormSubmitDown(); // 👉 auto-switch
+  }
+
+  // ② FormSubmit එකෙන් නොගිය ලිපින → SMTP (server route)
+  if (remaining.length) {
+    const viaSmtp = await sendViaServerRoute(route, payload, remaining);
+    ok += viaSmtp;
+  }
   return ok;
 }
 

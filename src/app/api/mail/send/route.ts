@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  type MailBody = { to?: unknown; subject?: unknown; text?: unknown; route?: unknown } | null;
+  type MailBody = { to?: unknown; subject?: unknown; text?: unknown; route?: unknown; only?: unknown } | null;
   let body: MailBody = null;
   try {
     body = (await req.json()) as MailBody;
@@ -112,7 +112,14 @@ export async function POST(req: NextRequest) {
     if (!SERVER_MAIL_ROUTES.includes(wanted)) return json({ ok: false, reason: "bad_route" }, 400);
     const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
     if (!rateLimit(ip, wanted)) return json({ ok: false, reason: "rate_limited" }, 429);
-    const recipients = await routeEmailsServer(wanted);
+    const all = await routeEmailsServer(wanted);
+    if (!all.length) return json({ ok: false, reason: "no_recipients" }, 400);
+    // 🔒 `only` — client එකේදී FormSubmit එකෙන් යැවීමට නොහැකි වුණු ලිපින විතරක් ඉල්ලන්න පුළුවන්.
+    //    නමුත් ඒවා **route එකට දාලා තියෙන ලිපිනම** විය යුතුයි (එහෙනම් විතරයි) — open relay නොවේ.
+    const wantedOnly = Array.isArray(body?.only) ? (body.only as unknown[]).map((x) => String(x).trim().toLowerCase()) : [];
+    const recipients = wantedOnly.length
+      ? all.filter((e) => wantedOnly.includes(e.trim().toLowerCase()))
+      : all;
     if (!recipients.length) return json({ ok: false, reason: "no_recipients" }, 400);
     const subject = String(body?.subject ?? "MPCS — පණිවිඩයක්").slice(0, 200);
     const text = String(body?.text ?? "").slice(0, 20_000);

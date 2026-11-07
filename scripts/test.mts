@@ -2263,10 +2263,18 @@ console.log("\n── 27) Mail delivery — SMTP (Gmail App Password) + FormSubm
   ok("/api/mail/settings: SMTP save + test send (admin පමණයි)",
     setRoute.includes("saveSmtp(") && setRoute.includes("body?.testTo") && setRoute.includes("userIsAdmin"));
 
-  ok("site forms: මුලින්ම server (SMTP) → නැත්නම් FormSubmit (sendToRoute)",
+  ok("site forms: ① FormSubmit (contact form submit) → ② වැඩ නොකළොත් ඉබේම SMTP",
     mailSrc.includes("async function sendViaServerRoute") && mailSrc.includes('fetch("/api/mail/send"') &&
-    mailSrc.includes("const viaServer = await sendViaServerRoute(route, payload);") &&
-    mailSrc.includes("// ② පරණ FormSubmit ක්‍රමය (fallback)"));
+    mailSrc.includes("async function postFormSubmitOnce") &&
+    mailSrc.includes("if (formSubmitDown()) {") &&
+    mailSrc.includes("const viaSmtp = await sendViaServerRoute(route, payload, remaining);"));
+  ok("site forms: FormSubmit fail වුණාම 8s timeout + විනාඩි 15ක් මතක (පරිශීලකයා රැඳෙන්නේ නෑ)",
+    mailSrc.includes("const FS_TIMEOUT_MS = 8_000;") && mailSrc.includes("AbortSignal.timeout(FS_TIMEOUT_MS)") &&
+    mailSrc.includes("FS_DOWN_FOR_MS = 15 * 60 * 1000") && mailSrc.includes("markFormSubmitDown()") &&
+    mailSrc.includes("clearFormSubmitDown()"));
+  ok("site forms: FormSubmit එකෙන් නොගිය ලිපින වලට විතරයි SMTP (දෙපාරක් යවන්නේ නෑ)",
+    mailSrc.includes("const remaining: string[] = [];") && mailSrc.includes("remaining.push(r.to)") &&
+    sendRoute.includes("body?.only") && sendRoute.includes("all.filter((e) => wantedOnly.includes("));
   ok("Admin → Emails: 📮 Mail Server (SMTP) card + Gmail App Password උපදෙස් + Activate → server route",
     emailsPage.includes("Mail Server (SMTP)") && emailsPage.includes("App Password") &&
     emailsPage.includes("myaccount.google.com/apppasswords") &&

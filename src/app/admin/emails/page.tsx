@@ -251,9 +251,9 @@ export default function AdminEmailsPage() {
               📮 Mail Server (SMTP) {smtpState?.configured ? "— ✅ සක්‍රීය" : "— ⚠ තාම set කරලා නෑ"}
             </div>
             <p className="mt-1 text-[11.5px] leading-relaxed text-slate-600">
-              දැනට email යන්නේ <b>FormSubmit</b> (formsubmit.co) හරහා. ඒ සේවාව down වුණොත් (Cloudflare 522)
-              <b> activation mail, backup report, contact form </b> හැම email එකක්ම යැවෙන්නේ නෑ.
-              ඔයාගේ <b>Gmail App Password</b> එකක් දැම්මොත් එහෙම ප්‍රශ්නයක් එන්නේ නෑ — email යන්නේ ඔයාගේ ගිණුමෙන්මයි.
+              Contact form / Account emails මුලින්ම යන්නේ <b>FormSubmit</b> (formsubmit.co) හරහා — ඒක වැඩ නොකළොත්
+              (down · 522 · timeout) <b>ඉබේම මේ SMTP එකට මාරු වෙනවා</b>. ඒ නිසා <b>Gmail App Password</b> එකක්
+              දාලා තිබ්බොත් site එකේ කිසිම email එකක් නැති වෙන්නේ නෑ — යන්නේ ඔයාගේ ගිණුමෙන්මයි.
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <input value={smtp.user} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} type="email" placeholder="Gmail ලිපිනය (උදා: induwara633@gmail.com)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
@@ -262,6 +262,10 @@ export default function AdminEmailsPage() {
               <input value={smtp.host} onChange={(e) => setSmtp({ ...smtp, host: e.target.value })} placeholder="smtp.gmail.com" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
               <input value={smtp.port} onChange={(e) => setSmtp({ ...smtp, port: parseInt(e.target.value, 10) || 465 })} type="number" placeholder="465" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
               <input value={smtp.fromEmail} onChange={(e) => setSmtp({ ...smtp, fromEmail: e.target.value })} type="email" placeholder="From ලිපිනය (හිස් නම් උඩ ලිපිනයම)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+            </div>
+            <div className="mt-2 rounded-xl bg-white/80 px-3 py-2 text-[11px] leading-relaxed text-slate-600 ring-1 ring-slate-200">
+              🔁 <b>යැවීමේ පිළිවෙළ:</b> ① FormSubmit → ② fail වුණොත් <b>ඉබේම SMTP</b> → ③ දෙකම fail නම් error එකේ හේතුව පෙන්වයි.
+              FormSubmit down වුණාම ඊළඟ විනාඩි 15 තුළ කෙලින්ම SMTP එකෙන් යයි (ආයේ තත්පර 20ක් ඉන්නේ නෑ).
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button onClick={() => void saveSmtpSettings()} disabled={smtpBusy !== ""} className="btn btn-primary !py-1.5 !px-3 !text-[11px]">

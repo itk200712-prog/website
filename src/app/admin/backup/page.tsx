@@ -1248,7 +1248,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           <div className="text-[12px] font-extrabold text-slate-800">📧 ඊමේල් වාර්තාව (සාර්ථක / අසාර්ථක)</div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
             හැම auto-backup එකකටම පස්සේ <b>file නම · file වර්ගය · file ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස</b> සහිත
-            email එකක් යයි. ලිපින එකතු කරන්නේ{" "}
+            email එකක් යයි. (යැවීම: FormSubmit → වැඩ නොකළොත් ඉබේම SMTP.) ලිපින එකතු කරන්නේ{" "}
             <a href="/admin/emails" className="font-extrabold text-indigo-700 underline">Admin → Emails → “Auto Backup Reports”</a> එකෙන්.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
