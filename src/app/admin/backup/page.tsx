@@ -555,7 +555,7 @@ drop policy if exists site_images_backup_super on public.site_images_backup;
 create policy site_images_backup_super on public.site_images_backup for all using (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin')) with check (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'));
 drop policy if exists backup_history_super on public.backup_history;
 create policy backup_history_super on public.backup_history for all using (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin')) with check (exists (select 1 from public.profiles where id = auth.uid() and role = 'superadmin'));
-insert into public.backup_secrets (key, value) values ('backup_download_password','MPCS@Backup#2026'),('backup_import_password','MPCS@Restore#2026'),('backup_encryption_password','MPCS@Encrypt#2026') on conflict (key) do nothing;`}</pre>
+insert into public.backup_secrets (key, value) values ('backup_download_password','<ඔබේ DOWNLOAD PASSWORD>'),('backup_import_password','<ඔබේ IMPORT PASSWORD>'),('backup_encryption_password','<ඔබේ ENCRYPTION PASSWORD>') on conflict (key) do nothing;`}</pre>
         </div>
       )}
 

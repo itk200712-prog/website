@@ -368,6 +368,30 @@ function contentTypeForPath(path: string): string {
   return "application/octet-stream";
 }
 
+/**
+ * Canonical schema.sql — client bundle එකට නොයවා, server route එකෙන් ගන්නවා.
+ * (ලොග් වී ඉන්න admin/superadmin කෙනෙකුට විතරයි — token එකක් නැත්නම් හිස් string)
+ */
+async function fetchSchemaSql(): Promise<string> {
+  try {
+    const sb = await authedClient();
+    const { data } = await sb.auth.getSession();
+    const token = data?.session?.access_token ?? "";
+    if (!token && typeof window !== "undefined") {
+      const { data: alt } = await sb.auth.getUser();
+      if (!alt?.user) return "";
+    }
+    const res = await fetch("/api/backup/schema", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: "no-store",
+    });
+    if (!res.ok) return "";
+    return await res.text();
+  } catch {
+    return "";
+  }
+}
+
 /* ------------------------------------------------------ LOGIN ACCOUNTS - */
 /**
  * auth.users + auth.identities නැවත හදන SQL එක — profiles වල auth_email +
@@ -728,7 +752,10 @@ export async function restoreBackup(
     if (!failed) restored[t.name] = rows.length;
   }
 
-  // 3) backup එකේ නැති පරණ profiles අයින් කරයි (දැන් login වී ඇති admin හැර) — stale ගිණුම් ඉතුරු නොවීමට
+  // 3) ⚠ Import/Restore එකෙන් කිසිම ගිණුමක් මකන්නේ නෑ (profiles NEVER deleted)
+  //    කලින් "backup එකේ නැති profiles" stale කියලා auto-delete වුණා — ඒ නිසා
+  //    backup එක ගත්තට පස්සේ හදපු admin/සාමාජික ගිණුම් import එකකදී නැති වුණා.
+  //    දැන් ඒවා කිසිවක් මකන්නේ නෑ — කීයක් backup එකේ නැද්ද කියලා විතරයි වාර්තා කරන්නේ.
   const backupProfileIds = new Set(
     (byTable.get("profiles") ?? []).map((r) => String(r.id ?? "")).filter(Boolean)
   );
@@ -736,27 +763,22 @@ export async function restoreBackup(
     try {
       const { data: u } = await sb.auth.getUser();
       if (u?.user?.id) backupProfileIds.add(u.user.id);
-      // 🛡 admin / superadmin ගිණුම් stale cleanup එකෙන් කවදාවත් මකන්නේ නෑ —
-      //    backup එකක් import කළාම ඊට පස්සේ හදපු admin කෙනෙක් නැති වෙන එක නවත්තනවා.
-      try {
-        const { data: adminRows } = await sb.from("profiles").select("id,role").in("role", ["admin", "superadmin"]);
-        for (const r of (adminRows ?? []) as { id?: string }[]) {
-          if (r?.id) backupProfileIds.add(String(r.id));
-        }
-      } catch { /* column/policy නැත්නම් skip */ }
-      const stale: string[] = [];
+      let notInBackup = 0;
       for (let from = 0; from < 200000; from += 1000) {
         const { data, error } = await sb.from("profiles").select("id").range(from, from + 999);
         if (error || !data?.length) break;
-        for (const r of data as { id: string }[]) if (!backupProfileIds.has(String(r.id))) stale.push(String(r.id));
+        for (const r of data as { id: string }[]) {
+          if (!backupProfileIds.has(String(r.id))) notInBackup += 1;
+        }
         if (data.length < 1000) break;
       }
-      for (let j = 0; j < stale.length; j += 100) {
-        const { error } = await sb.from("profiles").delete().in("id", stale.slice(j, j + 100));
-        if (error) errors.push(`stale profiles cleanup: ${error.message}`);
+      if (notInBackup > 0) {
+        errors.push(
+          `ℹ backup එකේ නොතිබුණු ගිණුම් ${notInBackup}ක් තියෙනවා — කිසිවක් මකා නෑ (ආරක්ෂාවට). අවශ්‍ය නම් Admin → Registered Members එකෙන් අතින් ඉවත් කරන්න.`
+        );
       }
     } catch (e) {
-      errors.push(`stale profiles cleanup: ${(e as Error).message}`);
+      errors.push(`profile check skipped: ${(e as Error).message}`);
     }
   }
 
@@ -1008,8 +1030,9 @@ export async function generateBackupZip(
   //     fresh Supabase project එකකට restore කරද්දී මුලින්ම run කළ යුත්තේ මෙයයි.
   let schemaSha256 = "";
   try {
-    const schemaMod = await import("../../supabase/schema.sql");
-    const schemaText = (schemaMod as { default?: unknown }).default;
+    // 🔒 schema.sql එක Dං browser bundle එකට ගන්නේ නෑ (default passwords/seed
+    //    credentials ඒකේ තියෙනවා) — superadmin-only server route එකෙන් ගන්නවා.
+    const schemaText = await fetchSchemaSql();
     if (typeof schemaText === "string" && schemaText.length > 1000) {
       schemaSha256 = await sha256Hex(schemaText);
       await addFile("schema.sql", schemaText);

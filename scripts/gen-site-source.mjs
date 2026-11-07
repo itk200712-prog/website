@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SITE_PACKAGE_VERSION = "2026-11-04-special-download-v25";
+const SITE_PACKAGE_VERSION = "2026-11-07-security-backup-fix-v26";
 
 const FILES = [
   "src/app/globals.css",

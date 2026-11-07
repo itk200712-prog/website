@@ -591,8 +591,11 @@ ok("backup: login accounts (auth.users+passwords) written BEFORE data rows (FK o
   genSqlFn.includes("buildLoginAccountsSql(profilesRows)") && genSqlFn.indexOf("buildLoginAccountsSql(profilesRows)") < genSqlFn.indexOf("Writing data rows"));
 ok("backup: login SQL uses crypt(pgcrypto) and creates auth.identities",
   backupSrc.includes("crypt(${sqlVal(plain)}, gen_salt('bf'))") && backupSrc.includes("INSERT INTO auth.identities") && backupSrc.includes("set search_path = public, extensions;"));
-ok("backup: ZIP embeds canonical schema.sql (live chat DB logic + RLS)",
-  backupSrc.includes('addFile("schema.sql"') && backupSrc.includes("../../supabase/schema.sql"));
+ok("backup: ZIP embeds canonical schema.sql (live chat DB logic + RLS) — server route එකෙන්",
+  backupSrc.includes('addFile("schema.sql"') &&
+  backupSrc.includes("async function fetchSchemaSql") &&
+  backupSrc.includes('fetch("/api/backup/schema"') &&
+  !backupSrc.includes('import("../../supabase/schema.sql")'));
 ok("backup: image scan covers nested JSON (JSON.stringify) + recursive storage list",
   backupSrc.includes("scanImagePathsInRows") && backupSrc.includes("JSON.stringify(r)") && backupSrc.includes("listAllStorageFiles"));
 ok("restore: wipe uses not(pk,is,null) in reverse order; profiles never fully wiped (no RLS lockout)",
@@ -831,6 +834,42 @@ ok("admin-account: existing profile rows are never overwritten, delete refusals 
   adminAccount.isProtectedDeleteRefusal("You cannot delete your own account") === true &&
   adminAccount.isProtectedDeleteRefusal("relation does not exist") === false);
 
+// ── Backup reliability + secret hardening (2026-11-07 full scan) ─────────────
+const scheduledRouteSrc = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
+const schemaRouteSrc = readFileSync(join(root, "src/app/api/backup/schema/route.ts"), "utf8");
+const seedSrc = readFileSync(join(root, "src/lib/seed.ts"), "utf8");
+
+ok("backup: restore/import never deletes accounts (admin auto-delete bug)",
+  backupSrc.includes("profiles NEVER deleted") &&
+  !backupSrc.includes('from("profiles").delete()') &&
+  backupSrc.includes("backup එකේ නොතිබුණු ගිණුම්"));
+
+ok("backup: scheduled run is locked + uploads are verified before reporting success",
+  scheduledRouteSrc.includes("backup_schedule_running_at") &&
+  scheduledRouteSrc.includes("already_running") &&
+  scheduledRouteSrc.includes("async function clearRunLock") &&
+  scheduledRouteSrc.includes("MEGA verify failed") &&
+  scheduledRouteSrc.includes("Supabase verify failed") &&
+  scheduledRouteSrc.includes("async function megaChildren") &&
+  scheduledRouteSrc.includes("files වැඩිම එක තෝරනවා"));
+
+ok("security: schema.sql (default passwords) is server-only — not in the browser bundle",
+  schemaRouteSrc.includes("auth/v1/user") &&
+  schemaRouteSrc.includes('role !== "admin" && role !== "superadmin"') &&
+  schemaRouteSrc.includes('"Cache-Control": "no-store, private"') &&
+  !readFileSync(join(root, "src/lib/backup.ts"), "utf8").includes('import("../../supabase/schema.sql")') &&
+  readFileSync(join(root, "src/lib/backup.ts"), "utf8").includes("async function fetchSchemaSql") &&
+  !seedSrc.includes('btoa("Admin@123")') &&
+  !seedSrc.includes('btoa("Kenula@123")') &&
+  !adminBackupSrc.includes("MPCS@Backup#2026") &&
+  !adminBackupSrc.includes("MPCS@Encrypt#2026"));
+
+ok("security: no plaintext default passwords left in client-side source",
+  !readdirSync(join(root, "src/lib"), { recursive: true } as never)
+    .filter((f) => String(f).endsWith(".ts") && !String(f).includes("generated"))
+    .some((f) => /MPCS@Backup#2026|MPCS@Restore#2026|MPCS@Encrypt#2026/.test(readFileSync(join(root, "src/lib", String(f)), "utf8"))) &&
+  !/MPCS@Backup#2026|MPCS@Restore#2026|MPCS@Encrypt#2026|Admin@123/.test(readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8")));
+
 ok("administrators: adding an admin can never overwrite/delete an existing account",
   readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes("const clashQuery = await Promise.all([") &&
   readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes("signupAlreadyExists(created, error?.message)") &&
@@ -840,8 +879,9 @@ ok("administrators: adding an admin can never overwrite/delete an existing accou
   readFileSync(join(root, "src/app/admin/administrators/page.tsx"), "utf8").includes("if (isProtectedDeleteRefusal(rpcMsg))") &&
   membersSrc.includes("if (isProtectedDeleteRefusal(msg))") &&
   membersSrc.includes("මේ row එකට id/NIC නෑ — මකන්න බෑ") &&
-  // backup restore එකේ stale cleanup එකෙන් admin ගිණුම් මකන්නේ නෑ
-  backupSrc.includes('in("role", ["admin", "superadmin"])'));
+  // backup restore එකේ කිසිම ගිණුමක් මකන්නේ නෑ (2026-11-07 fix — stale cleanup එක සම්පූර්ණයෙන් ඉවත්)
+  !backupSrc.includes('.from("profiles").delete()') &&
+  backupSrc.includes("backup එකේ නොතිබුණු ගිණුම්"));
 
 ok("login: NIC login retries the real auth email + admin reset creates a missing login account", 
   readFileSync(join(root, "src/lib/auth.ts"), "utf8").includes("login_email_for_nic") &&
@@ -1291,7 +1331,7 @@ ok("gallery social: everyone like/view + signed-in replies + superadmin-only boo
   genSiteSourceSrc.includes('"src/lib/gallery-social.ts"') &&
   genSiteSourceSrc.includes('"src/app/admin/gallery/page.tsx"') &&
   genSiteSourceSrc.includes('"src/lib/supabase/storage.ts"') &&
-  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
+  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
 const homeSectionsSrc = readFileSync(join(root, "src/components/home-sections.tsx"), "utf8");
 ok("gallery albums UI: one cover card + View More + album-only popup swipe/arrows/thumbs with per-photo social (gallery page + home + admin)",
   galleryGridSrc.includes("groupGalleryItems(items)") &&
@@ -1359,7 +1399,7 @@ ok("Ubuntu/Linux desktop motion: animations + cursor work on laptops/PCs even wh
   homeSectionsSrc.includes("shouldReduceMotion(window)") &&
   genSiteSourceSrc.includes('"src/lib/motion-compat.ts"') &&
   genSiteSourceSrc.includes('"src/components/hero-slideshow.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
+  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
 const generatedSiteSource = await import("../src/lib/site-source.generated.ts");
 const generatedSiteSourceByPath = new Map(
   generatedSiteSource.SITE_SOURCE_FILES.map((f) => [f.path, f.content])
@@ -1397,7 +1437,7 @@ const latestBackupUpdateFiles = [
   "src/lib/site-source-assets.ts",
 ];
 ok("backup latest updates: generated site-source snapshot is current and includes Gallery language + Ubuntu animation/cursor files + professional glass auth pages",
-  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-04-special-download-v25" &&
+  generatedSiteSource.SITE_PACKAGE_VERSION === "2026-11-07-security-backup-fix-v26" &&
   generatedSiteSource.SITE_SOURCE_FILES.length >= 48 &&
   generatedSiteSource.SITE_SOURCE_FILES.every(
     (f) => readFileSync(join(root, f.path), "utf8") === f.content
@@ -1425,7 +1465,7 @@ ok("Windows cursor: mouse ring works on Windows laptops even with Animation effe
   cursorFollowerSrc.includes('document.documentElement.classList.toggle("cursor-motion", ok)') &&
   !cursorFollowerSrc.includes("shouldReduceMotionForEnv(reducedQuery") &&
   globalsCssSrc.includes("html:not(.motion-compat):not(.cursor-motion) .cursor-fx") &&
-  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
+  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
 const newsClientSrc = readFileSync(join(root, "src/components/news-client.tsx"), "utf8");
 ok("News + Gallery professional open/view animations: staggered cards + animated reader/lightboxes + directional photo transitions + close/progress polish",
   globalsCssSrc.includes("@keyframes mediaCardIn") &&
@@ -1454,7 +1494,7 @@ ok("News + Gallery professional open/view animations: staggered cards + animated
   homeSectionsSrc.includes("?item=${encodeURIComponent") &&
   homeSectionsSrc.includes("gallery-progress") &&
   genSiteSourceSrc.includes('"src/components/news-client.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
+  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
 const mediaInfo = await import("../src/lib/media-info.ts");
 ok("media size helpers: actual dimensions → clean ratio/orientation/MP/format/file-size labels",
   mediaInfo.parseAspectRatio("16 / 9")?.label === "16:9" &&
@@ -1512,7 +1552,7 @@ ok("member/voter register PDF: visual page keeps a real invisible Unicode text l
   genSiteSourceSrc.includes('"src/lib/pdf-register.ts"') &&
   genSiteSourceSrc.includes('"src/components/directory.tsx"') &&
   genSiteSourceSrc.includes('"src/app/admin/data/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
+  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
 const signinPageSrc = readFileSync(join(root, "src/app/signin/page.tsx"), "utf8");
 const registerPageSrc = readFileSync(join(root, "src/app/register/page.tsx"), "utf8");
 const authShellSrc = readFileSync(join(root, "src/components/auth-shell.tsx"), "utf8");
@@ -1544,7 +1584,7 @@ ok("Sign In + Register professional glass experience: gradient glass shell (no p
   genSiteSourceSrc.includes('"src/app/signin/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/register/page.tsx"') &&
   genSiteSourceSrc.includes('"src/components/auth-shell.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
+  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
 
 const registerNoticeLib = await import("../src/lib/register-notice.ts");
 const noticeDefaults = registerNoticeLib.defaultRegisterNotice();
@@ -1589,7 +1629,7 @@ ok("member/voter register update notice: default text + phone, admin show/hide p
   genSiteSourceSrc.includes('"src/app/admin/settings/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/members/page.tsx"') &&
   genSiteSourceSrc.includes('"src/app/membership/voters/page.tsx"') &&
-  genSiteSourceSrc.includes("2026-11-04-special-download-v25"));
+  genSiteSourceSrc.includes("2026-11-07-security-backup-fix-v26"));
 
 // ── Download With Special (admin-granted access + search-only PDF) ──────────
 const specialLibSrc = readFileSync(join(root, "src/lib/special-access.ts"), "utf8");

@@ -110,6 +110,20 @@ async function lastScheduledSuccessDate(): Promise<string | null> {
   return storedDate ?? historyDate;
 }
 
+/** run lock එක ගලවනවා (success/fail දෙකේදීම) */
+async function clearRunLock(): Promise<void> {
+  try {
+    await fetch(`${SUPA_BASE}/rest/v1/system_settings?key=eq.backup_schedule_running_at`, {
+      method: "PATCH",
+      headers: svcHeaders({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+      body: JSON.stringify({ value: "0" }),
+      cache: "no-store",
+    });
+  } catch {
+    /* lock එක ඉතුරු වුණත් විනාඩි 12කින් ඉබේම නිදහස් වේ */
+  }
+}
+
 async function storeLastScheduledSuccessDate(dateStr: string): Promise<void> {
   try {
     await fetch(`${SUPA_BASE}/rest/v1/system_settings`, {
@@ -159,6 +173,24 @@ async function uploadToSupabase(fileName: string, zip: Buffer, keep: number): Pr
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Supabase storage upload failed (${res.status})`);
+  // verify — upload එකට පස්සේ file එක ඇත්තටම bucket එකේ තියෙනවද?
+  try {
+    const listRes = await fetch(`${SUPA_BASE}/storage/v1/object/list/backups`, {
+      method: "POST",
+      headers: svcHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ prefix: `auto/${fileName}`, limit: 5 }),
+      cache: "no-store",
+    });
+    if (listRes.ok) {
+      const files = (await listRes.json()) as { name: string }[];
+      if (files.length && !files.some((f) => f.name === fileName)) {
+        throw new Error(`Supabase verify failed — "${fileName}" bucket එකේ හමු වුණේ නෑ`);
+      }
+    }
+  } catch (e) {
+    if (String((e as Error).message).includes("verify failed")) throw e;
+    /* list එක fail වුණත් upload එක සාර්ථක — නවත්තන්නේ නෑ */
+  }
 
   // අලුත්ම keep ගාණ තියාගෙන පරණ ඒවා මකයි
   try {
@@ -195,6 +227,8 @@ type MegaFileLike = {
   directory: boolean;
   timestamp?: number;
   children?: MegaFileLike[];
+  reload?: (deep?: boolean) => Promise<unknown>;
+  loadAttributes?: () => Promise<unknown>;
   upload: (opts: { name: string; size: number }, source: Buffer) => { complete: Promise<MegaFileLike> };
   mkdir: (name: string) => Promise<MegaFileLike>;
   delete: (permanent?: boolean) => Promise<void>;
@@ -206,6 +240,25 @@ type MegaStorageLike = {
   close: () => Promise<void>;
 };
 
+/** MEGA root/folder එකේ children refresh කරනවා — list එක හිස් නම් reload කරලා ආයෙ බලයි */
+async function megaChildren(folder: MegaFileLike): Promise<MegaFileLike[]> {
+  const reload = (folder as unknown as { reload?: (deep?: boolean) => Promise<unknown>; loadAttributes?: () => Promise<unknown> });
+  try {
+    if (reload.reload) await reload.reload();
+    else if (reload.loadAttributes) await reload.loadAttributes();
+  } catch {
+    /* reload බැරි වුණත් දැනට තියෙන list එකෙන් යනවා */
+  }
+  return folder.children ?? [];
+}
+
+/**
+ * MEGA upload — "MPCS Backups" folder එක **හොයාගෙන** ඒකට upload කරයි.
+ * (කලින් `root.children` හිස් නම් — MEGA root list එක lazy load නිසා —
+ *  එකම නමින් අලුත් folder එකක් හැදිලා backup එක වෙන folder එකකට යන ප්‍රශ්නය තිබ්බා.
+ *  දැන් reload කරලා බලනවා, හම්බුණොත් ඒකම පාවිච්චි කරනවා. upload එකට පස්සේ
+ *  නැවත list කරලා file එක ඇත්තටම තියෙනවද verify කරනවා — නැත්නම් error.)
+ */
 async function uploadToMega(
   email: string,
   password: string,
@@ -213,27 +266,69 @@ async function uploadToMega(
   fileName: string,
   zip: Buffer,
   keep: number
-): Promise<void> {
+): Promise<{ folder: string }> {
   const mega = (await import("megajs")) as unknown as {
     Storage: new (opts: { email: string; password: string; keepalive?: boolean }) => MegaStorageLike;
   };
-  const storage = await new mega.Storage({ email, password, keepalive: false }).ready;
+  const openStorage = async () =>
+    await new mega.Storage({ email, password, keepalive: false }).ready;
+  let storage = await openStorage();
   try {
-    let folder = (storage.root.children ?? []).find((f) => f.directory && f.name === folderName);
+    // ① folder එක හොයනවා (children reload කරලා) — නැත්නම් අලුතින් හදනවා
+    let root = await megaChildren(storage.root);
+    let candidates = root.filter((f) => f.directory && (f.name ?? "") === folderName);
+    // එකම නමින් folders කිහිපයක් තිබ්බොත් (පරණ duplicate) → files වැඩිම එක තෝරනවා
+    let folder = candidates[0];
+    if (candidates.length > 1) {
+      let best = -1;
+      for (const c of candidates) {
+        const kids = await megaChildren(c);
+        if (kids.length > best) {
+          best = kids.length;
+          folder = c;
+        }
+      }
+    }
     if (!folder) folder = await storage.mkdir(folderName);
-    await folder.upload({ name: fileName, size: zip.length }, zip).complete;
-
-    // අලුත්ම keep ගාණ තියාගෙන පරණ auto-backup මකයි
-    const mine = (folder.children ?? [])
-      .filter((f) => !f.directory && ((f.name ?? "").startsWith("mpcs-full-backup-") || (f.name ?? "").startsWith("database-")))
+    // ② upload (එක වරක් fail වුණොත් MEGA session එක අලුතින් අරගෙන ආයෙ එක වරක්)
+    const put = async (f: MegaFileLike) => {
+      await f.upload({ name: fileName, size: zip.length }, zip).complete;
+    };
+    try {
+      await put(folder);
+    } catch {
+      try {
+        await storage.close();
+      } catch {
+        /* ignore */
+      }
+      storage = await openStorage();
+      root = await megaChildren(storage.root);
+      candidates = root.filter((f) => f.directory && (f.name ?? "") === folderName);
+      folder = candidates[0] ?? (await storage.mkdir(folderName));
+      await put(folder);
+    }
+    // ③ verify — folder එකේ ඇත්තටම අලුත් file එක තියෙනවද?
+    const after = await megaChildren(folder);
+    const mine = after
+      .filter((f) => !f.directory)
       .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0) || String(b.name).localeCompare(String(a.name)));
-    for (const stale of mine.slice(keep)) {
+    if (!mine.some((f) => f.name === fileName)) {
+      throw new Error(`MEGA verify failed — "${fileName}" folder එකේ හමු වුණේ නෑ`);
+    }
+    // ④ පරණ ඒවා (keep ගාණට වඩා) මකනවා
+    const autoFiles = mine.filter(
+      (f) => (f.name ?? "").startsWith("mpcs-full-backup-") || (f.name ?? "").startsWith("database-")
+    );
+    for (const stale of autoFiles.slice(keep)) {
       try {
         await stale.delete(true);
       } catch {
         /* එක file එකක් මකන්න බැරි වුණත් දිගටම යනවා */
       }
     }
+    const dupNote = candidates.length > 1 ? ` (folders ${candidates.length})` : "";
+    return { folder: `${folderName}${dupNote}` };
   } finally {
     try {
       await storage.close();
@@ -326,6 +421,26 @@ export async function POST(req: NextRequest) {
   }
 
   const settings = await loadSchedule();
+
+  // 🔒 එකම වෙලාවේ runs දෙකක් දුවන්න දෙන්නේ නෑ (cron එක විනාඩි 15කට වරක් වැටෙන නිසා
+  //    විනාඩි 15ට වඩා යන run එකක් තිබ්බොත් දෙපාරක් upload වෙන්න පුළුවන්).
+  if (!force) {
+    const lockRows = (await restGet(
+      "system_settings?select=value&key=eq.backup_schedule_running_at&limit=1",
+      SERVICE_KEY || ANON_KEY
+    )) as { value: string }[] | null;
+    const startedMs = Number(lockRows?.[0]?.value ?? 0);
+    if (Number.isFinite(startedMs) && startedMs > 0 && Date.now() - startedMs < 12 * 60_000) {
+      return json({ ok: true, skipped: true, reason: "already_running" });
+    }
+  }
+  await fetch(`${SUPA_BASE}/rest/v1/system_settings`, {
+    method: "POST",
+    headers: svcHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+    body: JSON.stringify({ key: "backup_schedule_running_at", value: String(Date.now()) }),
+    cache: "no-store",
+  }).catch(() => undefined);
+
   if (!force) {
     const last = await lastScheduledSuccessDate();
     const decision = backupDueDecision(settings, last);
@@ -352,6 +467,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const detail = `FULL ZIP build failed: ${(e as Error).message}`;
     await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed", detail, encrypted });
+    await clearRunLock();
     return json({ ok: false, reason: "build_failed", detail }, 500);
   }
 
@@ -370,7 +486,7 @@ export async function POST(req: NextRequest) {
     if (secrets.megaEmail && secrets.megaPassword) {
       uploads.push(
         uploadToMega(secrets.megaEmail, secrets.megaPassword, settings.megaFolder, fileName, built.zip, settings.keepCount)
-          .then(() => void done.push("MEGA"))
+          .then((r) => void done.push(`MEGA${r?.folder ? ` (${r.folder})` : ""}`))
           .catch((e: Error) => void failed.push(`MEGA: ${e.message}`))
       );
     } else {
@@ -402,6 +518,7 @@ export async function POST(req: NextRequest) {
     encrypted,
   });
   if (done.length) await storeLastScheduledSuccessDate(lkDateParts().dateStr);
+  await clearRunLock();
 
   if (!done.length) return json({ ok: false, reason: "upload_failed", detail }, 500);
   return json({

@@ -310,7 +310,7 @@ export default function AdminBusinessesPage() {
                 <button className="btn btn-outline !py-1.5 !px-3 !text-[11px] flex-1" onClick={() => openEdit(b)}>
                   <Pencil size={12} /> Edit Page &amp; Card
                 </button>
-                <a href={`/businesses/${b.slug}`} target="_blank" className="btn btn-outline !py-1.5 !px-3 !text-[11px]">
+                <a href={`/businesses/${b.slug}`} target="_blank" rel="noopener noreferrer" className="btn btn-outline !py-1.5 !px-3 !text-[11px]">
                   Live Page <ExternalLink size={11} />
                 </a>
                 <button

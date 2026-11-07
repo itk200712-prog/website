@@ -403,7 +403,7 @@ export default function AdminAdministratorsPage() {
                 </div>
                 <div>
                   <label className="field-label">Password *</label>
-                  <input name="password" type="text" required className="field" placeholder="e.g. Admin@123" />
+                  <input name="password" type="text" required className="field" placeholder="අකුරු 8+ · අකුරු + ඉලක්කම් මිශ්‍ර කරන්න" />
                 </div>
               </div>
             )}
