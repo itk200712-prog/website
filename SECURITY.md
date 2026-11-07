@@ -16,7 +16,7 @@ reject වේ → **CSP එක next.config.ts එකට ආපහු දාන�
 | `X-Frame-Options` | `SAMEORIGIN` | ✅ |
 | `X-Content-Type-Options` | `nosniff` | ✅ |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | ✅ |
-| `Permissions-Policy` | හැම feature එකකටම **explicit quoted origin** — `geolocation=("https://<site>")` … `interest-cohort=()` (`src/lib/permissions-policy.ts` → middleware). `(self)` / `()` දැම්මම scan එකේ *"not restricted to specific origins"* warning එක තාම එනවා | ✅ |
+| `Permissions-Policy` | හැම feature එකක්ම `()` — `geolocation=(), microphone=(), camera=(), payment=(), usb=(), …` (`src/lib/permissions-policy.ts` → middleware). කිසිම origin එකකට (self ටත්) අවසර නෑ. **pentestnet warning එක false positive — පහළ බලන්න** | ✅ |
 | `Cross-Origin-Opener-Policy` | `same-origin` | ✅ |
 | `X-Powered-By` | **ඉවත්** (`poweredByHeader: false`) | ✅ |
 | `Strict-Transport-Security` | Vercel auto (`max-age=63072000; includeSubDomains; preload`) | ✅ |
@@ -26,6 +26,28 @@ reject වේ → **CSP එක next.config.ts එකට ආපහු දාන�
 `script-src` එකේ `'unsafe-inline'` දැම්මොත් pentest report එකේ **warning** එකක් එනවා වගේම nonce එකත්
 නිෂ්ඵල වේ. Nonce එක `x-nonce` request header එකෙන් server components වලට ලැබේ.
 `unsafe-eval` දාන්නේ development එකේදී විතරයි (`NODE_ENV !== "production"`).
+
+## ⚠ pentestnet "permissions-policy" warning — false positive (සාක්ෂි සහිතව)
+
+scan එකේ එන *"Privacy-sensitive feature 'X' is not restricted to specific origins"* note එක
+**අපේ header එකේ වැරැද්දක් නෙවෙයි** — pentestnet ගේ parser එක header එකේ **පළවෙනි directive එක විතරයි**
+කියවනවා. එකම header එකේ order එක විතරක් වෙනස් කරලා තමයි මේක ඔප්පු කළේ (production එකේම scan කරලා):
+
+| Production header (එකම syntax, එකම values) | scan එකේ note වුණේ | "Pass" වුණේ |
+|---|---|---|
+| `camera=(…) first, microphone=(…) second, …` | geolocation, microphone, payment | **camera** (1st) |
+| `geolocation=(…) first, microphone=(…) second, …` | camera, microphone, payment | **geolocation** (1st) |
+| `geolocation=(), microphone=(), camera=(), …` | camera, microphone, payment | **geolocation** (1st) |
+
+`()`, `(self)`, `("https://<site>")` — මේ **තුනම** එකම warning එක දුන්නා. ඒ කියන්නේ
+feature එකේ value එක කියවන්නේ නෑ; header එකේ **පළමු එක විතරයි** කියවනවා.
+
+තහවුරු කිරීමක්: **cloudflare.com** (`geolocation=(), camera=(), microphone=()`) ටත් එකම warning
+එකම එනවා — note වෙන්නේ `camera, microphone, payment` (එයාගේ පළවෙනි එක `geolocation` නිසා ඒක pass).
+
+**ඒ නිසා:** කවදාවත් මේ warning එක නිසා `*` දාන්න එපා. අපේ header එක spec-compliant (MDN/W3C) සහ
+උපරිම ආරක්ෂිත (`()` = deny all). Pentestnet support එකට මේ වගුව යවන්න පුළුවන්; නැත්නම්
+securityheaders.com / Mozilla Observatory වලින් cross-check කරන්න.
 
 ## Well-known files
 

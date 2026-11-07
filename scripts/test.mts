@@ -932,16 +932,14 @@ ok("security: all pentest-reported headers are sent (CSP, XFO, nosniff, referrer
   nextConfigSrc.includes('{ key: "X-Frame-Options", value: "SAMEORIGIN" }') &&
   nextConfigSrc.includes('{ key: "X-Content-Type-Options", value: "nosniff" }') &&
   nextConfigSrc.includes('{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" }') &&
-  // Permissions-Policy: දැන් middleware එකේ **explicit quoted origins** සමඟ (scan warning #2)
+  // Permissions-Policy: middleware එකේ, හැම feature එකක්ම () — deny-all (scan warning #2)
   !nextConfigSrc.includes('key: "Permissions-Policy"') &&
   permissionsPolicySrc.includes("export function buildPermissionsPolicy") &&
-  permissionsPolicySrc.includes('origins.map((o) => `"${o}"`)') &&
-  permissionsPolicySrc.includes('feature("geolocation")') &&
-  permissionsPolicySrc.includes('feature("microphone")') &&
-  permissionsPolicySrc.includes('feature("payment")') &&
-  !permissionsPolicySrc.includes('const allow = "(self)"') &&
-  permissionsPolicySrc.includes('request.headers.get("x-forwarded-host")') &&
-  middlewareSrc.includes('import { buildPermissionsPolicy, requestOrigins } from "@/lib/permissions-policy"') &&
+  permissionsPolicySrc.includes('"geolocation=()"') &&
+  permissionsPolicySrc.includes('"microphone=()"') &&
+  permissionsPolicySrc.includes('"camera=()"') &&
+  permissionsPolicySrc.includes('"payment=()"') &&
+  middlewareSrc.includes('import { buildPermissionsPolicy } from "@/lib/permissions-policy"') &&
   middlewareSrc.includes('response.headers.set("Permissions-Policy", permissionsPolicy)') &&
   middlewareSrc.includes('res.headers.set("Permissions-Policy", permissionsPolicy)') &&
   // CSP එක දැන් middleware එකේ nonce සහිතව
@@ -957,18 +955,16 @@ ok("security: all pentest-reported headers are sent (CSP, XFO, nosniff, referrer
   middlewareSrc.includes("frame-ancestors 'self'") &&
   middlewareSrc.includes("connect-src 'self' ${SUPABASE_ORIGIN}"));
 
-ok("security: permissions-policy value is built from quoted origins (scan #2 warning)", (() => {
+ok("security: permissions-policy denies every feature (scanner-proof + browser-valid)", (() => {
   try {
-    const mod = permissionsPolicyModule;
-    const one = mod.buildPermissionsPolicy(["https://website-blond-eta-94.vercel.app"]);
-    const empty = mod.buildPermissionsPolicy([]);
+    const value = permissionsPolicyModule.buildPermissionsPolicy();
+    const required = ["geolocation", "microphone", "camera", "payment", "usb"];
     return (
-      one.includes('geolocation=("https://website-blond-eta-94.vercel.app")') &&
-      one.includes('microphone=("https://website-blond-eta-94.vercel.app")') &&
-      one.includes('payment=("https://website-blond-eta-94.vercel.app")') &&
-      one.includes("interest-cohort=()") &&
-      !one.includes("(self)") &&
-      empty.includes("geolocation=()")
+      required.every((f) => value.includes(`${f}=()`)) &&
+      value.includes("interest-cohort=()") &&
+      !value.includes("(self)") &&
+      !value.includes("*") &&
+      !value.includes('"http')
     );
   } catch {
     return false;
