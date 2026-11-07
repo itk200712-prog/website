@@ -1,4 +1,5 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { buildPermissionsPolicy, requestOrigins } from "@/lib/permissions-policy";
 import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
@@ -75,6 +76,7 @@ export async function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV !== "production";
   const nonce = makeNonce();
   const csp = buildCsp(nonce, isDev);
+  const permissionsPolicy = buildPermissionsPolicy(requestOrigins(request));
 
   // Next.js මේ request header එකෙන් තමන්ගේ inline scripts වලට nonce එක දාගන්නවා
   const requestHeaders = new Headers(request.headers);
@@ -83,6 +85,7 @@ export async function middleware(request: NextRequest) {
 
   let response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
+  response.headers.set("Permissions-Policy", permissionsPolicy);
 
   const { pathname } = request.nextUrl;
 
@@ -112,6 +115,7 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request: { headers: requestHeaders } });
           response.headers.set("Content-Security-Policy", csp);
+          response.headers.set("Permissions-Policy", permissionsPolicy);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
@@ -159,6 +163,7 @@ export async function middleware(request: NextRequest) {
     response.cookies.getAll().forEach((c) => res.cookies.set(c.name, c.value, c));
     res.cookies.set("lang", locale, { path: "/", maxAge: 31536000, sameSite: "lax" });
     res.headers.set("Content-Security-Policy", csp);
+    res.headers.set("Permissions-Policy", permissionsPolicy);
     res.headers.set("x-nonce", nonce);
     return res;
   }

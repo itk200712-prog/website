@@ -67,6 +67,8 @@ ok("Header brand always shows the full Panduwasnuwara New MPCS LTD name (mobile 
 const hubRouteSrc = readFileSync(join(root, "src/app/hub/route.ts"), "utf8");
 const hubHtml = readFileSync(join(root, "src/app/hub/hub.html"), "utf8");
 const middlewareSrc = readFileSync(join(root, "src/middleware.ts"), "utf8");
+const permissionsPolicySrc = readFileSync(join(root, "src/lib/permissions-policy.ts"), "utf8");
+const permissionsPolicyModule = await import("../src/lib/permissions-policy.ts");
 const adminShellEarlySrc = readFileSync(join(root, "src/components/admin.tsx"), "utf8");
 ok("Hidden /hub standalone page is direct-URL-only (no public/admin link)",
   hubRouteSrc.includes('from "./hub.html"') &&
@@ -930,11 +932,18 @@ ok("security: all pentest-reported headers are sent (CSP, XFO, nosniff, referrer
   nextConfigSrc.includes('{ key: "X-Frame-Options", value: "SAMEORIGIN" }') &&
   nextConfigSrc.includes('{ key: "X-Content-Type-Options", value: "nosniff" }') &&
   nextConfigSrc.includes('{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" }') &&
-  nextConfigSrc.includes('key: "Permissions-Policy"') &&
-  // permissions-policy: origin-explicit (pentest warning fix)
-  nextConfigSrc.includes("geolocation=(self)") &&
-  nextConfigSrc.includes("microphone=(self)") &&
-  nextConfigSrc.includes("payment=(self)") &&
+  // Permissions-Policy: දැන් middleware එකේ **explicit quoted origins** සමඟ (scan warning #2)
+  !nextConfigSrc.includes('key: "Permissions-Policy"') &&
+  permissionsPolicySrc.includes("export function buildPermissionsPolicy") &&
+  permissionsPolicySrc.includes('origins.map((o) => `"${o}"`)') &&
+  permissionsPolicySrc.includes('feature("geolocation")') &&
+  permissionsPolicySrc.includes('feature("microphone")') &&
+  permissionsPolicySrc.includes('feature("payment")') &&
+  !permissionsPolicySrc.includes('const allow = "(self)"') &&
+  permissionsPolicySrc.includes('request.headers.get("x-forwarded-host")') &&
+  middlewareSrc.includes('import { buildPermissionsPolicy, requestOrigins } from "@/lib/permissions-policy"') &&
+  middlewareSrc.includes('response.headers.set("Permissions-Policy", permissionsPolicy)') &&
+  middlewareSrc.includes('res.headers.set("Permissions-Policy", permissionsPolicy)') &&
   // CSP එක දැන් middleware එකේ nonce සහිතව
   !nextConfigSrc.includes('key: "Content-Security-Policy"') &&
   middlewareSrc.includes("function makeNonce") &&
@@ -946,8 +955,25 @@ ok("security: all pentest-reported headers are sent (CSP, XFO, nosniff, referrer
   middlewareSrc.includes("object-src 'none'") &&
   middlewareSrc.includes("base-uri 'self'") &&
   middlewareSrc.includes("frame-ancestors 'self'") &&
-  nextConfigSrc.includes("connect-src 'self' ${SUPABASE_ORIGIN}") === false &&
   middlewareSrc.includes("connect-src 'self' ${SUPABASE_ORIGIN}"));
+
+ok("security: permissions-policy value is built from quoted origins (scan #2 warning)", (() => {
+  try {
+    const mod = permissionsPolicyModule;
+    const one = mod.buildPermissionsPolicy(["https://website-blond-eta-94.vercel.app"]);
+    const empty = mod.buildPermissionsPolicy([]);
+    return (
+      one.includes('geolocation=("https://website-blond-eta-94.vercel.app")') &&
+      one.includes('microphone=("https://website-blond-eta-94.vercel.app")') &&
+      one.includes('payment=("https://website-blond-eta-94.vercel.app")') &&
+      one.includes("interest-cohort=()") &&
+      !one.includes("(self)") &&
+      empty.includes("geolocation=()")
+    );
+  } catch {
+    return false;
+  }
+})());
 
 ok("security: framework fingerprint hidden + robots.txt + sitemap + security.txt present",
   nextConfigSrc.includes("poweredByHeader: false") &&

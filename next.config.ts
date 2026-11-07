@@ -21,15 +21,10 @@ const securityHeaders = (_isDev: boolean) => [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  {
-    key: "Permissions-Policy",
-    // 📌 pentestnet: "feature 'geolocation' is not restricted to specific origins"
-    //    → origin එක explicit ව දෙන්නේ (self පමණයි = වෙන කිසිම third-party origin එකකට බෑ)
-    value:
-      "camera=(self), microphone=(self), geolocation=(self), payment=(self), " +
-      "usb=(self), magnetometer=(self), gyroscope=(self), accelerometer=(self), " +
-      "fullscreen=(self), picture-in-picture=(self), interest-cohort=()",
-  },
+  // 📌 Permissions-Policy එක **middleware එකේ** (src/middleware.ts → buildPermissionsPolicy).
+  //    හේතුව: scanner එක "specific origins" ඉල්ලනවා → request එකේ **නියම origin එක**
+  //    quoted string එකක් විදිහට ("https://site.lk") දෙන්න ඕනේ. Static config එකේ
+  //    `(self)` දැම්මම scanner එක තාමත් warning දෙනවා (2nd scan report).
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "X-DNS-Prefetch-Control", value: "on" },
   { key: "X-Permitted-Cross-Domain-Policies", value: "none" },

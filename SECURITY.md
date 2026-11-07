@@ -16,12 +16,13 @@ reject වේ → **CSP එක next.config.ts එකට ආපහු දාන�
 | `X-Frame-Options` | `SAMEORIGIN` | ✅ |
 | `X-Content-Type-Options` | `nosniff` | ✅ |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | ✅ |
-| `Permissions-Policy` | `camera=(self), microphone=(self), geolocation=(self), payment=(self), usb=(self), magnetometer=(self), gyroscope=(self), accelerometer=(self), fullscreen=(self), picture-in-picture=(self), interest-cohort=()` — හැම feature එකක්ම **origin එකට සීමා** කරලා (pentest warning fix) | ✅ |
+| `Permissions-Policy` | හැම feature එකකටම **explicit quoted origin** — `geolocation=("https://<site>")` … `interest-cohort=()` (`src/lib/permissions-policy.ts` → middleware). `(self)` / `()` දැම්මම scan එකේ *"not restricted to specific origins"* warning එක තාම එනවා | ✅ |
 | `Cross-Origin-Opener-Policy` | `same-origin` | ✅ |
 | `X-Powered-By` | **ඉවත්** (`poweredByHeader: false`) | ✅ |
 | `Strict-Transport-Security` | Vercel auto (`max-age=63072000; includeSubDomains; preload`) | ✅ |
 
-**රන්න එපා:** `default-src *`, `script-src 'unsafe-inline'`, `script-src 'unsafe-eval'` (production), `frame-ancestors *`.
+**රන්න එපා:** `default-src *`, `script-src 'unsafe-inline'`, `script-src 'unsafe-eval'` (production), `frame-ancestors *`,
+`Permissions-Policy` එකේ `(self)` හෝ `*` (scan එකට ඒක "specific origin" නෙවෙයි).
 `script-src` එකේ `'unsafe-inline'` දැම්මොත් pentest report එකේ **warning** එකක් එනවා වගේම nonce එකත්
 නිෂ්ඵල වේ. Nonce එක `x-nonce` request header එකෙන් server components වලට ලැබේ.
 `unsafe-eval` දාන්නේ development එකේදී විතරයි (`NODE_ENV !== "production"`).
