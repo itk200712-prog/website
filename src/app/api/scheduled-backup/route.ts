@@ -203,28 +203,40 @@ async function uploadToSupabase(fileName: string, zip: Buffer, keep: number): Pr
   }
 
   // අලුත්ම keep ගාණ තියාගෙන පරණ ඒවා මකයි
+  // (keep 350 වෙනකම් දෙන්න පුළුවන් නිසා list එක පිටු ගණනාවකින් කියවයි — Supabase
+  //  එකේ එක list එකක උපරිමය 1000ක් නිසා pagination ඕනේ)
   try {
-    const listRes = await fetch(`${SUPA_BASE}/storage/v1/object/list/backups`, {
-      method: "POST",
-      headers: svcHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ prefix: "auto", limit: 100, sortBy: { column: "name", order: "desc" } }),
-      cache: "no-store",
-    });
-    if (listRes.ok) {
-      const files = (await listRes.json()) as { name: string }[];
-      const stale = files
-        .map((f) => f.name)
-        .filter((n) => n.startsWith("mpcs-full-backup-") || n.startsWith("database-"))
-        .slice(keep)
-        .map((n) => `auto/${n}`);
-      if (stale.length) {
-        await fetch(`${SUPA_BASE}/storage/v1/object/backups`, {
-          method: "DELETE",
-          headers: svcHeaders({ "Content-Type": "application/json" }),
-          body: JSON.stringify({ prefixes: stale }),
-          cache: "no-store",
-        });
-      }
+    const need = Math.max(keep + 25, 200);
+    const names: string[] = [];
+    for (let offset = 0; offset < Math.max(need, 1000); offset += 500) {
+      const listRes = await fetch(`${SUPA_BASE}/storage/v1/object/list/backups`, {
+        method: "POST",
+        headers: svcHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          prefix: "auto",
+          limit: 500,
+          offset,
+          sortBy: { column: "name", order: "desc" },
+        }),
+        cache: "no-store",
+      });
+      if (!listRes.ok) break;
+      const page = (await listRes.json()) as { name: string }[];
+      names.push(...page.map((f) => f.name));
+      if (page.length < 500) break;
+    }
+    const stale = [...new Set(names)]
+      .filter((n) => n.startsWith("mpcs-full-backup-") || n.startsWith("database-"))
+      .sort((a, b) => b.localeCompare(a)) // අලුත්ම මුලට (filename එකේ දිනය තියෙන නිසා)
+      .slice(keep)
+      .map((n) => `auto/${n}`);
+    if (stale.length) {
+      await fetch(`${SUPA_BASE}/storage/v1/object/backups`, {
+        method: "DELETE",
+        headers: svcHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ prefixes: stale }),
+        cache: "no-store",
+      });
     }
   } catch {
     /* cleanup අසාර්ථක වුණත් backup එක හරි */

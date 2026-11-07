@@ -23,7 +23,7 @@ import {
   type BackupManifest, type ParsedInsert,
 } from "@/lib/backup-utils";
 import {
-  buildCronSql, DEFAULT_SCHEDULE, lkDateParts, nextRunLabel, normalizeScheduleHours, parseScheduleSettings,
+  buildCronSql, DEFAULT_SCHEDULE, lkDateParts, MAX_KEEP_COPIES, MIN_KEEP_COPIES, nextRunLabel, normalizeScheduleHours, parseScheduleSettings,
   scheduleTimesOfDay, SCHEDULE_HOUR_OPTIONS,
   SCHEDULE_SECRET_KEYS, SCHEDULE_SETTING_KEYS, scheduleSettingsRows, type BackupScheduleSettings,
 } from "@/lib/scheduled-backup";
@@ -927,13 +927,15 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">තබා ගන්නා copies</label>
             <input
               type="number"
-              min={2}
-              max={30}
+              min={MIN_KEEP_COPIES}
+              max={MAX_KEEP_COPIES}
               value={sch.keepCount}
-              onChange={(e) => setSch({ ...sch, keepCount: Math.min(30, Math.max(2, parseInt(e.target.value, 10) || 8)) })}
+              onChange={(e) => setSch({ ...sch, keepCount: Math.min(MAX_KEEP_COPIES, Math.max(MIN_KEEP_COPIES, parseInt(e.target.value, 10) || 8)) })}
               className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[12.5px] outline-none focus:border-indigo-400 focus:bg-white"
             />
-            <div className="mt-0.5 text-[10px] text-slate-400">ඊට වඩා පරණ auto-backup ඉබේම මැකේ</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">
+              ඊට වඩා පරණ auto-backup ඉබේම මැකේ · {MIN_KEEP_COPIES}–{MAX_KEEP_COPIES} අතර
+            </div>
           </div>
         </div>
 

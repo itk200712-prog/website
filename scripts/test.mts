@@ -1345,9 +1345,21 @@ ok("schedule: due logic (පැය 4කට වරක් — 00/04/08/12/16/20, s
   sched.backupDueDecision({ ...schSettings, intervalHours: 24 }, lkAt(19, 0, 0).toISOString(), lkAt(19, 23, 0)).reason === "already_done" &&
   // LK වේලාව + ගොනු නම
   sched.lkDateParts(new Date(Date.UTC(2026, 9, 19, 3, 0))).dateStr === "2026-10-19" &&
-  sched.autoBackupFileName(lkAt(19, 10, 0)) === "mpcs-full-backup-2026-10-19.zip" &&
+  sched.autoBackupFileName(lkAt(19, 10, 0)) === "mpcs-full-backup-2026-10-19_1000.zip" &&
+  sched.autoBackupFileName(lkAt(19, 0, 0)) === "mpcs-full-backup-2026-10-19_0000.zip" &&
+  // දවසට කිහිප වරක් යන නිසා එකම දවසේ නම් දෙකක් overwrite වෙන්නේ නෑ
+  sched.autoBackupFileName(lkAt(19, 4, 0)) !== sched.autoBackupFileName(lkAt(19, 20, 0)) &&
   sched.nextRunLabel(schSettings, lkAt(19, 5, 0)) === "2026-10-19 08:00" &&
   sched.nextRunLabel({ ...schSettings, anchorDate: "2026-11-09" }, lkAt(19, 5, 0)) === "2026-11-09 00:00");
+
+ok("schedule: copies ගාණ 2–350 (30 නොවේ) + දවසට කිහිප වරක් යන නිසා නමට වේලාවත්",
+  sched.MAX_KEEP_COPIES === 350 &&
+  sched.MIN_KEEP_COPIES === 2 &&
+  sched.parseScheduleSettings((k) => (k === "backup_schedule_keep" ? "350" : undefined)).keepCount === 350 &&
+  sched.parseScheduleSettings((k) => (k === "backup_schedule_keep" ? "999" : undefined)).keepCount === 350 &&
+  sched.parseScheduleSettings((k) => (k === "backup_schedule_keep" ? "1" : undefined)).keepCount === 2 &&
+  readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8").includes("max={MAX_KEEP_COPIES}") &&
+  !readFileSync(join(root, "src/lib/scheduled-backup.ts"), "utf8").includes("Math.min(30, Math.max(2, keep))"));
 
 ok("schedule: පළවෙනි backup = Save කරපු වේලාවෙන් පස්සේ එන පළවෙනි slot (missed run catch-up)",
   (() => {

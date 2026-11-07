@@ -29,7 +29,7 @@ export type BackupScheduleSettings = {
   savedAt: string;
   toSupabase: boolean;
   toMega: boolean;
-  /** තබා ගන්නා අලුත්ම auto-backup ගාණ (ඊට වඩා පරණ ඒවා මැකේ) */
+  /** තබා ගන්නා අලුත්ම auto-backup ගාණ (2–350 · ඊට වඩා පරණ ඒවා මැකේ) */
   keepCount: number;
   megaFolder: string;
   /** true නම් auto backup එකත් backup_encryption_password එකෙන් encrypt වෙනවා */
@@ -57,6 +57,10 @@ export const LEGACY_SCHEDULE_KEYS = {
 
 /** History එක prune වුණත් "අන්තිමට කවදා ගියාද" මතක තබන hidden setting එක (ISO වේලාව) */
 export const SCHEDULE_LAST_SUCCESS_KEY = "backup_schedule_last_success_date";
+
+/** තබා ගන්න පුළුවන් උපරිම auto-backup copies ගාණ */
+export const MAX_KEEP_COPIES = 350;
+export const MIN_KEEP_COPIES = 2;
 
 /** තෝරන්න පුළුවන් පැය ගාණ — 24න් බෙදෙන ඒවා (හැමදාම එකම වෙලාවට slot වැටේ) */
 export const SCHEDULE_HOUR_OPTIONS = [1, 2, 3, 4, 6, 8, 12, 24] as const;
@@ -131,7 +135,9 @@ export function parseScheduleSettings(get: (key: string) => string | undefined):
     savedAt: (get(SCHEDULE_SETTING_KEYS.savedAt) ?? "").trim(),
     toSupabase: onOff(get(SCHEDULE_SETTING_KEYS.toSupabase), true),
     toMega: onOff(get(SCHEDULE_SETTING_KEYS.toMega), false),
-    keepCount: Number.isFinite(keep) ? Math.min(30, Math.max(2, keep)) : DEFAULT_SCHEDULE.keepCount,
+    keepCount: Number.isFinite(keep)
+      ? Math.min(MAX_KEEP_COPIES, Math.max(MIN_KEEP_COPIES, keep))
+      : DEFAULT_SCHEDULE.keepCount,
     megaFolder: (get(SCHEDULE_SETTING_KEYS.megaFolder) ?? "").trim() || DEFAULT_SCHEDULE.megaFolder,
     encrypt: onOff(get(SCHEDULE_SETTING_KEYS.encrypt), true),
   };
@@ -264,9 +270,19 @@ export function nextRunLabel(s: BackupScheduleSettings, now: Date = new Date()):
   return formatLk(nextSlotMs ?? lastSlotMs);
 }
 
-/** manual download එකේ නමමයි — `mpcs-full-backup-2026-10-19.zip` (එකම FULL ZIP එක) */
+/**
+ * Auto backup file එකේ නම — `mpcs-full-backup-2026-11-07_0400.zip`
+ *
+ * ⚠ දවසට කිහිප වරක් (පැය කීයකට වරක්) යන නිසා **වේලාවත්** නමට එකතු වේ.
+ *   නැත්නම් එකම දවසේ backups එකිනෙක **overwrite** වෙලා (එකම නම නිසා)
+ *   copies 350ක් තියාගන්න බැරි වෙනවා. (අන්තර්ගතය තාම manual ZIP එකමයි.)
+ */
 export function autoBackupFileName(now: Date = new Date()): string {
-  return `mpcs-full-backup-${lkDateParts(now).dateStr}.zip`;
+  const { dateStr } = lkDateParts(now);
+  const lk = new Date(now.getTime() + LK_OFFSET_MIN * 60_000);
+  const hh = String(lk.getUTCHours()).padStart(2, "0");
+  const mm = String(lk.getUTCMinutes()).padStart(2, "0");
+  return `mpcs-full-backup-${dateStr}_${hh}${mm}.zip`;
 }
 
 /** pg_cron එකට දාන SQL එක — Admin card එකේ copy කරගන්න පෙන්වනවා */
