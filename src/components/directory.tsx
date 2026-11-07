@@ -7,7 +7,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState } from "react";
-import { rowMatch } from "@/lib/search";
+import { rowMatchKind } from "@/lib/search";
 import { Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Eye, FileSpreadsheet, Layers, Printer, Search, Users, X } from "lucide-react";
 import { useLang } from "@/lib/i18n";
 import { createAnonClient } from "@/lib/supabase/anon";
@@ -62,6 +62,9 @@ async function fetchAllRows(table: "member_rows" | "voter_rows"): Promise<AnyRow
   }
   return out;
 }
+
+// 🔎 සෙවුම් කරන තීරු — address සහ postal_address දෙකම (ලිපිනයෙන් සොයන නිසා)
+const SEARCH_FIELDS = ["full_name", "nic", "address", "postal_address", "member_no", "voter_no", "file_name"];
 
 // ✅ ස්ත්‍රී/පුරුෂ — දෙකම එකම නිල් පාටින්
 function genderTone(_g: string): string {
@@ -171,7 +174,13 @@ export function DirectoryTable({
         cmpNat((a.member_no ?? a.voter_no ?? "") as string, (b.member_no ?? b.voter_no ?? "") as string) ||
         String(a.file_name || "").localeCompare(String(b.file_name || ""));
       for (let from = 0; from < 60000; from += BATCH) {
-        const { data, error } = await sb.from(table).select("*").range(from, from + BATCH - 1);
+        // ⚠️ order("id") නැතුව range() පාවිච්චි කළොත් පිටු දෙකක එකම පේළිය දෙපාරක් එන්න/පේළි
+        //    මගහැරෙන්න පුළුවන් (Postgres එකේ පිළිවෙළ ස්ථිර නෑ) → 53,000 පේළි වලදී ගණන් අඩු වේ.
+        const { data, error } = await sb
+          .from(table)
+          .select("*")
+          .order("id", { ascending: true })
+          .range(from, from + BATCH - 1);
         if (error || !alive) break;
         const got = (data ?? []) as unknown as AnyRow[];
         // ✅ Excel එකේ තීරු 6ම පිරුණු පේළි පමණයි — හිස්/අඩවගු පේළි පෙන්වන්නේ නෑ
@@ -189,17 +198,27 @@ export function DirectoryTable({
     };
   }, [kind]);
 
-  const filtered = useMemo(() => {
-    if (!q.trim()) return allRows.filter((r) => file === "all" || r.file_name === file);
-    // ✅ නමේ වචන කිහිපයක් දුන්නොත් → ඒ වචන ඔක්කොම තියෙන සියලු අය (පිළිවෙළ වැදගත් නෑ)
-    return allRows.filter((r) => {
-      if (file !== "all" && r.file_name !== file) return false;
-      return rowMatch(r as unknown as Record<string, unknown>, q, [
-        // ✅ address සහ postal_address දෙකම — "දොරටියාගෙදර" වගේ ලිපිනයකින් සෙව්වම ඒ අය විතරයි එනවා
-        "full_name", "nic", "address", "postal_address", "member_no", "voter_no", "file_name",
-      ]);
-    });
+  // 🔎 exact (අකුරු හරියටම) + loose (සිංහල අකුරු වෙනස්කම් නොසලකා) ගණන්
+  const searchStats = useMemo(() => {
+    const scope = file === "all" ? allRows : allRows.filter((r) => r.file_name === file);
+    if (!q.trim()) return { rows: scope, exact: scope.length, loose: 0 };
+    const rows: AnyRow[] = [];
+    let exact = 0;
+    let loose = 0;
+    for (const r of scope) {
+      const k = rowMatchKind(r as unknown as Record<string, unknown>, q, SEARCH_FIELDS);
+      if (k === "exact") {
+        exact += 1;
+        rows.push(r);
+      } else if (k === "loose") {
+        loose += 1;
+        rows.push(r);
+      }
+    }
+    return { rows, exact, loose };
   }, [q, file, allRows]);
+  // ✅ තෝරාගත් file එකේ / සෙවුමේ ප්‍රතිඵල — හැම විටම එකම (stable) පිළිවෙළ
+  const filtered = searchStats.rows;
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const view = filtered.slice((page - 1) * perPage, page * perPage);
@@ -395,6 +414,18 @@ export function DirectoryTable({
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-400/15 border border-emerald-300/25 text-emerald-200 px-3 py-1">
                 <FileSpreadsheet size={11} /> {file}
                 <button onClick={() => setFile("all")} className="hover:text-white ml-0.5"><X size={11} /></button>
+              </span>
+            )}
+            {q.trim() && searchStats.loose > 0 && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/15 border border-amber-300/30 text-amber-200 px-3 py-1"
+                title={lang === "si"
+                  ? "සිංහල අකුරු (ා ි ී ු ෙ ේ …) වෙනස්කම් නොසලකා ගැළපුණු පේළි"
+                  : "Rows matched ignoring Sinhala vowel-sign differences"}
+              >
+                🔎 {lang === "si"
+                  ? `${searchStats.loose.toLocaleString()}ක් අකුරු වෙනස්කම් නිසා එකතු විය`
+                  : `${searchStats.loose.toLocaleString()} extra with spelling tolerance`}
               </span>
             )}
           </div>

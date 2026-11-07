@@ -11,7 +11,7 @@
 
 import { createAnonClient } from "@/lib/supabase/anon";
 
-export type MailRouteKey = "membership" | "inquiry" | "livechat" | "message" | "business";
+export type MailRouteKey = "membership" | "inquiry" | "livechat" | "message" | "business" | "backup";
 
 export type MailRouteDef = {
   key: MailRouteKey;
@@ -61,6 +61,17 @@ export const MAIL_ROUTES: MailRouteDef[] = [
     desc_en: "Messages sent from the chat widget's ‘Message’ tab are emailed to these addresses (and also appear in Admin → Messages).",
     desc_si: "චැට් එකේ ‘Message’ tab එකෙන් එවන පණිවිඩ මේ ලිපින වලට email වේ — එම පණිවිඩ Admin → Messages එකෙත් පෙනේ.",
     fallbackKeys: ["mail_route_livechat_1", "live_chat_email", "contact_email_1"],
+  },
+  {
+    key: "backup",
+    title_en: "Auto Backup Reports",
+    title_si: "Auto Backup වාර්තා (සාර්ථක / අසාර්ථක)",
+    desc_en:
+      "Every scheduled auto-backup sends a report here: file name, file type, file size, status (successful/failed), time spent, and the date & day of the run.",
+    desc_si:
+      "ඉබේම දුවන හැම auto-backup එකකටම පස්සේ වාර්තාවක් මේ ලිපින වලට එයි — file නම · file වර්ගය · file ප්‍රමාණය · තත්ත්වය (සාර්ථක/අසාර්ථක) · ගත වූ වේලාව · දිනය සහ දවස.",
+    fallbackKeys: ["contact_email_1", "contact_email_2"],
+    useNotifyList: false,
   },
   {
     key: "business",

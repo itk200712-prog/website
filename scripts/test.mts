@@ -1965,7 +1965,7 @@ ok("Download With Special: button exports ONLY the current search results in the
   directorySrc.includes("async function downloadPdf(specialMode = false)") &&
   directorySrc.includes("const label = specialMode ? specialFileLabel(base, q) : base;") &&
   directorySrc.includes("rows: filtered.map((r) => ({ ...r })),") &&
-  directorySrc.includes('"full_name", "nic", "address", "postal_address", "member_no", "voter_no", "file_name",') &&
+  directorySrc.includes('const SEARCH_FIELDS = ["full_name", "nic", "address", "postal_address", "member_no", "voter_no", "file_name"];') &&
   specialAccess.specialFileLabel("All-Files-Members", "දොරටියාගෙදර") === "All-Files-Members-දොරටියාගෙදර" &&
   specialAccess.specialFileLabel("All-Files-Voters", "  ") === "All-Files-Voters-Special" &&
   specialAccess.specialFileLabel("All-Files-Members", 'a/b:c*"d') === "All-Files-Members-a-b-c-d" &&
@@ -2121,6 +2121,115 @@ ok("register rows: duplicates (same person uploaded twice) never counted twice",
   registerRowsSrc.includes("export function dedupeRegisterRows") &&
   registerRowsSrc.includes("export function displayRegisterRows") &&
   registerRowsSrc.includes("return dedupeRegisterRows(filterCompleteRegisterRows(rows));"));
+
+console.log("\n── 25) Sinhala-tolerant register search (දොරටියගෙදර = දොරටියාගෙදර) + stable paging ──");
+{
+  const search = await import("../src/lib/search.ts");
+  ok("search: සිංහල matra ඉවත් කරන foldSinhala() — ා ි ී ු ෙ ේ …",
+    search.foldSinhala("දොරටියාගෙදර") === search.foldSinhala("දොරටියගෙදර") &&
+    search.foldSinhala("දොරටියාගෙදර") === "දරටයගදර" &&
+    search.foldSinhala("කාන්තා") === search.foldSinhala("කානතා"));
+
+  // ⭐ ප්‍රධාන bug එක: "දොරටියගෙදර" (ා නැතුව) සෙව්වම "දොරටියාගෙදර" පේළිත් එයි
+  const rows = [
+    { address: "දොරටියාගෙදර", postal_address: "මූණමල්දෙනිය", full_name: "එක් අයෙක්" },
+    { address: "298 / 1 දොරටියාගෙදර", postal_address: "මගුලාගම", full_name: "දෙවැන්නා" },
+    { address: "දොරටියගෙදර", postal_address: "මූණමල්දෙනිය", full_name: "තුන්වැන්නා" },
+    { address: "මල්වාන", postal_address: "දොරටියාගෙදර", full_name: "හතරවැන්නා" },
+    { address: "කොළඹ", postal_address: "කුරුණෑගල", full_name: "අදාළ නැති අයෙක්" },
+  ];
+  const fields = ["full_name", "address", "postal_address"];
+  const looseHits = rows.filter((r) => search.rowMatchKind(r, "දොරටියගෙදර", fields) !== null);
+  const exactHits = rows.filter((r) => search.rowMatchKind(r, "දොරටියගෙදර", fields) === "exact");
+  ok("search: 'දොරටියගෙදර' (ා නැතුව) → 'දොරටියාගෙදර' පේළි 4ම හමුවේ (exact 1 + loose 3)",
+    looseHits.length === 4 && exactHits.length === 1);
+  ok("search: හරියටම ගැළපෙන එක 'exact', අකුරු වෙනස්කම් නිසා ගැළපෙන එක 'loose'",
+    search.rowMatchKind(rows[0], "දොරටියගෙදර", fields) === "loose" &&
+    search.rowMatchKind(rows[2], "දොරටියගෙදර", fields) === "exact" &&
+    search.rowMatchKind(rows[4], "දොරටියගෙදර", fields) === null);
+  ok("search: කෙටි සිංහල වචන (අකුරු 3ට අඩු) → ලිහිල් සෙවුම නෑ (වැරදි ප්‍රතිඵල වැළැක්වීම)",
+    search.rowMatchKind({ address: "ගාම" }, "ගම", ["address"]) === null &&
+    search.rowMatchKind({ address: "කාන්තා" }, "කාන්තාව", ["address"]) === null &&
+    search.rowMatchKind({ address: "දොරටියාගෙදර" }, "දොරටියගෙදර", ["address"]) === "loose");
+  ok("search: ඉංග්‍රීසි / NIC / අංක සෙවුම් කලින් වගේම (regression නෑ)",
+    search.rowMatch({ nic: "642553520V" }, "642553520v", ["nic"]) &&
+    search.rowMatch({ full_name: "Nimal Perera" }, "perera nimal", ["full_name"]) &&
+    !search.rowMatch({ full_name: "Nimal Perera" }, "kamal", ["full_name"]));
+
+  // ⚠️ PostgREST range() පිටු — order("id") නැත්නම් පේළි මගහැරෙන්න/දෙපාරක් එන්න පුළුවන්
+  const dir = readFileSync(join(root, "src/components/directory.tsx"), "utf8");
+  ok("directory: 53,000+ පේළි stable විදිහට ගන්නවා (order id → range) — සෙවුම් ගණන් අඩු වෙන්නේ නෑ",
+    dir.includes(".order(\"id\", { ascending: true })") && dir.includes(".range(from, from + BATCH - 1)"));
+  ok("directory: තෝරාගත් file එක ඇතුළෙම සොයයි + exact/loose ගණන් පෙන්වයි",
+    dir.includes("const scope = file === \"all\" ? allRows : allRows.filter((r) => r.file_name === file);") &&
+    dir.includes("searchStats.loose > 0") && dir.includes("rowMatchKind"));
+}
+
+console.log("\n── 26) Auto-backup වාර්තා email (file name · type · size · status · time · දවස) ──");
+{
+  const rep = await import("../src/lib/backup-report.ts");
+  ok("backup report: file size human-readable + bytes",
+    rep.formatFileSize(1884417) === "1.80 MB (1,884,417 bytes)" && rep.formatFileSize(0).startsWith("0 B"));
+  ok("backup report: ගත වූ වේලාව (මිනිත්තු/තත්පර)",
+    rep.formatDuration(134_000) === "2 මිනිත්තු 14 තත්පර (134s)" &&
+    rep.formatDuration(7_000) === "7 තත්පර (7s)" &&
+    rep.formatDuration(3_725_000) === "1 පැය 2 මිනිත්තු 5 තත්පර (3725s)");
+
+  // 2026-11-07 10:30 UTC = 16:00 LK (සෙනසුරාදා)
+  const parts = rep.lkDateParts(new Date("2026-11-07T10:30:00Z"));
+  ok("backup report: දිනය + දවස + වේලාව (ශ්‍රී ලංකා) — 2026-11-07 සෙනසුරාදා 16:00",
+    parts.iso === "2026-11-07" && parts.weekdaySi === "සෙනසුරාදා" && parts.weekdayEn === "Saturday" &&
+    parts.time === "16:00" && parts.label.includes("2026-11-07") && parts.label.includes("ශ්‍රී ලංකා"));
+
+  const email = rep.buildBackupReportEmail({
+    status: "success",
+    source: "auto",
+    fileName: "mpcs-full-backup-2026-11-07_1600.zip",
+    fileSize: 1884417,
+    durationMs: 134_000,
+    destinations: ["Supabase", "MEGA (MPCS Backups)"],
+    rows: 53210,
+    tables: 29,
+    images: 24,
+    encrypted: true,
+    at: new Date("2026-11-07T10:30:00Z"),
+    schedule: "Every 4h from 00:00 (LK)",
+  });
+  ok("backup report: subject එකේ තත්ත්වය + file නම",
+    email.subject.includes("mpcs-full-backup-2026-11-07_1600.zip") && email.subject.includes("සාර්ථක"));
+  ok("backup report: email එකේ file name · file type · file size · status · time spent · දවස ඔක්කොම තියේ",
+    email.body.includes("File name") && email.body.includes("mpcs-full-backup-2026-11-07_1600.zip") &&
+    email.body.includes("File type") && email.body.includes("Full backup") &&
+    email.body.includes("1.80 MB (1,884,417 bytes)") &&
+    email.body.includes("සාර්ථක") && email.body.includes("successful") &&
+    email.body.includes("2 මිනිත්තු 14 තත්පර") &&
+    email.body.includes("සෙනසුරාදා") && email.body.includes("2026-11-07") &&
+    email.fields["File size"].includes("1.80 MB") && email.fields["Day"].includes("Saturday"));
+
+  const failed = rep.buildBackupReportEmail({
+    status: "failed",
+    fileName: "mpcs-full-backup-2026-11-08_0000.zip",
+    fileSize: 0,
+    durationMs: 9_000,
+    failures: ["MEGA: login failed"],
+  });
+  ok("backup report: fail වුණත් වාර්තාව එයි (status failed + හේතුව)",
+    failed.subject.includes("අසාර්ථක") && failed.body.includes("MEGA: login failed") && failed.body.includes("failed"));
+
+  // route wiring
+  const schedRouteSrc = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
+  ok("scheduled backup: සාර්ථක වුණත් අසාර්ථක වුණත් email report යවයි",
+    schedRouteSrc.includes("sendBackupReport(") &&
+    (schedRouteSrc.match(/sendBackupReport\(/g) ?? []).length >= 2 &&
+    schedRouteSrc.includes("loadBackupReportEmails"));
+
+  const mailSrc = readFileSync(join(root, "src/lib/mail-routes.ts"), "utf8");
+  const mailPage = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
+  ok("admin → Emails: අලුත් “Auto Backup Reports” card එක (mail_route_backup_1..4)",
+    mailSrc.includes('key: "backup"') && mailSrc.includes("Auto Backup Reports") &&
+    mailPage.includes("backup: HardDriveDownload") &&
+    mailSrc.includes("return `mail_route_${route}_${n}`;"));
+}
 
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);

@@ -5,11 +5,12 @@
 //  එක් එක් "කාරනාව" (route) එකට ලිපින 1–4ක් — හැම ලිපිනයකටම email යයි.
 //  · Membership Applications  · Contact / Inquiry Form
 //  · Live Chat Requests        · Website Message Box · Business Unit Inquiries
+//  · Auto Backup Reports (සාර්ථක/අසාර්ථක වාර්තා)
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import {
-  AlertTriangle, Briefcase, CheckCircle2, Inbox, Info, Mail, Plus, RefreshCw, Save, Send, Sparkles, Trash2, UserPlus, X,
+  AlertTriangle, Briefcase, CheckCircle2, HardDriveDownload, Inbox, Info, Mail, Plus, RefreshCw, Save, Send, Sparkles, Trash2, UserPlus, X,
 } from "lucide-react";
 import { MessageImageIcon as MessageCircle } from "@/components/site-icons";
 import { AdminTopbar, useNotice } from "@/components/admin";
@@ -27,6 +28,7 @@ const ICONS: Record<MailRouteKey, ComponentType<{ size?: number | string; classN
   livechat: MessageCircle,
   message: Inbox,
   business: Briefcase,
+  backup: HardDriveDownload,
 };
 
 const TONES: Record<MailRouteKey, string> = {
@@ -35,6 +37,7 @@ const TONES: Record<MailRouteKey, string> = {
   livechat: "from-fuchsia-500 to-purple-600 shadow-fuchsia-200",
   message: "from-emerald-500 to-teal-600 shadow-emerald-200",
   business: "from-amber-500 to-orange-600 shadow-amber-200",
+  backup: "from-slate-600 to-slate-900 shadow-slate-200",
 };
 
 function emptyDraft(): Draft {

@@ -19,6 +19,7 @@ import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
 import { generateBackupZip, type BackupClient } from "@/lib/backup";
 import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils";
+import { sendBackupReport } from "@/lib/backup-report";
 import {
   autoBackupFileName,
   backupDueDecision,
@@ -411,6 +412,27 @@ async function recordHistory(input: {
   }
 }
 
+/**
+ * 📧 Auto Backup Report ලිපින — Admin → Emails → “Auto Backup Reports” card එකෙන්
+ * (mail_route_backup_1..4). එකක්වත් දාලා නැත්නම් contact_email_1/2 වලට යයි.
+ */
+async function loadBackupReportEmails(): Promise<string[]> {
+  const rows = ((await restGet("system_settings?select=key,value&key=like.mail_route_backup_*", SERVICE_KEY)) ?? []) as {
+    key: string;
+    value: string;
+  }[];
+  const own = rows
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map((r) => String(r.value ?? "").trim())
+    .filter(Boolean);
+  if (own.length) return Array.from(new Set(own));
+  const fb = ((await restGet(
+    "system_settings?select=key,value&key=in.(contact_email_1,contact_email_2)",
+    SERVICE_KEY
+  )) ?? []) as { key: string; value: string }[];
+  return Array.from(new Set(fb.map((r) => String(r.value ?? "").trim()).filter(Boolean)));
+}
+
 /** GET — Admin card එකේ status එකට (රහස් කිසිවක් එවන්නේ නෑ) */
 export async function GET() {
   if (!SERVICE_KEY) return json({ ok: true, serverConfigured: false, cronReady: false, megaConfigured: false, encryptionConfigured: false });
@@ -496,6 +518,25 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const detail = `FULL ZIP build failed: ${(e as Error).message}`;
     await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed", detail, encrypted });
+    // 📧 අසාර්ථක වුණත් වාර්තාව email එකෙන් යයි (file size 0 · ගත වූ වේලාව සමඟ)
+    try {
+      const emails = await loadBackupReportEmails();
+      await sendBackupReport(
+        {
+          status: "failed",
+          source: "auto",
+          fileName,
+          fileSize: 0,
+          durationMs: Date.now() - startedAt,
+          failures: [detail],
+          encrypted,
+          schedule: `Every ${settings.intervalHours}h from 00:00 (LK)`,
+        },
+        emails
+      );
+    } catch {
+      /* email එක යැවීමේ දෝෂයක් ආවත් backup flow එක නවත්වන්නේ නෑ */
+    }
     await clearRunLock();
     return json({ ok: false, reason: "build_failed", detail }, 500);
   }
@@ -549,6 +590,37 @@ export async function POST(req: NextRequest) {
     encrypted,
   });
   if (done.length) await storeLastScheduledSuccessDate(new Date().toISOString());
+
+  // 📧 වාර්තා email — file නම · වර්ගය · ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස
+  let reportSent = 0;
+  try {
+    const emails = await loadBackupReportEmails();
+    reportSent = await sendBackupReport(
+      {
+        status: status as "success" | "partial" | "failed",
+        source: "auto",
+        fileName,
+        fileType: encrypted
+          ? "ZIP — Full backup (encrypted database.sql + schema.sql + registers + site files)"
+          : "ZIP — Full backup (database.sql + schema.sql + registers + site files)",
+        fileSize: built.zip.length,
+        durationMs: Date.now() - startedAt,
+        destinations: done,
+        failures: failed,
+        rows: built.totalRows,
+        tables: built.tables,
+        images: built.images,
+        encrypted,
+        schedule: force
+          ? "Manual test run"
+          : `Every ${settings.intervalHours}h from 00:00 (LK) — slots: ${scheduleTimesOfDay(settings.intervalHours).join(", ")}`,
+      },
+      emails
+    );
+  } catch {
+    /* email report එක අසාර්ථක වුණත් backup එක සාර්ථකයි — response එකට බලපෑමක් නෑ */
+  }
+
   await clearRunLock();
 
   if (!done.length) return json({ ok: false, reason: "upload_failed", detail }, 500);
@@ -562,6 +634,7 @@ export async function POST(req: NextRequest) {
     seconds: Math.round((Date.now() - startedAt) / 1000),
     encrypted,
     destinations: done,
+    emailReportsSent: reportSent,
     warnings: [encryptWarning, ...failed].filter(Boolean),
   });
 }

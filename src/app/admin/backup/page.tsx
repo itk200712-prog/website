@@ -31,6 +31,8 @@ import { logActivity } from "@/lib/activity";
 import {
   BACKUP_COVERAGE, buildCoverageReport, type CoverageReport, type CoverageRow,
 } from "@/lib/backup-coverage";
+import { sendBackupReport } from "@/lib/backup-report";
+import { getRouteEmails } from "@/lib/mail-routes";
 
 function formatFileSize(size?: number | null): string {
   if (size == null || !Number.isFinite(size)) return "—";
@@ -94,6 +96,9 @@ export default function AdminBackupPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   // 📋 Coverage — site එකේ හැම කොටසක්ම backup එකට එනවද (user/admin/login/images/excel…)
   const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+  // 📧 Auto Backup Report email — යැවූ ගණන / busy
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportEmails, setReportEmails] = useState<string[]>([]);
   const [coverageBusy, setCoverageBusy] = useState(false);
   const [coverageAt, setCoverageAt] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
@@ -288,6 +293,55 @@ export default function AdminBackupPage() {
    * site-source count කරලා "site එකේ හැම දෙයක්ම backup එකට එනවා" කියා තහවුරු කරයි.
    * (backup එකක් හදන්නේ නැතුව — වේගවත් `head: true` count query 29ක් විතරයි)
    */
+  // 📧 වාර්තා email ලිපින (Admin → Emails → Auto Backup Reports)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const list = await getRouteEmails("backup");
+        if (alive) setReportEmails(list);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  /** Test report එකක් දැන්ම යවයි — email එක එනවද කියා බලාගන්න */
+  async function sendTestReport() {
+    if (reportBusy) return;
+    setReportBusy(true);
+    try {
+      const list = await getRouteEmails("backup");
+      setReportEmails(list);
+      if (!list.length) {
+        show("⚠ ලිපිනයක් දාලා නෑ — Admin → Emails → “Auto Backup Reports” එකේ email එකක් add කරලා Save කරන්න");
+        return;
+      }
+      const sent = await sendBackupReport(
+        {
+          status: "success",
+          source: "auto",
+          fileName: `mpcs-full-backup-${new Date().toISOString().slice(0, 10).replace(/-/g, "-")}_TEST.zip`,
+          fileSize: 1884417,
+          durationMs: 134_000,
+          destinations: ["Supabase (TEST)"],
+          rows: 53210,
+          tables: 29,
+          images: 24,
+          encrypted: false,
+          schedule: `Every ${sch.intervalHours}h from 00:00 (LK) — TEST`,
+        },
+        list
+      );
+      show(sent > 0
+        ? `✅ Test report එක ${sent} ලිපිනයකට යැවුණා — inbox (සහ spam) බලන්න`
+        : `⚠ Email යැවීම අසාර්ථක — ලිපිනය FormSubmit එකේ “Activate” කරලා තියෙනවද? (Admin → Emails)`);
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
   async function loadCoverage() {
     if (coverageBusy) return;
     setCoverageBusy(true);
@@ -1179,6 +1233,29 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
               onFocus={(e) => e.target.select()}
             />
           )}
+        </div>
+
+        {/* 📧 ඊමේල් වාර්තාව — හැම auto-backup එකකටම පස්සේ */}
+        <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50/70 p-4">
+          <div className="text-[12px] font-extrabold text-slate-800">📧 ඊමේල් වාර්තාව (සාර්ථක / අසාර්ථක)</div>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+            හැම auto-backup එකකටම පස්සේ <b>file නම · file වර්ගය · file ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස</b> සහිත
+            email එකක් යයි. ලිපින එකතු කරන්නේ{" "}
+            <a href="/admin/emails" className="font-extrabold text-indigo-700 underline">Admin → Emails → “Auto Backup Reports”</a> එකෙන්.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">
+              {reportEmails.length ? `📮 ${reportEmails.join(" · ")}` : "⚠ තාම ලිපිනයක් දාලා නෑ"}
+            </span>
+            <button
+              type="button"
+              onClick={() => void sendTestReport()}
+              disabled={reportBusy}
+              className="rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-extrabold text-white hover:bg-sky-700 disabled:opacity-50"
+            >
+              {reportBusy ? "යවමින්…" : "Test report එකක් යවන්න"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">

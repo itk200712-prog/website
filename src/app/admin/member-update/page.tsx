@@ -280,7 +280,15 @@ export default function MemberUpdatePage() {
           />
         </div>
         {debounced.trim() && !loading && (
-          <div className="mt-2 text-[11.5px] text-slate-500">{total.toLocaleString()} result(s) — “{debounced.trim()}”</div>
+          <div className="mt-2 text-[11.5px] text-slate-500">
+            {total.toLocaleString()} result(s) — “{debounced.trim()}”
+            {total === 0 && /[\u0D80-\u0DFF]/.test(debounced) && (
+              <span className="ml-1 font-bold text-amber-600">
+                · සිංහල අකුරු වෙනස්කම් (ා ි ී ු ෙ ේ) නිසා වෙන්න පුළුවන් — public සාමාජික ලැයිස්තුවේ
+                එම නම සොයන්න (එතන අකුරු වෙනස්කම් නොසලකා සොයයි)
+              </span>
+            )}
+          </div>
         )}
       </div>
 
