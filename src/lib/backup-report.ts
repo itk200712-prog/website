@@ -1,4 +1,3 @@
-import { postToSilentForms, resolveSilentFormsKey } from "@/lib/silentforms";
 // ============================================================================
 //  📧 AUTO BACKUP REPORT — සාර්ථක / අසාර්ථක වාර්තා email
 // ----------------------------------------------------------------------------
@@ -197,30 +196,22 @@ export function buildBackupReportEmail(input: BackupReportInput): {
   return { subject, body, fields };
 }
 
-/** 🗝 Admin → Emails එකේදී save කරපු key එක (localStorage cache) — නැත්නම් default */
-function cachedSilentFormsKey(): string {
+/** Legacy helper name retained; all browser reports use the authenticated server sender now. */
+export async function postSilentForms(to: string, payload: Record<string, unknown>): Promise<boolean> {
   try {
-    return resolveSilentFormsKey(globalThis.localStorage?.getItem("mpcs_silentforms_key"));
-  } catch {
-    return resolveSilentFormsKey(null);
-  }
-}
-
-/**
- * 📨 SilentForms (AJAX) හරහා වාර්තාව යවයි.
- * SilentForms එකේ ලිපි එන්නේ access key එකට සම්බන්ධ inbox එකට —
- * ඒ නිසා යවන්න ඕන ලිපින ටික email එකේ body එකේ සටහන් කරයි.
- */
-export async function postSilentForms(to: string, payload: Record<string, unknown>, key?: string): Promise<boolean> {
-  const addr = String(to ?? "").trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(addr)) return false;
-  const fields: Record<string, string> = { "To (configured)": addr, ccemail: addr };
-  for (const [k, v] of Object.entries(payload)) {
-    if (v === undefined || v === null) continue;
-    fields[k] = Array.isArray(v) ? v.join(" | ") : String(v);
-  }
-  const r = await postToSilentForms(key ? resolveSilentFormsKey(key) : cachedSilentFormsKey(), fields);
-  return r.ok;
+    const { authedClient } = await import("@/lib/supabase/client");
+    const sb = await authedClient();
+    const { data } = await sb.auth.getSession();
+    const token = data?.session?.access_token;
+    if (!token) return false;
+    const res = await fetch("/api/mail/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ to, subject: String(payload._subject ?? "MPCS Backup Report"), text: String(payload.Message ?? "") }),
+    });
+    const result = await res.json() as { ok?: boolean };
+    return res.ok && result.ok === true;
+  } catch { return false; }
 }
 
 /**

@@ -4,12 +4,12 @@
 //  GET  → දැනට තියෙන සැකසුම (password/access key එවන්නේ නෑ — තියෙනවද + masked preview)
 //  POST → { accessKey?, provider? } SilentForms සැකසුම · host/port/user/pass/from SMTP
 //         (service-role → backup_secrets — backup එකට ඉබේම එකතු වේ)
-//  POST → { testTo } test mail (SilentForms → key inbox · fail නම් SMTP)
+//  POST → { recipientEmail, recipientAccessKey } per-email key; { testTo, testProvider } isolated test
 //  Auth: admin/superadmin Bearer token
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { loadMailSettings, loadSmtp, saveMailSettings, saveSmtp, sendMail, sendViaSilentForms, sendViaSmtp } from "@/lib/mail-server";
+import { loadMailSettings, loadSmtp, saveMailSettings, saveSmtp, sendMail, sendViaSilentForms, sendViaSmtp, recipientKeyMetadata, saveRecipientKey } from "@/lib/mail-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +57,9 @@ export async function GET(req: NextRequest) {
   const smtp = await loadSmtp();
   const sf = await loadMailSettings();
   const key = sf.key;
+  let recipientKeys;
+  try { recipientKeys = await recipientKeyMetadata(); }
+  catch { return json({ ok: false, reason: "recipient_keys_load_failed" }, 503); }
   return json({
     ok: true,
     silentforms: {
@@ -67,6 +70,7 @@ export async function GET(req: NextRequest) {
       preview: key ? `${key.slice(0, 8)}…${key.slice(-6)}` : "",
       length: key.length,
     },
+    recipientKeys,
     provider: sf.provider,
     configured: Boolean(smtp),
     host: smtp?.host ?? "",
@@ -85,6 +89,15 @@ export async function POST(req: NextRequest) {
     body = (await req.json()) as Record<string, unknown>;
   } catch {
     return json({ ok: false, reason: "bad_json" }, 400);
+  }
+
+  // Separate row per normalized email; auth is checked before all secret operations.
+  if (body?.recipientEmail !== undefined) {
+    if (typeof body.recipientEmail !== "string" || typeof body.recipientAccessKey !== "string") return json({ ok: false, reason: "invalid_recipient_key_payload" }, 400);
+    const error = await saveRecipientKey(body.recipientEmail, body.recipientAccessKey);
+    if (error) return json({ ok: false, reason: error }, error.startsWith("invalid_") ? 400 : 500);
+    try { return json({ ok: true, recipientKeys: await recipientKeyMetadata() }); }
+    catch { return json({ ok: false, reason: "Saved, but metadata refresh failed. Refresh page." }, 503); }
   }
 
   // 🧪 test send — configure කරලා තියෙන SMTP එකෙන් ලිපිනයකට යවලා බලනවා
@@ -107,13 +120,17 @@ export async function POST(req: NextRequest) {
       const result = await sendViaSmtp(smtp, to, subject, text);
       r = { ok: result.ok ? 1 : 0, method: "smtp", failed: result.ok ? [] : [result] };
     } else if (testProvider === "silentforms") {
-      const results = await sendViaSilentForms([to], subject, text);
+      const legacyKey = body.useGlobalKey === true ? (await loadMailSettings()).key : undefined;
+      const results = await sendViaSilentForms([to], subject, text, legacyKey);
       r = { ok: results.filter(x => x.ok).length, method: "silentforms", failed: results.filter(x => !x.ok) };
     } else {
       r = await sendMail({ to, subject, text });
     }
     const notice = r.method === "silentforms"
-      ? "SilentForms submission accepted — inbox delivery තහවුරු නෑ. Test ලිපිනයෙන් recipient වෙනස් නොවේ. SilentForms dashboard → Email me every submission ON → Extra recipients Add + confirm → Spam / All Mail බලන්න."
+      ? (body.useGlobalKey === true
+        ? "Legacy global-key submission accepted — goes to that key owner, not necessarily the typed email. Inbox delivery unconfirmed."
+        : "SilentForms submission accepted — inbox delivery තහවුරු නෑ. මේ email එකට අදාළ key එකම save කළ බව බලන්න. SilentForms → Email me every submission ON → Inbox / Spam බලන්න.")
+      : r.method === "mixed" ? "SilentForms + SMTP accepted pending recipients; inbox delivery unconfirmed."
       : `SMTP server accepted mail for ${to} — inbox / Spam බලන්න; instant delivery සහතික කළ නොහැක.`;
     return json(
       { ok: r.ok > 0, sent: r.ok, method: r.method, delivery: "unconfirmed", notice, failed: r.failed.map((f) => ({ to: f.to, error: f.error })) },

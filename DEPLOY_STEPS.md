@@ -60,13 +60,22 @@ git push -u origin main
 
 ## පියවර 6 — Email delivery සැකසීම (SilentForms / SMTP)
 
-### SilentForms තබාගන්න නම්
-1. https://silentforms.com/sign-in → key හිමියාගේ email එකෙන් sign in → අදාළ form එක විවෘත කරන්න.
-2. **Email me every submission** ON කරන්න. Form paused නම් unpause කරන්න; domain restrictions පරීක්ෂා කරන්න.
-3. වෙනත් inbox වලටත් ඕන නම් **Extra recipients → Add recipient**. ඒ inbox වලට ආ confirmation links click කරන්න. Waiting for confirmation නම් ලිපි ලැබෙන්නේ නෑ (extra recipients උපරිම 5).
-4. Site **Admin → Emails → SilentForms** → තමන්ගේ key එක Save → **SilentForms Test**.
-5. Key owner / confirmed extra recipients ගේ Inbox, Spam, All Mail බලන්න. Admin එකේ Test ලිපිනයෙන් recipient වෙනස් නොවේ.
-6. HTTP success = submission accepted පමණයි. Inbox delivery තහවුරු නෑ. Dashboard confirmation/email settings site Admin panel එකෙන් වෙනස් කළ නොහැක.
+### එක් එක් email ලිපිනයට වෙනම SilentForms key එකක්
+1. https://silentforms.com/get-access-key → Email 1 දාලා එම inbox එකේ confirmation link එක click කර key එක ගන්න.
+2. Email 2, 3… 6/7 සඳහාත් වෙන වෙනම එම පියවර කරන්න. Key එක අදාළ inbox එකේම විය යුතුයි; site එකට ownership verify කරන්න provider API එකක් නැහැ.
+3. එක් එක් form එකේ https://silentforms.com/sign-in → **Email me every submission ON**. Paused නොවන බවත් domain restrictions නිවැරදි බවත් බලන්න.
+4. Site **Admin → Emails** → අදාළ කාරණාවේ email ලිපිනය ලියන්න → card **Save**. Email ලිපිනයක් හා key එකක් save කිරීම වෙන වෙනමයි.
+5. එම email පේළිය යට ඇති key කොටුවට **එම email එකේ key** paste → **Save key**. **KEY SAVED ✅** පෙනෙයි. අනිත් email වල keys මෙයට දාන්න එපා.
+6. **Test key** → එම inbox එකේ Inbox / Spam / All Mail පරීක්ෂා කරන්න. Test එක uses saved mapping only; SMTP fallback නැහැ. API success = provider accepted, inbox verified නොවේ.
+7. අනෙක් email පේළි සඳහාත් ඒ ආකාරයට Save key + Test key කරන්න. එකම email ලිපිනය කාරණා කිහිපයක තිබුණත් key එක එකවරක් save කළාම ඇති. Email ලිපිනය වෙනස් කළොත් එයට අදාළ වෙනම key එක Save කරන්න.
+8. Provider order එකේ **① SilentForms → ② SMTP** තෝරන්න. Notifications සඳහා global/default key fallback නෑ. Global key card එක legacy manual test පමණයි. Missing key නම් ඒ ලිපිනයට error පෙන්වයි / SMTP configured නම් එයට fallback වේ.
+9. **Auto Backup Reports** card එකේ ලිපින + එම keys Save → Admin → Backup → test run. Reports හරියටම එම mappings භාවිත කරයි; size එක final ZIP bytes ගණනයි.
+10. **Remove key** කරන්නේ ඒ email එකේ key mapping එක විතරයි. Email route ලිපිනය වෙනමයි; පරණ email එකක key එක අලුත් email එකට ඉබේම මාරු නොවේ.
+
+**Extra recipients අවශ්‍ය නැහැ** — වෙන වෙනම owner keys නිසා ඒ ක්‍රමය මත රඳා නොපවතී. කලින් SilentForms dashboard එකේ extra recipients තිබේ නම් අනවශ්‍ය copies යා හැක; ඒවා dashboard එකෙන් remove කරන්න.
+Keys server-only `backup_secrets` rows තුළයි; full backup/export/import සමඟ ඇතුළත්. නව SQL අවශ්‍ය නැහැ. Saved full keys GET response එකෙන් නොඑයි; masked preview පමණයි.
+
+**Rate limits:** විනාඩියකට IP එකකට 10 / key එකකට 60. සියලු keys එක් site එකකින් යවන නිසා IP සීමාවත් අදාළයි. Repeated Test නිසා 429 ආවොත් ටිකක් ඉඳලා retry කරන්න. SMTP fallback යන්නේ fail වූ recipients වෙත පමණයි; සාර්ථක ලිපිනවලට ආයේ යවන්නේ නෑ.
 
 ### Site Admin එකේ ලිපින වලටම යවන්න SMTP
 1. Gmail → Google Account → Security → 2-Step Verification ON → https://myaccount.google.com/apppasswords → නව App Password (සාමාන්‍ය Gmail password නොවේ).

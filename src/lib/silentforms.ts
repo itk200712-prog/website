@@ -16,13 +16,13 @@
 
 export const SILENTFORMS_ENDPOINT = "https://silentforms.com/api/submit";
 
-/** system_settings key — Admin → Emails එකෙන් save කරන access key */
+/** backup_secrets key — legacy global manual-test access key only */
 export const SILENTFORMS_KEY_SETTING = "silentforms_access_key";
 /** Admin → Emails එකේ “මුලින්ම යවන සේවාව” — "silentforms" (default) හෝ "smtp" */
 export const MAIL_PROVIDER_SETTING = "mail_provider";
 export type MailProvider = "silentforms" | "smtp";
 
-/** ඔබ දුන් access key — settings එකේ එකක් නැත්නම් මේක පාවිච්චි වේ */
+/** Legacy manual-test default only. Production notifications require each recipient mapping. */
 export const SILENTFORMS_DEFAULT_KEY =
   "bf4a0621f8f5f3d1360a356ad57a15dc623b96d52412b27e87cc6f75f64f189b";
 
@@ -37,7 +37,7 @@ export function resolveSilentFormsKey(saved?: string | null): string {
   return looksLikeAccessKey(v) ? v : SILENTFORMS_DEFAULT_KEY;
 }
 
-export type SilentFormsResult = { ok: boolean; error?: string; status?: string };
+export type SilentFormsResult = { ok: boolean; error?: string; status?: string; statusCode?: number };
 
 /**
  * SilentForms එකට submission එකක් යවයි.
@@ -80,7 +80,7 @@ export async function postToSilentForms(
             : res.status === 413 ? "පණිවිඩය වැඩිපුර ලොකුයි (413)"
               : res.status === 503 ? "CAPTCHA සේවාවට connect වුණේ නෑ (503)"
                 : `HTTP ${res.status}`);
-    return { ok: false, error: reason.slice(0, 200), status: json?.status };
+    return { ok: false, error: reason.slice(0, 200), status: json?.status, statusCode: res.status };
   } catch (e) {
     return { ok: false, error: `SilentForms වෙත connect වෙන්න බෑ — ${(e as Error).message}`.slice(0, 200) };
   }

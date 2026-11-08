@@ -2290,14 +2290,14 @@ console.log("\n── 27) Mail delivery — SilentForms (ප්‍රධාන) 
     mailSrc.includes("async function sendViaServerRoute") && mailSrc.includes('fetch("/api/mail/send"') &&
     !mailSrc.includes("silentforms.com") && !mailSrc.includes("SILENTFORMS_DEFAULT_KEY") &&
     mailSrc.includes("export async function sendToRoute"));
-  ok("server mail: SilentForms fail වුණාම විනාඩි 15ක් මතක + ඉබේම SMTP (ෆෝම් එක රැඳෙන්නේ නෑ)",
-    ms.includes("SF_DOWN_FOR_MS = 15 * 60 * 1000") && ms.includes("markSilentFormsDown()") &&
-    ms.includes("clearSilentFormsDown()") && ms.includes("silentFormsDown()") &&
+  ok("server mail: cooldown එක එක් එක් key එකට පමණයි — අනෙක් ලිපින නවතින්නේ නෑ",
+    ms.includes("SF_DOWN_FOR_MS = 15 * 60 * 1000") && ms.includes("sfDownUntil = new Map<string, number>()") &&
+    ms.includes("markSilentFormsDown(key)") && ms.includes("clearSilentFormsDown(key)") && ms.includes("silentFormsDown(key)") &&
     ms.includes('const order: MailProvider[] = settings.provider === "smtp" ? ["smtp", "silentforms"] : ["silentforms", "smtp"]'));
-  ok("server mail: හැම ලිපිනයම එක SilentForms submission එකකින් (key inbox) — fail නම් SMTP",
-    ms.includes("export async function sendViaSilentForms") &&
-    ms.includes("export async function loadMailSettings") && ms.includes("export async function saveMailSettings") &&
-    ms.includes("const r = await sendViaSilentForms(list, input.subject, input.text, settings.key);"));
+  ok("server mail: එක් එක් ලිපිනයට එහිම key එක — partial fallback යන්නේ fail වුණු ලිපිනවලට පමණයි",
+    ms.includes("export async function loadRecipientKeys") && ms.includes("export async function saveRecipientKey") &&
+    ms.includes("const key = keys.get(to)") && ms.includes("const pending = list.filter(email => !final.get(email)?.ok)") &&
+    ms.includes("sendViaSilentForms(pending, input.subject, input.text)") && !ms.includes("input.text, settings.key"));
   ok("Admin → Emails: 📨 SilentForms card (access key + configured badge) + 📮 SMTP card",
     emailsPage.includes("SilentForms — ප්‍රධාන email සේවාව") && emailsPage.includes("Access Key සුරකින්න") &&
     emailsPage.includes("mail/settings") && emailsPage.includes("Mail Server (SMTP)") &&
@@ -2317,6 +2317,17 @@ console.log("\n── 27) Mail delivery — SilentForms (ප්‍රධාන) 
   ok("ZIP report displays actual decimal MB + exact bytes", report.formatFileSize(36700000) === "36.7 MB (36,700,000 bytes)" && report.formatFileSize(NaN).startsWith("0 B"));
   const cron = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
   ok("Backup report uses final ZIP length, same bytes used in history/uploads", cron.includes("fileSize: built.zip.length") && cron.includes("size: built.zip.length"));
+}
+
+{
+  const page = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
+  const editor = readFileSync(join(root, "src/components/recipient-mail-key.tsx"), "utf8");
+  const server = readFileSync(join(root, "src/lib/mail-server.ts"), "utf8");
+  const route = readFileSync(join(root, "src/app/api/mail/settings/route.ts"), "utf8");
+  const backup = readFileSync(join(root, "src/lib/backup-report.ts"), "utf8");
+  ok("Recipient keys: every valid email row has its own editor, saved state + masked preview", page.includes("<RecipientMailKey") && editor.includes("Save key") && editor.includes("Test key") && editor.includes("Remove key") && editor.includes("KEY SAVED"));
+  ok("Recipient keys: authenticated API only, dedicated backup_secrets row per normalized address", route.includes("recipientKeys") && route.includes("saveRecipientKey(body.recipientEmail, body.recipientAccessKey)") && server.includes('RECIPIENT_KEY_PREFIX = "silentforms_recipient:"') && server.includes("RECIPIENT_KEY_PREFIX + email"));
+  ok("Backup reports: no key/localStorage or direct provider call in browser", !backup.includes("localStorage") && !backup.includes("resolveSilentFormsKey") && backup.includes('fetch("/api/mail/send"') && !page.includes('localStorage?.setItem("mpcs_silentforms_key"'));
 }
 
 console.log(`\n══════════════════════════════════════`);

@@ -623,7 +623,7 @@ export async function POST(req: NextRequest) {
   }
 
   const reportDetail = reportSent > 0
-    ? `Email report: provider accepted (${reportSent}, ${reportMethod}); inbox delivery unconfirmed${reportMethod === "silentforms" ? "; key owner + confirmed dashboard recipients only" : ""}${reportError ? `; Partial failure: ${reportError}` : ""}`
+    ? `Email report: provider accepted (${reportSent}, ${reportMethod}); inbox delivery unconfirmed${reportMethod === "silentforms" ? "; per-email saved keys" : ""}${reportError ? `; Partial failure: ${reportError}` : ""}`
     : `Email report: not accepted — ${reportError}`;
   await recordHistory({
     fileName,
