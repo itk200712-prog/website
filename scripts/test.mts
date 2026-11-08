@@ -2261,6 +2261,11 @@ console.log("\n── 27) Mail delivery — SilentForms (ප්‍රධාන) 
     sfSrc.includes("SILENTFORMS_DEFAULT_KEY") && sfSrc.includes("SILENTFORMS_KEY_SETTING") &&
     sfSrc.includes("MAIL_PROVIDER_SETTING") && sfSrc.includes("resolveSilentFormsKey") &&
     sfSrc.includes("bf4a0621f8f5f3d1360a356ad57a15dc623b96d52412b27e87cc6f75f64f189b"));
+  ok("SilentForms key save: backup_secrets එකේ තියෙන columns (key, value) විතරයි — 400 නෑ", 
+    ms.includes("async function upsertSecretRows") &&
+    ms.includes("rows.map((r) => ({ key: r.key, value: r.value }))") &&
+    !/updated_at\s*:/.test(ms) &&
+    ms.includes("save failed (${res.status})"));
   ok("SilentForms: 401/403/429 දෝෂ පැහැදිලිව හඳුනාගනී (key වැරදි / rate limit)",
     sfSrc.includes("res.status === 401") && sfSrc.includes("res.status === 403") && sfSrc.includes("res.status === 429"));
   ok("FormSubmit සම්පූර්ණයෙන්ම ඉවත් — කිසිම තැනක formsubmit.co නෑ", 

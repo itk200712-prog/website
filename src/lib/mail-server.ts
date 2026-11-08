@@ -55,6 +55,38 @@ function svcHeaders(extra: Record<string, string> = {}): Record<string, string> 
   return { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, ...extra };
 }
 
+/**
+ * 🗝 `backup_secrets` එකට rows save කරයි (merge on key).
+ *
+ * ⚠ ඒ table එකේ තියෙන්නේ **`key` සහ `value` විතරයි** — `updated_at` වගේ column එකක්
+ *   යැව්වොත් PostgREST එක `400 · column backup_secrets.updated_at does not exist` දෙනවා.
+ *   (ඒකයි “save failed (400)” කියලා ආවේ.) දැන් යවන්නේ ඒ columns දෙකම විතරයි, අසාර්ථක
+ *   වුණොත් Supabase එකේ ඇත්ත හේතුවම UI එකට එනවා.
+ */
+async function upsertSecretRows(rows: { key: string; value: string }[]): Promise<string | null> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return "server_not_configured";
+  if (!rows.length) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/backup_secrets`, {
+      method: "POST",
+      headers: svcHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify(rows.map((r) => ({ key: r.key, value: r.value }))),
+      cache: "no-store",
+    });
+    if (res.ok) return null;
+    let detail = "";
+    try {
+      const j = (await res.json()) as { message?: string; details?: string; hint?: string; code?: string };
+      detail = [j?.message, j?.code, j?.hint].filter(Boolean).join(" · ").slice(0, 240);
+    } catch {
+      detail = (await res.text().catch(() => "")).slice(0, 240);
+    }
+    return `save failed (${res.status})${detail ? ` — ${detail}` : ""}`;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
 /** `backup_secrets` එකෙන් SMTP සැකසුම කියවයි (service-role — browser එකට යන්නේ නෑ) */
 export async function loadSmtp(): Promise<SmtpConfig | null> {
   if (!SUPABASE_URL || !SERVICE_KEY) return null;
@@ -101,18 +133,7 @@ export async function saveSmtp(input: Partial<SmtpConfig> & { pass?: string }): 
   put(SMTP_KEYS.fromName, input.fromName?.trim());
   put(SMTP_KEYS.fromEmail, input.fromEmail?.trim());
   put(SMTP_KEYS.secure, typeof input.secure === "boolean" ? String(input.secure) : undefined);
-  if (!rows.length) return null;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/backup_secrets`, {
-      method: "POST",
-      headers: svcHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
-      body: JSON.stringify(rows),
-      cache: "no-store",
-    });
-    return res.ok ? null : `save failed (${res.status})`;
-  } catch (e) {
-    return (e as Error).message;
-  }
+  return upsertSecretRows(rows);
 }
 
 /**
@@ -158,27 +179,14 @@ export async function loadMailSettings(): Promise<{ key: string; provider: MailP
 
 /** SilentForms key / provider save කරයි */
 export async function saveMailSettings(input: { accessKey?: string; provider?: MailProvider }): Promise<string | null> {
-  if (!SUPABASE_URL || !SERVICE_KEY) return "server key නෑ";
-  const rows: { key: string; value: string; updated_at: string }[] = [];
-  const now = new Date().toISOString();
+  const rows: { key: string; value: string }[] = [];
   if (input.accessKey !== undefined) {
-    rows.push({ key: SILENTFORMS_KEY_SETTING, value: String(input.accessKey).trim(), updated_at: now });
+    rows.push({ key: SILENTFORMS_KEY_SETTING, value: String(input.accessKey).trim() });
   }
   if (input.provider !== undefined) {
-    rows.push({ key: MAIL_PROVIDER_SETTING, value: input.provider === "smtp" ? "smtp" : "silentforms", updated_at: now });
+    rows.push({ key: MAIL_PROVIDER_SETTING, value: input.provider === "smtp" ? "smtp" : "silentforms" });
   }
-  if (!rows.length) return null;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/backup_secrets`, {
-      method: "POST",
-      headers: svcHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
-      body: JSON.stringify(rows),
-      cache: "no-store",
-    });
-    return res.ok ? null : `save failed (${res.status})`;
-  } catch (e) {
-    return (e as Error).message;
-  }
+  return upsertSecretRows(rows);
 }
 
 /**
