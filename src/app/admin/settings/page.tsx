@@ -1,7 +1,7 @@
 "use client";
 
 // ============================================================================
-// System Settings — WhatsApp number, Years of Service, FormSubmit emails
+// System Settings — WhatsApp number, Years of Service, notification emails
 // ============================================================================
 
 import { useEffect, useState } from "react";

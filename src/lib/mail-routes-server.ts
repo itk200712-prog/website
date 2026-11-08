@@ -4,7 +4,7 @@
 //  Browser bundle එකට යන්නේ නෑ. `/api/mail/send` route එකේදී විතරයි පාවිච්චි වෙන්නේ:
 //    · ලිපින client එකෙන් එවන්නේ නෑ — server එකේම `system_settings` එකෙන් හොයනවා
 //      (ඒ නිසා route එක open relay එකක් වෙන්නේ නෑ)
-//    · SMTP down/not-configured නම් FormSubmit වලට යනවා (කලින් විදිහටම)
+//    · ප්‍රධාන සේවාව SilentForms; එය fail/not-configured නම් SMTP වලට යනවා
 // ============================================================================
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");

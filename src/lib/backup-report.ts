@@ -1,3 +1,4 @@
+import { postToSilentForms, resolveSilentFormsKey } from "@/lib/silentforms";
 // ============================================================================
 //  📧 AUTO BACKUP REPORT — සාර්ථක / අසාර්ථක වාර්තා email
 // ----------------------------------------------------------------------------
@@ -119,7 +120,7 @@ const STATUS_META: Record<BackupReportStatus, { emoji: string; si: string; en: s
 
 /**
  * යවන email එකේ subject + body එක හදයි.
- * (FormSubmit එකට plain text විදිහට යවයි — Sinhala අකුරු හැම email client එකකම පේනවා.)
+ * (SilentForms එකට plain text විදිහට යවයි — Sinhala අකුරු හැම email client එකකම පේනවා.)
  */
 export function buildBackupReportEmail(input: BackupReportInput): {
   subject: string;
@@ -172,7 +173,7 @@ export function buildBackupReportEmail(input: BackupReportInput): {
   lines.push("මේ email එක ඉබේම යැවුණේ auto-backup schedule එකෙන්.");
 
   const body = lines.join("\n");
-  // FormSubmit fields (subject line එකද අතින් තබයි)
+  // SilentForms fields (subject line එකද අතින් තබයි)
   const fields: Record<string, string> = {
     _subject: subject,
     _template: "table",
@@ -196,42 +197,37 @@ export function buildBackupReportEmail(input: BackupReportInput): {
   return { subject, body, fields };
 }
 
-/**
- * FormSubmit (AJAX) හරහා ලිපිනයකට email එක යවයි.
- * FormSubmit එක HTTP 200 දුන්නත් confirm නොකළ ලිපිනයකට success:"false" එයි —
- * ඒ නිසා JSON එකේ success එකත් බලයි.
- */
-export async function postFormSubmit(to: string, payload: Record<string, unknown>): Promise<boolean> {
-  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to.trim())) return false;
-  // 🔁 FormSubmit එක වහාම fail වුණොත් (522/timeout) තව එක වරක් උත්සාහ කරයි
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to.trim())}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(payload),
-      });
-      let sent = res.ok;
-      try {
-        const j = (await res.json()) as { success?: boolean | string } | null;
-        if (j && typeof j.success !== "undefined") sent = res.ok && (j.success === true || j.success === "true");
-      } catch {
-        /* JSON නෙවෙයි නම් HTTP status එකම ඇති */
-      }
-      if (sent) return true;
-    } catch {
-      /* ඊළඟ උත්සාහයට යයි */
-    }
-    if (attempt === 0) await new Promise((r) => setTimeout(r, 1200));
+/** 🗝 Admin → Emails එකේදී save කරපු key එක (localStorage cache) — නැත්නම් default */
+function cachedSilentFormsKey(): string {
+  try {
+    return resolveSilentFormsKey(globalThis.localStorage?.getItem("mpcs_silentforms_key"));
+  } catch {
+    return resolveSilentFormsKey(null);
   }
-  return false;
+}
+
+/**
+ * 📨 SilentForms (AJAX) හරහා වාර්තාව යවයි.
+ * SilentForms එකේ ලිපි එන්නේ access key එකට සම්බන්ධ inbox එකට —
+ * ඒ නිසා යවන්න ඕන ලිපින ටික email එකේ body එකේ සටහන් කරයි.
+ */
+export async function postSilentForms(to: string, payload: Record<string, unknown>, key?: string): Promise<boolean> {
+  const addr = String(to ?? "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(addr)) return false;
+  const fields: Record<string, string> = { "To (configured)": addr };
+  for (const [k, v] of Object.entries(payload)) {
+    if (v === undefined || v === null) continue;
+    fields[k] = Array.isArray(v) ? v.join(" | ") : String(v);
+  }
+  const r = await postToSilentForms(key ? resolveSilentFormsKey(key) : cachedSilentFormsKey(), fields);
+  return r.ok;
 }
 
 /**
 
  * හැම ලිපිනයකටම වාර්තාව යවයි — @returns යැවූ ගණන
- * @param sender optional — server එකේදී SMTP දෙන්න (`(to, subject, text) => Promise<number>`).
- *               නොදුන්නොත් කලින් විදිහටම FormSubmit.
+ * @param sender optional — server එකේදී SilentForms/SMTP දෙන්න (`(to, subject, text) => Promise<number>`).
+ *               නොදුන්නොත් browser එකේදී SilentForms (Admin → Emails එකේ save කරපු key එකෙන්).
  */
 export async function sendBackupReport(
   input: BackupReportInput,
@@ -245,7 +241,7 @@ export async function sendBackupReport(
   let ok = 0;
   await Promise.all(
     list.map(async (to) => {
-      if (await postFormSubmit(to, fields)) ok += 1;
+      if (await postSilentForms(to, fields)) ok += 1;
     })
   );
   return ok;

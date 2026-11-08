@@ -10,7 +10,7 @@
 //  · 🏢 Business Managers → එක් එක් අංශය වෙන වෙනම (අංශය + කළමනාකරු නම)
 //  · ☎️ Office Phones     → අධ්‍යක්ෂ මණ්ඩලයේ නම් + දුරකථන
 //  · 📞 Managers Phones   → කළමනාකරු නම් බොත්තම් → තෝරපු අයගේ දුරකථනය (Office Phones වගේමයි)
-//  · 📨 Contact Live Chat → නම + NIC + දුරකථන → FormSubmit email + inbox
+//  · 📨 Contact Live Chat → නම + NIC + දුරකථන → SilentForms email + inbox
 //                          → "Wait a few minutes, our officer will contact you"
 //  · 🧠 Smalltalk brain   → hi/hello/කොහොමද ආචාර, නම මතක තබා ගැනීම,
 //                          තේරුණේ නැති පණිවිඩ log කිරීම (src/lib/chatbot.ts)
@@ -2233,7 +2233,7 @@ export function LiveChat() {
       Message: message,
     };
     if (visitorEmail) {
-      // FormSubmit: "email" field එකටයි confirmation (autoresponse) එක යන්නේ
+      // 📨 SilentForms: "email" field එක Reply-To විදිහට යයි (inbox එකෙන් කෙලින්ම reply කරන්න)
       payload.email = visitorEmail;
       payload._replyto = visitorEmail;
       payload._autoresponse = si

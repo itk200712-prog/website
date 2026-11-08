@@ -58,12 +58,17 @@ git push -u origin main
 - 🗑️ delete කළ විට upload කළ image එක storage එකෙනුත් ඉවත් වේ
 - ↑ ↓ පිළිවෙල වෙනස් කරන්න · උපරිම images 10ක් · **Save Settings** ඔබන්න
 
-## පියවර 6 — FormSubmit සක්‍රීය කිරීම (Contact Form)
+## පියවර 6 — SilentForms සක්‍රීය කිරීම (site එකේ හැම email එකක්ම)
 
-1. `/contact` පිටුවෙන් පරීක්ෂණ පණිවුඩයක් යවන්න
-2. `itk200712@gmail.com` inbox එකට **"Activate Form"** ලිපියක් එයි — එහි ඇති link එක click කරන්න (එක වරක් පමණයි)
-3. ඉන් පසු හැම පණිවුඩයක්ම එම විද්‍යුත් තැපෑලට යයි
-4. විද්‍යුත් තැපෑල වෙනස් කරන්නේ **Admin → System Settings → Contact Form Submission Emails** එකෙන්
+1. **Admin → Emails** එකේ උඩම තියෙන **📨 SilentForms** card එකට යන්න
+2. **Access Key** එක ඒ කොටුවේ paste කරලා **Access Key සුරකින්න** ඔබන්න
+   (key එක server එකේ `backup_secrets` එකේ තමයි තියෙන්නේ — backup එකට ඉබේම එකතු වේ)
+3. **Test email එකක් යවන්න** ඔබලා ඔයාගේ inbox එකේ පණිවිඩය එනවද බලන්න
+4. ඉන් පසු Contact form · Membership · Live Chat · Messages · Business · Backup reports
+   **හැම email එකක්ම** SilentForms (`https://silentforms.com/api/submit`) හරහා යයි
+5. SilentForms down වුණොත් ඉබේම **SMTP** එකට මාරු වෙනවා — ඒකට පහළින් තියෙන
+   **📮 Mail Server (SMTP)** card එකේ Gmail App Password එක දාන්න
+6. FormSubmit (formsubmit.co) සම්පූර්ණයෙන්ම ඉවත් කරලා තියෙනවා — දැන් ඒක පාවිච්චි වෙන්නේ නෑ
 
 ## පියවර 7 — WhatsApp Password Recovery
 

@@ -160,41 +160,6 @@ export async function getRouteEmailsCached(route: MailRouteKey): Promise<string[
   return emails;
 }
 
-/**
- * හැම ලිපිනයකටම email යවයි.
- * @returns යැවූ ගණන
- */
-/**
- * 🚦 FormSubmit “down” මතක තබා ගැනීම — එක වරක් fail වුණාම ඊළඟ විනාඩි 15 තුළ
- * FormSubmit එක ආයේ උත්සාහ නොකර කෙලින්ම SMTP එකට යනවා (පරිශීලකයා තත්පර 20ක්
- * රැඳී ඉන්නේ නැති වෙන්න). සේවාව හොඳ වුණාම ඉබේම ආයේ FormSubmit එකට මාරු වේ.
- */
-const FS_DOWN_KEY = "mpcs_formsubmit_down_until";
-const FS_DOWN_FOR_MS = 15 * 60 * 1000;
-const FS_TIMEOUT_MS = 8_000;
-
-function formSubmitDown(): boolean {
-  try {
-    return Number(globalThis.localStorage?.getItem(FS_DOWN_KEY) ?? 0) > Date.now();
-  } catch {
-    return false;
-  }
-}
-function markFormSubmitDown(): void {
-  try {
-    globalThis.localStorage?.setItem(FS_DOWN_KEY, String(Date.now() + FS_DOWN_FOR_MS));
-  } catch {
-    /* private mode — මතක නොතිබ්බත් කමක් නෑ */
-  }
-}
-function clearFormSubmitDown(): void {
-  try {
-    globalThis.localStorage?.removeItem(FS_DOWN_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
 /** 🌐 server route එකෙන් යවයි (SMTP). `only` දුන්නොත් ඒ ලිපින වලට විතරයි. */
 async function sendViaServerRoute(
   route: MailRouteKey,
@@ -226,93 +191,15 @@ async function sendViaServerRoute(
   }
 }
 
-/** FormSubmit එකෙන් ලිපිනයකට යවයි — 8 තත්පරයක් ඇතුළත පිළිතුරක් නැත්නම් අත්හැරෙයි */
-async function postFormSubmitOnce(to: string, payload: Record<string, unknown>): Promise<boolean> {
-  try {
-    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(FS_TIMEOUT_MS),
-    });
-    // FormSubmit එක HTTP 200 දුන්නත් confirm නොකළ ලිපිනයකට success:"false" එයි —
-    // ඒක "යැවුණා" කියලා ගණන් ගන්නේ නෑ
-    let sent = res.ok;
-    try {
-      const j = (await res.json()) as { success?: boolean | string } | null;
-      if (j && typeof j.success !== "undefined") sent = res.ok && (j.success === true || j.success === "true");
-    } catch {
-      /* JSON නෙවෙයි නම් HTTP status එකම ඇති */
-    }
-    return sent;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * 📨 route එකක ලිපින වලට email යවයි.
  *
- *  ① **FormSubmit** (කලින් විදිහටම — contact form submit එක) උත්සාහ කරයි
- *  ② ඒක වැඩ නොකළොත් (522 / timeout / success:false) **ඉබේම SMTP එකට මාරු වේ**
- *     — යැවීමට ඉතුරු වුණු ලිපින වලට විතරයි (දෙපාරක් යන්නේ නෑ)
- *  ③ FormSubmit down බව විනාඩි 15ක් මතක තබා ගනී — ඒ අතර කෙලින්ම SMTP
+ * ⚠ හැම යැවීමක්ම **server එකෙන්** (`/api/mail/send`) — SilentForms **access key එක
+ *   browser එකට කවදාවත් එන්නේ නෑ**. පිළිවෙළ server එකේම තීරණය වේ:
+ *   ① SilentForms (key එකෙන්) → ② වැඩ නොකළොත් SMTP → ③ දෙකම නෑ නම් form එක Admin → Messages එකට save වේ.
  */
 export async function sendToRoute(route: MailRouteKey, payload: Record<string, unknown>): Promise<number> {
   const list = await getRouteEmails(route);
   if (!list.length) return 0;
-
-  let ok = 0;
-  /** FormSubmit එකෙන් යැවීමට ඉතුරු වුණු ලිපින */
-  const remaining: string[] = [];
-
-  if (formSubmitDown()) {
-    remaining.push(...list); // ⏭ FormSubmit දැනටමත් down — කෙලින්ම SMTP
-  } else {
-    const results = await Promise.all(
-      list.map(async (to, i) => {
-        const body: Record<string, unknown> = { ...payload };
-        // Visitor confirmation (_autoresponse) එක පළමු ලිපිනයෙන් පමණයි
-        if (i > 0) delete body._autoresponse;
-        const sent = await postFormSubmitOnce(to, body);
-        return { to, sent };
-      })
-    );
-    for (const r of results) {
-      if (r.sent) {
-        ok += 1;
-        clearFormSubmitDown();
-      } else {
-        remaining.push(r.to);
-      }
-    }
-    if (ok === 0 && remaining.length) markFormSubmitDown(); // 👉 auto-switch
-  }
-
-  // ② FormSubmit එකෙන් නොගිය ලිපින → SMTP (server route)
-  if (remaining.length) {
-    const viaSmtp = await sendViaServerRoute(route, payload, remaining);
-    ok += viaSmtp;
-  }
-  return ok;
-}
-
-/** FormSubmit activation mail — ලිපිනයකට */
-export async function sendActivationMail(email: string): Promise<boolean> {
-  try {
-    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(email)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        _subject: "MPCS — Activate this email address",
-        Name: "Panduwasnuwara MPCS",
-        Message:
-          "This is the activation request for the society notification list. Please confirm this address to start receiving notifications.",
-        Source: "Admin → Emails (activation)",
-      }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  return sendViaServerRoute(route, payload);
 }

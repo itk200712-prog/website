@@ -1,4 +1,4 @@
-// Contact page — HQ card + inquiry form (FormSubmit → admin settings email)
+// Contact page — HQ card + inquiry form (SilentForms → admin settings email)
 
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";

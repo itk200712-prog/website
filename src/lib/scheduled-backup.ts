@@ -200,27 +200,37 @@ export type ScheduleSlot = {
   cutoffMs: number;
 };
 
-/** cutoff (save වේලාව) ට සමාන හෝ ඊට පස්සේ එන පළවෙනි slot එක */
-function firstSlotFrom(anchorMs: number, step: number, cutoffMs: number): number {
-  if (cutoffMs <= anchorMs) return anchorMs;
-  const steps = Math.ceil((cutoffMs - anchorMs) / step);
-  return anchorMs + steps * step;
+/**
+ * 🕐 LK වේලාවෙන් **ඊළඟ පැයේ මුල** (HH:00:00) — හරියටම පැය මායිමේ නම් ඊට පැයක් පස්සේ.
+ *
+ * මේකයි auto-backup එකේ “anchor” එක: settings Save කරපු වේලාවෙන් ඊළඟ පැයේ මුල.
+ * උදා: රාත්‍රී 21:10ට Save → 22:00:00 (LK). ඊට පස්සේ හැම `intervalHours` පාසාම.
+ *
+ * (කලින් anchor එක හැමදාම **රෑ 12:00** වුණා — ඒ නිසා රෑ 10ට save කළත් backup එක
+ *  පහුවදා රෑ 12ට තමයි දුවන්නේ; ඒකයි “වැරදි වේලාවක පටන් ගත්තා” කියලා පෙනුණේ.)
+ */
+function nextLkHourStartMs(ms: number): number {
+  const lk = ms + LK_OFFSET_MIN * 60_000;
+  const nextHour = Math.floor(lk / HOUR_MS) * HOUR_MS + HOUR_MS;
+  return nextHour - LK_OFFSET_MIN * 60_000;
 }
 
 /**
- * anchor (රෑ 12:00) ඉඳන් intervalHours පාසා වැටෙන slots.
- * · lastSlotMs = cutoff (= settings save කරපු වේලාව) ට පස්සේ වැටුණු ළඟම slot
+ * 🕐 Save කරපු වේලාවේ ඉඳන් ඊළඟ පැයේ මුල පටන්, `intervalHours` පාසා වැටෙන slots.
+ * · lastSlotMs = දැන් වේලාවට පෙර වැටුණු ළඟම slot (ඒක තාම කරලා නැත්නම් backup එක අදාළයි)
  * · nextSlotMs = ඊළඟට යා යුතු slot
+ *
+ * ⚠ Anchor එක දැන් **save-time** (ඊළඟ පැය) — රෑ 12 නොවේ. `savedAt` නැති පරණ
+ *   settings වලට දැන් වේලාවම ගනී (එතකොට පරණ slot එකක් ඉබේම දිව යන්නේ නෑ).
  */
 export function scheduleSlots(s: BackupScheduleSettings, now: Date = new Date()): ScheduleSlot {
-  const anchorMs = s.anchorDate ? lkMidnightMs(s.anchorDate) : null;
-  if (anchorMs == null) return { lastSlotMs: null, nextSlotMs: null, anchorMs: null, cutoffMs: 0 };
-
   const step = normalizeScheduleHours(s.intervalHours) * HOUR_MS;
   const nowMs = now.getTime();
   const savedMs = s.savedAt ? Date.parse(s.savedAt) : NaN;
-  const cutoffMs = Number.isFinite(savedMs) ? savedMs : anchorMs;
-  const firstMs = firstSlotFrom(anchorMs, step, cutoffMs);
+  const validSaved = Number.isFinite(savedMs) && savedMs > 0;
+  const cutoffMs = validSaved ? savedMs : nowMs;
+  const anchorMs = nextLkHourStartMs(cutoffMs); // ⏰ ඊළඟ පැයේ මුල
+  const firstMs = anchorMs;
 
   if (nowMs < firstMs) {
     return { lastSlotMs: null, nextSlotMs: firstMs, anchorMs, cutoffMs };
@@ -254,7 +264,7 @@ export function backupDueDecision(
 
   if (!s.enabled) return { due: false, reason: "disabled", slotAt, nextAt };
   if (!s.toSupabase && !s.toMega) return { due: false, reason: "no_destination", slotAt, nextAt };
-  if (!s.anchorDate || lastSlotMs == null) return { due: false, reason: "not_started", slotAt, nextAt };
+  if (lastSlotMs == null) return { due: false, reason: "not_started", slotAt, nextAt };
 
   const lastMs = lastSuccessAt ? Date.parse(lastSuccessAt) : NaN;
   if (Number.isFinite(lastMs) && lastMs >= lastSlotMs) {
@@ -268,6 +278,20 @@ export function nextRunLabel(s: BackupScheduleSettings, now: Date = new Date()):
   const { lastSlotMs, nextSlotMs } = scheduleSlots(s, now);
   if (lastSlotMs == null) return nextSlotMs != null ? formatLk(nextSlotMs) : "—";
   return formatLk(nextSlotMs ?? lastSlotMs);
+}
+
+/** 🕐 ඉදිරියේ යන වේලාවන් (LK "HH:MM") — Admin card එකේ පෙන්වීමට */
+export function upcomingRunTimes(s: BackupScheduleSettings, now: Date = new Date(), count = 6): string[] {
+  const { nextSlotMs } = scheduleSlots(s, now);
+  if (nextSlotMs == null) return [];
+  const step = normalizeScheduleHours(s.intervalHours) * HOUR_MS;
+  const out: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const t = new Date(nextSlotMs + i * step);
+    const lk = new Date(t.getTime() + LK_OFFSET_MIN * 60_000);
+    out.push(`${String(lk.getUTCHours()).padStart(2, "0")}:${String(lk.getUTCMinutes()).padStart(2, "0")}`);
+  }
+  return out;
 }
 
 /**

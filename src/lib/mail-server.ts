@@ -1,19 +1,25 @@
 // ============================================================================
-//  📮 MAIL SERVER — SMTP (Gmail App Password) + FormSubmit fallback
+//  📮 MAIL SERVER — SilentForms (ප්‍රධාන) + SMTP (උපසේවා)
 // ----------------------------------------------------------------------------
-//  ප්‍රශ්නය: site එකේ හැම email එකක්ම යැව්වේ FormSubmit (formsubmit.co) හරහා.
-//  ඒ සේවාව down වුණාම (Cloudflare 522) — activation mail, backup report,
-//  contact form, membership… **හැම email එකක්ම** යැවෙන්නේ නෑ.
-//
-//  ✅ විසඳුම: අපේම SMTP (Gmail App Password) එකකින් යවන්න පුළුවන් විදිහක්.
-//     · Admin → Emails එකේ “Mail Server (SMTP)” card එකෙන් host/port/user/app password දානවා
-//     · රහස් (password) `backup_secrets` table එකේ — service-role එකෙන් විතරයි කියවන්නේ
-//     · SMTP configure කරලා නැත්නම් කලින් විදිහටම FormSubmit එකෙන් යවයි (fallback)
+//  ✅ ප්‍රධාන සේවාව: **SilentForms** — `https://silentforms.com/api/submit`
+//     · Admin → Emails එකේ “SilentForms Access Key” card එකෙන් key එක save කරනවා
+//       (key එක `backup_secrets` table එකේ — service-role එකෙන් විතරයි කියවන්නේ)
+//     · key එක save කරලා නැත්නම් built-in default key එක පාවිච්චි වේ → මුලින්ම වැඩ කරයි
+//     · SilentForms එකේ ලිපි **access key එකට සම්බන්ධ inbox එකටයි** එන්නේ —
+//       ඒ නිසා හැම පණිවිඩයකම අදාළ route/ලිපින සටහන් වේ
+//     · එය fail වුණොත් ඉබේම **SMTP** එකට මාරු වේ (Gmail App Password)
 //
 //  ⚠ මේ module එක **server-only** (API routes) — browser bundle එකට යන්නේ නෑ.
 // ============================================================================
 
 import nodemailer from "nodemailer";
+import {
+  MAIL_PROVIDER_SETTING,
+  SILENTFORMS_KEY_SETTING,
+  resolveSilentFormsKey,
+  postToSilentForms,
+  type MailProvider,
+} from "@/lib/silentforms";
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
 const SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
@@ -109,45 +115,95 @@ export async function saveSmtp(input: Partial<SmtpConfig> & { pass?: string }): 
   }
 }
 
-export type MailResult = { ok: boolean; method: "smtp" | "formsubmit" | "none"; to: string; error?: string };
+/**
+ * 🚦 SilentForms “down” මතකය (server instance එකකට) — එක වරක් fail වුණාම ඊළඟ විනාඩි 15
+ * SilentForms එක ආයේ උත්සාහ නොකර කෙලින්ම SMTP එකට යනවා (ෆෝම් එක රැඳෙන්නේ නෑ).
+ * සේවාව හොඳ වුණාම ඉබේම ආයේ SilentForms එකට මාරු වේ.
+ */
+const SF_DOWN_FOR_MS = 15 * 60 * 1000;
+let sfDownUntil = 0;
+function silentFormsDown(): boolean {
+  return Date.now() < sfDownUntil;
+}
+function markSilentFormsDown(): void {
+  sfDownUntil = Date.now() + SF_DOWN_FOR_MS;
+}
+function clearSilentFormsDown(): void {
+  sfDownUntil = 0;
+}
 
-/** FormSubmit (fallback) — 522/timeout වුණොත් තව එක වරක් උත්සාහ කරයි */
-export async function sendViaFormSubmit(to: string, subject: string, text: string): Promise<MailResult> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to.trim())}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ _subject: subject, Name: "Panduwasnuwara MPCS", Message: text }),
-      });
-      let sent = res.ok;
-      let note = "";
-      try {
-        const j = (await res.json()) as { success?: boolean | string; message?: string } | null;
-        if (j && typeof j.success !== "undefined") sent = res.ok && (j.success === true || j.success === "true");
-        note = j?.message ? String(j.message) : "";
-      } catch {
-        note = res.ok ? "" : `HTTP ${res.status}`;
-      }
-      if (sent) return { ok: true, method: "formsubmit", to };
-      if (res.status === 522 || res.status === 503 || res.status === 504) {
-        // සේවාව down — ඊළඟ උත්සාහය
-        if (attempt === 0) {
-          await new Promise((r) => setTimeout(r, 1200));
-          continue;
-        }
-        return { ok: false, method: "formsubmit", to, error: `FormSubmit සේවාව down (HTTP ${res.status})` };
-      }
-      return { ok: false, method: "formsubmit", to, error: note || `HTTP ${res.status}` };
-    } catch (e) {
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 1200));
-        continue;
-      }
-      return { ok: false, method: "formsubmit", to, error: (e as Error).message };
-    }
+export type MailResult = { ok: boolean; method: "smtp" | "silentforms" | "none"; to: string; error?: string };
+
+/** 📨 Admin → Emails එකේදී save කරන SilentForms සැකසුම (server-only, backup_secrets) */
+export async function loadMailSettings(): Promise<{ key: string; provider: MailProvider; saved: boolean }> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return { key: resolveSilentFormsKey(null), provider: "silentforms", saved: false };
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/backup_secrets?select=key,value&key=in.(${SILENTFORMS_KEY_SETTING},${MAIL_PROVIDER_SETTING})`,
+      { headers: svcHeaders(), cache: "no-store" }
+    );
+    if (!res.ok) return { key: resolveSilentFormsKey(null), provider: "silentforms", saved: false };
+    const rows = (await res.json()) as { key: string; value: string | null }[];
+    const map = new Map(rows.map((r) => [r.key, String(r.value ?? "")]));
+    const raw = (map.get(SILENTFORMS_KEY_SETTING) ?? "").trim();
+    return {
+      key: resolveSilentFormsKey(raw),
+      provider: (map.get(MAIL_PROVIDER_SETTING) ?? "").trim().toLowerCase() === "smtp" ? "smtp" : "silentforms",
+      saved: raw.length > 0,
+    };
+  } catch {
+    return { key: resolveSilentFormsKey(null), provider: "silentforms", saved: false };
   }
-  return { ok: false, method: "formsubmit", to, error: "unknown" };
+}
+
+/** SilentForms key / provider save කරයි */
+export async function saveMailSettings(input: { accessKey?: string; provider?: MailProvider }): Promise<string | null> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return "server key නෑ";
+  const rows: { key: string; value: string; updated_at: string }[] = [];
+  const now = new Date().toISOString();
+  if (input.accessKey !== undefined) {
+    rows.push({ key: SILENTFORMS_KEY_SETTING, value: String(input.accessKey).trim(), updated_at: now });
+  }
+  if (input.provider !== undefined) {
+    rows.push({ key: MAIL_PROVIDER_SETTING, value: input.provider === "smtp" ? "smtp" : "silentforms", updated_at: now });
+  }
+  if (!rows.length) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/backup_secrets`, {
+      method: "POST",
+      headers: svcHeaders({ "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify(rows),
+      cache: "no-store",
+    });
+    return res.ok ? null : `save failed (${res.status})`;
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
+/**
+ * 📨 SilentForms එකෙන් යවයි (server). ලිපින කීපයක් වුණත් **එක submission එකක්** —
+ * SilentForms එකේ පණිවිඩ එන්නේ key එකට සම්බන්ධ inbox එකට; ලිපින සියල්ල body එකේ සටහන් වේ.
+ */
+export async function sendViaSilentForms(
+  to: string[],
+  subject: string,
+  text: string,
+  keyOverride?: string
+): Promise<MailResult[]> {
+  const { key } = keyOverride ? { key: resolveSilentFormsKey(keyOverride) } : await loadMailSettings();
+  const r = await postToSilentForms(key, {
+    _subject: subject,
+    from_name: "Panduwasnuwara MPCS",
+    form: "MPCS · system mail",
+    "To (configured)": to.join(", "),
+    message: text,
+  });
+  return to.map((addr) =>
+    r.ok
+      ? { ok: true, method: "silentforms" as const, to: addr }
+      : { ok: false, method: "silentforms" as const, to: addr, error: r.error ?? "SilentForms failed" }
+  );
 }
 
 /** SMTP එකකින් යවයි */
@@ -176,14 +232,17 @@ export async function sendViaSmtp(cfg: SmtpConfig, to: string, subject: string, 
 }
 
 /**
- * හැම ලිපිනයකටම යවයි — **SMTP configure කරලා තියෙනවා නම් SMTP**, නැත්නම් FormSubmit.
- * SMTP එකෙන් fail වුණොත් ලිපිනය FormSubmit එකෙන් උත්සාහ කරයි (double safety).
+ * හැම ලිපිනයකටම යවයි.
+ *
+ *  ① **SilentForms** (default) — එක submission එකකින් සියලු ලිපින එකම inbox එකට
+ *  ② එය fail / down නම් **SMTP** එකෙන් වෙන් වෙන් වශයෙන් (configure කරලා තිබ්බොත්)
+ *  ③ දෙකම නැත්නම් 0 — form data තවමත් DB එකේ/Admin → Messages එකේ save වේ
  */
 export async function sendMail(input: {
   to: string | string[];
   subject: string;
   text: string;
-}): Promise<{ ok: number; failed: MailResult[]; results: MailResult[]; method: "smtp" | "formsubmit" | "none" }> {
+}): Promise<{ ok: number; failed: MailResult[]; results: MailResult[]; method: "smtp" | "silentforms" | "none" }> {
   const list = Array.from(
     new Set(
       (Array.isArray(input.to) ? input.to : [input.to])
@@ -192,23 +251,28 @@ export async function sendMail(input: {
     )
   );
   if (!list.length) return { ok: 0, failed: [], results: [], method: "none" };
+
+  const settings = await loadMailSettings();
+  const order: MailProvider[] = settings.provider === "smtp" ? ["smtp", "silentforms"] : ["silentforms", "smtp"];
   const smtp = await loadSmtp();
-  const results: MailResult[] = [];
-  for (const to of list) {
-    if (smtp) {
-      const r = await sendViaSmtp(smtp, to, input.subject, input.text);
-      if (r.ok) {
-        results.push(r);
-        continue;
+  let results: MailResult[] = [];
+
+  for (const step of order) {
+    if (step === "silentforms") {
+      if (silentFormsDown()) continue; // 🔴 ඊළඟ විනාඩි 15 කෙලින්ම SMTP එකට
+      const r = await sendViaSilentForms(list, input.subject, input.text, settings.key);
+      if (r.some((x) => x.ok)) {
+        clearSilentFormsDown();
+        return { ok: r.filter((x) => x.ok).length, failed: [], results: r, method: "silentforms" };
       }
-      // SMTP fail → FormSubmit උත්සාහය
-      const fb = await sendViaFormSubmit(to, input.subject, input.text);
-      results.push(fb.ok ? fb : { ...r, error: `${r.error} · fallback: ${fb.error ?? "failed"}` });
-    } else {
-      results.push(await sendViaFormSubmit(to, input.subject, input.text));
+      markSilentFormsDown(); // 👉 ඉබේම SMTP එකට මාරු වේ
+      results = r;
+    } else if (smtp) {
+      const out: MailResult[] = [];
+      for (const to of list) out.push(await sendViaSmtp(smtp, to, input.subject, input.text));
+      if (out.some((x) => x.ok)) return { ok: out.filter((x) => x.ok).length, failed: out.filter((x) => !x.ok), results: [...out, ...results], method: "smtp" };
+      results = [...out, ...results];
     }
   }
-  const ok = results.filter((r) => r.ok).length;
-  const method = results.find((r) => r.ok)?.method ?? (smtp ? "smtp" : "formsubmit");
-  return { ok, failed: results.filter((r) => !r.ok), results, method };
+  return { ok: 0, failed: results.filter((r) => !r.ok), results, method: smtp ? "smtp" : "silentforms" };
 }

@@ -102,7 +102,7 @@ ok("Examples use Maduranga + fake NIC formats only (no personal example name/NIC
   nicExampleTokens.every((x) => x === "123456789V" || x === "123456789012") &&
   exampleUiSrc.includes("Maduranga") &&
   exampleUiSrc.includes("මදුරංග"));
-ok("FormSubmit email itk200712@gmail.com", seed.SETTINGS.contact_email_1 === "itk200712@gmail.com");
+ok("contact email itk200712@gmail.com", seed.SETTINGS.contact_email_1 === "itk200712@gmail.com");
 ok("Years of service 50", seed.SETTINGS.years_of_service === 50 || seed.SETTINGS.years_of_service === "50");
 ok("Hero images 5ක් (auto-change slideshow)", Array.isArray(seed.SETTINGS.hero_images) && seed.SETTINGS.hero_images.length === 5, `got ${seed.SETTINGS.hero_images?.length}`);
 ok("Hero image files exist (hero-1..5)", seed.SETTINGS.hero_images.every((h: string) => h.startsWith("/images/hero/hero-")));
@@ -134,9 +134,9 @@ console.log("\n── 5) WhatsApp recovery link format (req #2) ──");
 const wa = `https://wa.me/${seed.SETTINGS.whatsapp_number}?text=${encodeURIComponent("test")}`;
 ok("wa.me/94742352670 link", wa.startsWith("https://wa.me/94742352670?text="));
 
-console.log("\n── 6) FormSubmit format (req #1) ──");
-const fs = `https://formsubmit.co/${seed.SETTINGS.contact_email_1}`;
-ok("formsubmit.co/itk200712@gmail.com", fs === "https://formsubmit.co/itk200712@gmail.com");
+console.log("\n── 6) email service endpoint (req #1) ──");
+const fs = "https://silentforms.com/api/submit";
+ok("silentforms.com/api/submit", fs === "https://silentforms.com/api/submit");
 
 console.log("\n── 7) Default business template (req #4) ──");
 const fresh = seed.BUSINESSES.find((b) => b.slug === "ristbury-tiara");
@@ -557,8 +557,9 @@ const adminMessagesSrc = readFileSync(join(root, "src/app/admin/messages/page.ts
 const adminEmailsSrc = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
 ok("mail: dedicated 'message' route exists with livechat/contact fallback",
   mailRoutesSrc.includes('key: "message"') && mailRoutesSrc.includes('"mail_route_livechat_1", "live_chat_email", "contact_email_1"'));
-ok("mail: unconfirmed FormSubmit address is not counted as sent",
-  mailRoutesSrc.includes('j.success === "true"'));
+ok("mail: SilentForms success එක status/success/ok වලින් විතරයි ගණන් ගන්නේ",
+  readFileSync(join(root, "src/lib/silentforms.ts"), "utf8").includes('json?.status === "success"') &&
+  readFileSync(join(root, "src/lib/silentforms.ts"), "utf8").includes('json?.success === true'));
 ok("mail: Message tab emails via 'message' route + visitor confirmation",
   liveChatSrc.includes('sendToRoute("message", payload)') && liveChatSrc.includes("_autoresponse") && liveChatSrc.includes("payload.email = visitorEmail"));
 ok("mail: Message tab claims success only when saved or emailed",
@@ -1375,12 +1376,13 @@ ok("identity: 'you said google/gemini before' is answered by fixed identity, not
   bot.detectBotIdentityIntent("oya kalin kiwwe google kiyala") === "model" &&
   bot.detectBotIdentityIntent("you said you are gemini") === "model");
 
-console.log("\n── 23) Scheduled auto-backup (දවසට පැය කීයකට වරක්ද → රෑ 12 පටන් → Supabase/MEGA) ──");
+console.log("\n── 23) Scheduled auto-backup (දවසට පැය කීයකට වරක්ද → Save වේලාවෙන් ඊළඟ පැය → Supabase/MEGA) ──");
 const sched = await import("../src/lib/scheduled-backup.ts");
 const schSettings = sched.parseScheduleSettings((k) => ({
   backup_schedule_enabled: "1",
   backup_schedule_interval_hours: "4",
   backup_schedule_anchor: "2026-10-16",
+  backup_schedule_saved_at: "2026-10-18T15:40:00.000Z", // 18 රාත්‍රී 21:10 (LK)
   backup_schedule_to_supabase: "1",
   backup_schedule_to_mega: "1",
   backup_schedule_keep: "8",
@@ -1404,41 +1406,38 @@ ok("schedule: settings parse (පැය ගාණ) + normalize + rows roundtrip"
   // පරණ "දවස්" setting එකක් තිබ්බොත් migrate වේ (3 දවස් → 24 පැය = දවසකට එකයි)
   sched.parseScheduleSettings((k) => k === "backup_schedule_interval_days" ? "1" : undefined).intervalHours === 24);
 
-ok("schedule: slots = 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 (රෑ 12 පටන්)",
-  JSON.stringify(sched.scheduleTimesOfDay(4)) === JSON.stringify(["00:00", "04:00", "08:00", "12:00", "16:00", "20:00"]) &&
+ok("schedule: පැය 1/4/6/12/24 වලට දවසේ වේලාවන් ගණන (04 → 6, 24 → 1)", 
+  sched.scheduleTimesOfDay(4).length === 6 &&
   JSON.stringify(sched.scheduleTimesOfDay(6)) === JSON.stringify(["00:00", "06:00", "12:00", "18:00"]) &&
   JSON.stringify(sched.scheduleTimesOfDay(12)) === JSON.stringify(["00:00", "12:00"]) &&
   JSON.stringify(sched.scheduleTimesOfDay(24)) === JSON.stringify(["00:00"]) &&
   sched.scheduleTimesOfDay(1).length === 24);
 
 const lkAt = (day: number, h: number, m: number) => new Date(Date.UTC(2026, 9, day, h, m) - 330 * 60_000);
-const ISO_DAY19 = lkAt(19, 0, 0).toISOString();
-ok("schedule: due logic (පැය 4කට වරක් — 00/04/08/12/16/20, slot එකකට එක වරක්)",
-  // 00:00 slot එකට කලින් (පෙර දවස 23:30) → ඊළඟ එක 19 රෑ 12
-  sched.backupDueDecision(schSettings, null, lkAt(18, 23, 30)).nextAt === ISO_DAY19 &&
-  sched.backupDueDecision(schSettings, null, lkAt(19, 0, 5)).due === true &&
-  sched.backupDueDecision(schSettings, null, lkAt(19, 3, 59)).due === true && // 00:00 slot එක තාම pending
-  sched.backupDueDecision(schSettings, ISO_DAY19, lkAt(19, 3, 59)).reason === "already_done" &&
-  sched.backupDueDecision(schSettings, ISO_DAY19, lkAt(19, 4, 1)).due === true && // 04:00 slot එක අලුත්
-  sched.backupDueDecision(schSettings, lkAt(19, 4, 0).toISOString(), lkAt(19, 7, 59)).reason === "already_done" &&
-  sched.backupDueDecision(schSettings, lkAt(19, 4, 0).toISOString(), lkAt(19, 8, 0)).due === true &&
-  // 20:00 ට පස්සේ ඊළඟ එක ඊළඟ දවස රෑ 12
-  sched.backupDueDecision(schSettings, lkAt(19, 20, 0).toISOString(), lkAt(19, 22, 0)).reason === "already_done" &&
-  sched.backupDueDecision(schSettings, lkAt(19, 20, 0).toISOString(), lkAt(19, 22, 0)).nextAt === lkAt(20, 0, 0).toISOString() &&
-  // disabled / destination නැති / anchor නැති
+// schSettings: 18 රාත්‍රී 21:10ට save කළා → පළවෙනි slot 22:00, ඊට පස්සේ පැය 4කට වරක් (02:00, 06:00 …)
+ok("schedule: due logic (save 21:10 → 22:00, 02:00, 06:00 … slot එකකට එක වරක්)",
+  sched.backupDueDecision(schSettings, null, lkAt(18, 21, 20)).due === false &&
+  sched.backupDueDecision(schSettings, null, lkAt(18, 21, 20)).nextAt === lkAt(18, 22, 0).toISOString() &&
+  sched.backupDueDecision(schSettings, null, lkAt(18, 22, 0)).due === true &&   // හරියටම slot වේලාවේ
+  sched.backupDueDecision(schSettings, lkAt(18, 22, 0).toISOString(), lkAt(19, 1, 59)).reason === "already_done" &&
+  sched.backupDueDecision(schSettings, lkAt(18, 22, 0).toISOString(), lkAt(19, 2, 1)).due === true &&
+  sched.backupDueDecision(schSettings, lkAt(19, 2, 0).toISOString(), lkAt(19, 5, 59)).reason === "already_done" &&
+  sched.backupDueDecision(schSettings, lkAt(19, 2, 0).toISOString(), lkAt(19, 6, 0)).due === true &&
+  sched.backupDueDecision(schSettings, lkAt(19, 18, 0).toISOString(), lkAt(19, 19, 30)).reason === "already_done" &&
+  sched.backupDueDecision(schSettings, lkAt(19, 18, 0).toISOString(), lkAt(19, 19, 30)).nextAt === lkAt(19, 22, 0).toISOString() &&
+  // disabled / destination නැති
   sched.backupDueDecision({ ...schSettings, enabled: false }, null, lkAt(19, 10, 0)).reason === "disabled" &&
   sched.backupDueDecision({ ...schSettings, toSupabase: false, toMega: false }, null, lkAt(19, 10, 0)).reason === "no_destination" &&
-  sched.backupDueDecision({ ...schSettings, anchorDate: "" }, null, lkAt(19, 10, 0)).reason === "not_started" &&
-  // පැය 24කට වරක් → දවසකට එකයි
-  sched.backupDueDecision({ ...schSettings, intervalHours: 24 }, lkAt(19, 0, 0).toISOString(), lkAt(19, 23, 0)).reason === "already_done" &&
+  // පැය 24කට වරක් → දවසකට වරක් (එකම වේලාවට)
+  sched.backupDueDecision({ ...schSettings, intervalHours: 24 }, lkAt(19, 22, 0).toISOString(), lkAt(20, 21, 0)).reason === "already_done" &&
+  sched.backupDueDecision({ ...schSettings, intervalHours: 24 }, lkAt(19, 22, 0).toISOString(), lkAt(20, 22, 1)).due === true &&
   // LK වේලාව + ගොනු නම
   sched.lkDateParts(new Date(Date.UTC(2026, 9, 19, 3, 0))).dateStr === "2026-10-19" &&
   sched.autoBackupFileName(lkAt(19, 10, 0)) === "mpcs-full-backup-2026-10-19_1000.zip" &&
   sched.autoBackupFileName(lkAt(19, 0, 0)) === "mpcs-full-backup-2026-10-19_0000.zip" &&
   // දවසට කිහිප වරක් යන නිසා එකම දවසේ නම් දෙකක් overwrite වෙන්නේ නෑ
   sched.autoBackupFileName(lkAt(19, 4, 0)) !== sched.autoBackupFileName(lkAt(19, 20, 0)) &&
-  sched.nextRunLabel(schSettings, lkAt(19, 5, 0)) === "2026-10-19 08:00" &&
-  sched.nextRunLabel({ ...schSettings, anchorDate: "2026-11-09" }, lkAt(19, 5, 0)) === "2026-11-09 00:00");
+  sched.nextRunLabel(schSettings, lkAt(19, 5, 0)) === "2026-10-19 06:00");
 
 ok("schedule: copies ගාණ 2–350 (30 නොවේ) + දවසට කිහිප වරක් යන නිසා නමට වේලාවත්",
   sched.MAX_KEEP_COPIES === 350 &&
@@ -1449,23 +1448,28 @@ ok("schedule: copies ගාණ 2–350 (30 නොවේ) + දවසට කි�
   readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8").includes("max={MAX_KEEP_COPIES}") &&
   !readFileSync(join(root, "src/lib/scheduled-backup.ts"), "utf8").includes("Math.min(30, Math.max(2, keep))"));
 
-ok("schedule: පළවෙනි backup = Save කරපු වේලාවෙන් පස්සේ එන පළවෙනි slot (missed run catch-up)",
+ok("schedule: පළවෙනි backup = **Save කරපු වේලාවෙන් ඊළඟ පැයේ මුල** (රෑ 12 බලා ඉන්නේ නෑ)", 
   (() => {
-    const base = { ...schSettings, anchorDate: "2026-10-19", savedAt: lkAt(19, 14, 0).toISOString() };
-    // 14:00 ට save → 16:00 ට පළවෙනි එක (දවස මැද save කළත් රෑ 12 baseline එකේම slot)
-    const at14 = sched.backupDueDecision(base, null, lkAt(19, 14, 5));
-    // 23:50 ට save → ඊළඟ එක ඊළඟ දවස රෑ 12:00
-    const late = sched.backupDueDecision({ ...base, savedAt: lkAt(19, 23, 50).toISOString() }, null, lkAt(19, 23, 55));
+    const oneHour = { ...schSettings, intervalHours: 1, savedAt: lkAt(18, 21, 10).toISOString() };
+    const fourHour = { ...schSettings, intervalHours: 4, savedAt: lkAt(18, 21, 10).toISOString() };
+    // 21:10 save → 22:00 (එදාම), ඊට පස්සේ ෆැයකට වරක්
+    const before = sched.backupDueDecision(oneHour, null, lkAt(18, 21, 20));
     return (
-      sched.nextRunLabel(base, lkAt(19, 14, 5)) === "2026-10-19 16:00" &&
-      at14.due === false && at14.reason !== "already_done" &&
-      sched.backupDueDecision(base, null, lkAt(19, 16, 1)).due === true &&
-      sched.backupDueDecision(base, lkAt(19, 16, 0).toISOString(), lkAt(19, 19, 0)).reason === "already_done" &&
-      sched.backupDueDecision(base, lkAt(19, 16, 0).toISOString(), lkAt(19, 20, 0)).due === true &&
-      // cron runner විනාඩි 15කට වරක් වුණත් slot එක මග හැරුණොත් ඊළඟ check එකේදීම එක වරක් යයි
-      sched.backupDueDecision(base, lkAt(19, 12, 0).toISOString(), lkAt(19, 20, 7)).due === true &&
-      sched.nextRunLabel({ ...base, savedAt: lkAt(19, 23, 50).toISOString() }, lkAt(19, 23, 55)) === "2026-10-20 00:00" &&
-      late.due === false
+      sched.nextRunLabel(oneHour, lkAt(18, 21, 20)) === "2026-10-18 22:00" &&
+      before.due === false && before.reason === "not_started" &&
+      sched.backupDueDecision(oneHour, null, lkAt(18, 22, 1)).due === true &&
+      sched.nextRunLabel(oneHour, lkAt(18, 22, 1)) === "2026-10-18 23:00" &&
+      // පැය 4කට වරක් වුණත් පටන් ගැන්ම ඊළඟ පැයේ මුලින්ම — රෑ 12 නොවේ
+      sched.nextRunLabel(fourHour, lkAt(18, 21, 20)) === "2026-10-18 22:00" &&
+      JSON.stringify(sched.upcomingRunTimes(fourHour, lkAt(18, 21, 20), 4)) ===
+        JSON.stringify(["22:00", "02:00", "06:00", "10:00"]) &&
+      // හරියටම පැය මායිමේ (21:00:00) save කළත් ඊළඟ පැයෙන් විතරයි
+      sched.nextRunLabel({ ...oneHour, savedAt: lkAt(18, 21, 0).toISOString() }, lkAt(18, 21, 0)) === "2026-10-18 22:00" &&
+      // savedAt නැති පරණ settings → දැන් වේලාවෙන් ඊළඟ පැය (පරණ slot එකක් ඉබේම දිව යන්නේ නෑ)
+      sched.nextRunLabel({ ...oneHour, savedAt: "" }, lkAt(19, 10, 10)) === "2026-10-19 11:00" &&
+      sched.backupDueDecision({ ...oneHour, savedAt: "" }, null, lkAt(19, 10, 10)).due === false &&
+      // Admin එකේ පෙන්වන ලැයිස්තුව = ඇත්තටම යන වේලාවන්
+      sched.upcomingRunTimes(oneHour, lkAt(18, 21, 20), 3).join(",") === "22:00,23:00,00:00"
     );
   })());
 
@@ -2231,27 +2235,40 @@ console.log("\n── 26) Auto-backup වාර්තා email (file name · typ
     mailSrc.includes("return `mail_route_${route}_${n}`;"));
 }
 
-console.log("\n── 27) Mail delivery — SMTP (Gmail App Password) + FormSubmit fallback ──");
+console.log("\n── 27) Mail delivery — SilentForms (ප්‍රධාන) + SMTP (උපසේවා) ──");
 {
   const ms = readFileSync(join(root, "src/lib/mail-server.ts"), "utf8");
   const mrs = readFileSync(join(root, "src/lib/mail-routes-server.ts"), "utf8");
   const sendRoute = readFileSync(join(root, "src/app/api/mail/send/route.ts"), "utf8");
   const setRoute = readFileSync(join(root, "src/app/api/mail/settings/route.ts"), "utf8");
   const mailSrc = readFileSync(join(root, "src/lib/mail-routes.ts"), "utf8");
+  const sfSrc = readFileSync(join(root, "src/lib/silentforms.ts"), "utf8");
   const emailsPage = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { dependencies: Record<string, string> };
 
-  ok("mail: nodemailer dependency + SMTP transport (Gmail App Password)",
+  ok("mail: nodemailer dependency + SMTP transport (Gmail App Password)", 
     Boolean(pkg.dependencies.nodemailer) && ms.includes("import nodemailer from \"nodemailer\"") &&
     ms.includes("nodemailer.createTransport") && ms.includes("smtp.gmail.com"));
   ok("mail: SMTP රහස් backup_secrets එකේ (service role) — browser bundle එකට යන්නේ නෑ",
     ms.includes("backup_secrets") && ms.includes("SUPABASE_SERVICE_ROLE_KEY") &&
     ms.includes('smtp_pass') && ms.includes("loadSmtp"));
-  ok("mail: SMTP fail වුණොත් FormSubmit වලට fallback (double safety)",
-    ms.includes("export async function sendViaSmtp") && ms.includes("export async function sendViaFormSubmit") &&
-    ms.includes("// SMTP fail → FormSubmit උත්සාහය"));
-  ok("mail: FormSubmit 522 (සේවාව down) වුණොත් retry + පැහැදිලි හේතුව",
-    ms.includes("res.status === 522") && ms.includes("FormSubmit සේවාව down"));
+
+  ok("SilentForms: https://silentforms.com/api/submit ට JSON POST + access key",
+    sfSrc.includes('export const SILENTFORMS_ENDPOINT = "https://silentforms.com/api/submit"') &&
+    sfSrc.includes('"Content-Type": "application/json"') && sfSrc.includes("accessKey") &&
+    sfSrc.includes("export async function postToSilentForms"));
+  ok("SilentForms: access key default එකක් + Admin save කරන එකට මුල් තැන (settings)",
+    sfSrc.includes("SILENTFORMS_DEFAULT_KEY") && sfSrc.includes("SILENTFORMS_KEY_SETTING") &&
+    sfSrc.includes("MAIL_PROVIDER_SETTING") && sfSrc.includes("resolveSilentFormsKey") &&
+    sfSrc.includes("bf4a0621f8f5f3d1360a356ad57a15dc623b96d52412b27e87cc6f75f64f189b"));
+  ok("SilentForms: 401/403/429 දෝෂ පැහැදිලිව හඳුනාගනී (key වැරදි / rate limit)",
+    sfSrc.includes("res.status === 401") && sfSrc.includes("res.status === 403") && sfSrc.includes("res.status === 429"));
+  ok("FormSubmit සම්පූර්ණයෙන්ම ඉවත් — කිසිම තැනක formsubmit.co නෑ", 
+    !ms.toLowerCase().includes("formsubmit") && !mailSrc.toLowerCase().includes("formsubmit") &&
+    !sendRoute.toLowerCase().includes("formsubmit") && !setRoute.toLowerCase().includes("formsubmit") &&
+    !emailsPage.toLowerCase().includes("formsubmit") &&
+    !readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").toLowerCase().includes("formsubmit") &&
+    !readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8").toLowerCase().includes("formsubmit"));
 
   ok("/api/mail/send: admin Bearer හෝ cron secret — නැත්නම් යවන්නේ නෑ (open relay නෑ)",
     sendRoute.includes("userIsAdmin") && sendRoute.includes("cronSecretOk") &&
@@ -2260,28 +2277,30 @@ console.log("\n── 27) Mail delivery — SMTP (Gmail App Password) + FormSubm
     sendRoute.includes("SERVER_MAIL_ROUTES.includes(wanted)") &&
     sendRoute.includes("routeEmailsServer(wanted)") && sendRoute.includes("rateLimit(ip, wanted)") &&
     mrs.includes("export const SERVER_MAIL_ROUTES") && mrs.includes("MAX_PER_WINDOW"));
-  ok("/api/mail/settings: SMTP save + test send (admin පමණයි)",
+  ok("/api/mail/settings: SilentForms access key save + SMTP save + test send (admin පමණයි)",
+    setRoute.includes("saveMailSettings(") && setRoute.includes("body?.accessKey") &&
     setRoute.includes("saveSmtp(") && setRoute.includes("body?.testTo") && setRoute.includes("userIsAdmin"));
 
-  ok("site forms: ① FormSubmit (contact form submit) → ② වැඩ නොකළොත් ඉබේම SMTP",
+  ok("site forms: හැම යැවීමක්ම server එකෙන් — access key එක browser එකට යන්නේ නෑ", 
     mailSrc.includes("async function sendViaServerRoute") && mailSrc.includes('fetch("/api/mail/send"') &&
-    mailSrc.includes("async function postFormSubmitOnce") &&
-    mailSrc.includes("if (formSubmitDown()) {") &&
-    mailSrc.includes("const viaSmtp = await sendViaServerRoute(route, payload, remaining);"));
-  ok("site forms: FormSubmit fail වුණාම 8s timeout + විනාඩි 15ක් මතක (පරිශීලකයා රැඳෙන්නේ නෑ)",
-    mailSrc.includes("const FS_TIMEOUT_MS = 8_000;") && mailSrc.includes("AbortSignal.timeout(FS_TIMEOUT_MS)") &&
-    mailSrc.includes("FS_DOWN_FOR_MS = 15 * 60 * 1000") && mailSrc.includes("markFormSubmitDown()") &&
-    mailSrc.includes("clearFormSubmitDown()"));
-  ok("site forms: FormSubmit එකෙන් නොගිය ලිපින වලට විතරයි SMTP (දෙපාරක් යවන්නේ නෑ)",
-    mailSrc.includes("const remaining: string[] = [];") && mailSrc.includes("remaining.push(r.to)") &&
-    sendRoute.includes("body?.only") && sendRoute.includes("all.filter((e) => wantedOnly.includes("));
-  ok("Admin → Emails: 📮 Mail Server (SMTP) card + Gmail App Password උපදෙස් + Activate → server route",
-    emailsPage.includes("Mail Server (SMTP)") && emailsPage.includes("App Password") &&
-    emailsPage.includes("myaccount.google.com/apppasswords") &&
-    emailsPage.includes("await sendViaServer(") && !emailsPage.includes("sendActivationMail("));
-  ok("auto-backup emails: SMTP sender එකෙන් යවයි (scheduled route + backup report)",
+    !mailSrc.includes("silentforms.com") && !mailSrc.includes("SILENTFORMS_DEFAULT_KEY") &&
+    mailSrc.includes("export async function sendToRoute"));
+  ok("server mail: SilentForms fail වුණාම විනාඩි 15ක් මතක + ඉබේම SMTP (ෆෝම් එක රැඳෙන්නේ නෑ)",
+    ms.includes("SF_DOWN_FOR_MS = 15 * 60 * 1000") && ms.includes("markSilentFormsDown()") &&
+    ms.includes("clearSilentFormsDown()") && ms.includes("silentFormsDown()") &&
+    ms.includes('const order: MailProvider[] = settings.provider === "smtp" ? ["smtp", "silentforms"] : ["silentforms", "smtp"]'));
+  ok("server mail: හැම ලිපිනයම එක SilentForms submission එකකින් (key inbox) — fail නම් SMTP",
+    ms.includes("export async function sendViaSilentForms") &&
+    ms.includes("export async function loadMailSettings") && ms.includes("export async function saveMailSettings") &&
+    ms.includes("const r = await sendViaSilentForms(list, input.subject, input.text, settings.key);"));
+  ok("Admin → Emails: 📨 SilentForms card (access key + configured badge) + 📮 SMTP card",
+    emailsPage.includes("SilentForms — ප්‍රධාන email සේවාව") && emailsPage.includes("Access Key සුරකින්න") &&
+    emailsPage.includes("mail/settings") && emailsPage.includes("Mail Server (SMTP)") &&
+    emailsPage.includes("App Password") && emailsPage.includes("myaccount.google.com/apppasswords"));
+  ok("auto-backup emails: SilentForms → SMTP sender එකෙන් යවයි (scheduled route + backup report)",
     readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8").includes("await sendMail({ to, subject, text })") &&
-    readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").includes("sender?: (to: string[], subject: string, text: string) => Promise<number>"));
+    readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").includes("sender?: (to: string[], subject: string, text: string) => Promise<number>") &&
+    readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").includes("postSilentForms"));
 }
 
 console.log(`\n══════════════════════════════════════`);

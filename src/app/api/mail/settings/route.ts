@@ -1,13 +1,15 @@
 // ============================================================================
-//  /api/mail/settings — Admin → Emails → “Mail Server (SMTP)” card
+//  /api/mail/settings — Admin → Emails → “SilentForms” + “Mail Server (SMTP)” cards
 // ----------------------------------------------------------------------------
-//  GET  → දැනට තියෙන සැකසුම (password එක එවන්නේ නෑ — තියෙනවද කියා විතරයි)
-//  POST → host/port/user/app-password/from save (service-role → backup_secrets)
+//  GET  → දැනට තියෙන සැකසුම (password/access key එවන්නේ නෑ — තියෙනවද + masked preview)
+//  POST → { accessKey?, provider? } SilentForms සැකසුම · host/port/user/pass/from SMTP
+//         (service-role → backup_secrets — backup එකට ඉබේම එකතු වේ)
+//  POST → { testTo } test mail (SilentForms → key inbox · fail නම් SMTP)
 //  Auth: admin/superadmin Bearer token
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { loadSmtp, saveSmtp, sendMail } from "@/lib/mail-server";
+import { loadMailSettings, loadSmtp, saveMailSettings, saveSmtp, sendMail } from "@/lib/mail-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,8 +55,19 @@ async function auth(req: NextRequest): Promise<boolean> {
 export async function GET(req: NextRequest) {
   if (!(await auth(req))) return json({ ok: false, reason: "forbidden" }, 403);
   const smtp = await loadSmtp();
+  const sf = await loadMailSettings();
+  const key = sf.key;
   return json({
     ok: true,
+    silentforms: {
+      configured: sf.saved,       // admin save කරපු key එකක් තියෙනවද
+      saved: sf.saved,
+      usingDefault: !sf.saved && Boolean(key),
+      provider: sf.provider,
+      preview: key ? `${key.slice(0, 8)}…${key.slice(-6)}` : "",
+      length: key.length,
+    },
+    provider: sf.provider,
     configured: Boolean(smtp),
     host: smtp?.host ?? "",
     port: smtp?.port ?? 465,
@@ -76,15 +89,44 @@ export async function POST(req: NextRequest) {
 
   // 🧪 test send — configure කරලා තියෙන SMTP එකෙන් ලිපිනයකට යවලා බලනවා
   if (body?.testTo) {
+    const settings = await loadMailSettings();
+    const order = settings.provider === "smtp" ? "① SMTP → ② SilentForms" : "① SilentForms → ② SMTP";
     const r = await sendMail({
       to: String(body.testTo),
-      subject: "✅ MPCS mail test — SMTP හරි",
-      text: "මේ email එක Panduwasnuwara MPCS site එකේ Mail Server (SMTP) සැකසුම පරීක්ෂා කරන්න යැව්වා.\n\nSMTP වැඩ කරනවා ✅",
+      subject: "✅ MPCS mail test — SilentForms / SMTP සැකසුම",
+      text:
+        "මේ email එක Panduwasnuwara MPCS site එකේ email සැකසුම පරීක්ෂා කරන්න යැව්වා.\n\n" +
+        `· යැවීමේ පිළිවෙළ: ${order}\n` +
+        "· SilentForms නම් පණිවිඩය access key එකේ inbox එකට එයි; fail වුණොත් SMTP එකෙන් යයි.\n\n" +
+        "වැඩ කරනවා ✅",
     });
     return json(
       { ok: r.ok > 0, sent: r.ok, method: r.method, failed: r.failed.map((f) => ({ to: f.to, error: f.error })) },
       r.ok > 0 ? 200 : 502
     );
+  }
+
+  // 📨 SilentForms access key / provider save
+  if (body?.accessKey !== undefined || body?.provider !== undefined) {
+    const accessKey = body?.accessKey === undefined ? undefined : String(body.accessKey ?? "").trim();
+    if (accessKey !== undefined && accessKey !== "" && !/^[a-zA-Z0-9_-]{16,128}$/.test(accessKey)) {
+      return json({ ok: false, reason: "invalid_access_key" }, 400);
+    }
+    const provider = body?.provider === undefined ? undefined : String(body.provider) === "smtp" ? "smtp" as const : "silentforms" as const;
+    const mkErr = await saveMailSettings({ accessKey, provider });
+    if (mkErr) return json({ ok: false, reason: mkErr }, 500);
+    const after = await loadMailSettings();
+    return json({
+      ok: true,
+      silentforms: {
+        configured: after.saved,
+        saved: after.saved,
+        usingDefault: !after.saved && Boolean(after.key),
+        provider: after.provider,
+        preview: after.key ? `${after.key.slice(0, 8)}…${after.key.slice(-6)}` : "",
+        length: after.key.length,
+      },
+    });
   }
 
   const err = await saveSmtp({

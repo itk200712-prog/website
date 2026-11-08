@@ -24,7 +24,7 @@ import {
 } from "@/lib/backup-utils";
 import {
   buildCronSql, DEFAULT_SCHEDULE, lkDateParts, MAX_KEEP_COPIES, MIN_KEEP_COPIES, nextRunLabel, normalizeScheduleHours, parseScheduleSettings,
-  scheduleTimesOfDay, SCHEDULE_HOUR_OPTIONS,
+  upcomingRunTimes, SCHEDULE_HOUR_OPTIONS,
   SCHEDULE_SECRET_KEYS, SCHEDULE_SETTING_KEYS, scheduleSettingsRows, type BackupScheduleSettings,
 } from "@/lib/scheduled-backup";
 import { logActivity } from "@/lib/activity";
@@ -154,8 +154,8 @@ export default function AdminBackupPage() {
     show(deleted > 0 ? `✅ පරණ history සටහන් ${deleted}ක් මැකුවා — අලුත්ම ${BACKUP_HISTORY_KEEP} විතරයි` : `✅ History එකේ අලුත්ම ${BACKUP_HISTORY_KEEP} විතරයි තියෙන්නේ`);
   }
 
-  // 📅 Scheduled settings save — anchor = අද රෑ 12:00, savedAt = දැන් වේලාව.
-  // ඒ නිසා පළවෙනි auto backup එක save කරපු වේලාවෙන් පස්සේ එන පළවෙනි slot එකේදී යයි.
+  // 📅 Scheduled settings save — **savedAt = දැන් වේලාව** (save-time anchor).
+  // ඒ නිසා පළවෙනි auto backup එක හැමදාම **ඊළඟ පැයෙන්** පටන් ගන්නවා (රෑ 12 බලා ඉන්නේ නෑ).
   async function saveSchedule() {
     if (sch.enabled && !sch.toSupabase && !sch.toMega) {
       return show("⚠ Backup එක යන තැනක් තෝරන්න — Supabase හරි MEGA හරි එකක්වත් on කරන්න");
@@ -165,7 +165,7 @@ export default function AdminBackupPage() {
     setSavingSch(true);
     try {
       const sb = await authedClient();
-      // anchor = අද (රෑ 12 baseline) · savedAt = දැන් වේලාව → මේකෙන් පස්සේ එන පළවෙනි slot එකෙන් පටන් ගනී
+      // anchor = අද (රෑ 12 baseline) · savedAt = දැන් වේලාව → **ඊළඟ slot එකෙන්** පටන් ගනී (save කරපු වේලාවෙන් පස්සේ)
       const next: BackupScheduleSettings = {
         ...sch,
         anchorDate: lkDateParts().dateStr,
@@ -184,14 +184,14 @@ export default function AdminBackupPage() {
       setSch(next);
       void logActivity(
         "BACKUP_SCHEDULE",
-        `Scheduled auto-backup ${next.enabled ? "enabled" : "disabled"} · every ${next.intervalHours}h from 00:00 (LK) · to ${[next.toSupabase ? "Supabase" : "", next.toMega ? "MEGA" : ""].filter(Boolean).join("+") || "none"}${next.encrypt ? " · 🔒 encrypted" : ""}`
+        `Scheduled auto-backup ${next.enabled ? "enabled" : "disabled"} · every ${next.intervalHours}h from save time (${nextRunLabel(next)}) · to ${[next.toSupabase ? "Supabase" : "", next.toMega ? "MEGA" : ""].filter(Boolean).join("+") || "none"}${next.encrypt ? " · 🔒 encrypted" : ""}`
       );
       if (next.enabled && next.encrypt && secrets && !secrets.encryption) {
         show("✅ Save වුණා — හැබැයි ⚠ Encryption Password එක තාම set කරලා නෑ! ඉහළ card එකෙන් set කළේ නැත්නම් auto backup එක encrypt නොවී යනවා");
       } else {
         show(
           next.enabled
-            ? `✅ Save වුණා — පළමු auto backup එක: ${nextRunLabel(next)} ට (රෑ 12 පටන් පැය ${next.intervalHours}කට වරක් · Cron SQL එක run කරලා නැත්නම් පහතින් run කරන්න)`
+            ? `✅ Save වුණා — පළමු auto backup එක: ${nextRunLabel(next)} ට (ඊළඟ පැයෙන් පටන් ගෙන පැය ${next.intervalHours}කට වරක් · Cron SQL එක run කරලා නැත්නම් පහතින් run කරන්න)`
             : "✅ Save වුණා — Scheduled auto-backup එක off කරලා"
         );
       }
@@ -329,9 +329,9 @@ export default function AdminBackupPage() {
         tables: 29,
         images: 24,
         encrypted: false,
-        schedule: `Every ${sch.intervalHours}h from 00:00 (LK) — TEST`,
+        schedule: `Every ${sch.intervalHours}h from save time (next: ${nextRunLabel(sch)}) — TEST`,
       });
-      // 📮 server route — SMTP configure කරලා නම් SMTP එකෙන්, නැත්නම් FormSubmit
+      // 📮 server route — SilentForms (ප්‍රධාන සේවාව) → fail වුණොත් SMTP
       const sb = await authedClient();
       const { data: sess } = await sb.auth.getSession();
       const token = sess?.session?.access_token ?? "";
@@ -343,8 +343,8 @@ export default function AdminBackupPage() {
       const j = (await res.json().catch(() => ({}))) as { sent?: number; method?: string; failed?: { error?: string }[] };
       const sent = Number(j?.sent ?? 0);
       show(sent > 0
-        ? `✅ Test report එක ${sent} ලිපිනයකට යැවුණා (${j.method === "smtp" ? "SMTP" : "FormSubmit"}) — inbox/spam බලන්න`
-        : `⚠ Email යැවීම අසාර්ථක — ${j.failed?.[0]?.error ?? "Admin → Emails එකේ SMTP දාන්න (FormSubmit down)"}`);
+        ? `✅ Test report එක ${sent} ලිපිනයකට යැවුණා (${j.method === "smtp" ? "SMTP" : "SilentForms"}) — inbox/spam බලන්න`
+        : `⚠ Email යැවීම අසාර්ථක — ${j.failed?.[0]?.error ?? "Admin → Emails එකේ SilentForms access key එක හෝ SMTP දාන්න"}`);
     } finally {
       setReportBusy(false);
     }
@@ -1083,10 +1083,10 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           </span>
         </div>
         <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
-          <b>දවසට පැය කීයකට වරක්ද</b> කියා තෝරලා Save කරන්න — පටන් ගැන්ම හැමදාම <b>රෑ 12:00 (ශ්‍රී ලංකා)</b>.
-          උදා: පැය 4කට වරක් නම් රෑ 12ට එකයි, පාන්දර 4ට එකයි, උදේ 8ට එකයි … ඒ වගේ.
+          <b>දවසට පැය කීයකට වරක්ද</b> කියා තෝරලා Save කරන්න — **Save කරපු වේලාවෙන් ඊළඟ පැයෙන්** පටන් ගන්නවා (රෑ 12 බලා ඉන්නේ නෑ).
+          උදා: පැය 4කට වරක් තෝරලා රාත්‍රී 9:10ට Save කළොත් → 22:00, 02:00, 06:00 … ඒ වගේ.
           එතකොට backup එක ඉබේම අරගෙන තෝරපු තැනට (Supabase සහ/හෝ MEGA) upload වෙනවා.
-          පළවෙනි backup එක <b>Save කරපු වේලාවෙන් පස්සේ එන පළවෙනි slot</b> එකේදී යයි (උදා: දැන් 14:00 නම් පැය 4කට වරක් දාලා නම් අද 16:00ට).
+          පළවෙනි backup එක <b>Save කරපු වේලාවෙන් ඊළඟ පැයේ මුලට</b> යයි (උදා: රාත්‍රී 9:10ට Save කළොත් අද 22:00ට, ඊට පස්සේ පැය 4කට වරක් නම් 02:00, 06:00 …).
           මේක <b>manual Download එකට සම්පූර්ණයෙන්ම සමාන FULL ZIP එකමයි</b> — schema + logins (password සහිතව) + images + registers ඔක්කොම එක්ක.
           කැමති නම් පහළින් <b>Encryption Password එකෙන් encrypt</b> කරන්නත් පුළුවන් — එතකොට Import කරද්දී ඒ password එකම ඉල්ලනවා.
         </p>
@@ -1094,7 +1094,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[12px] text-slate-700">
             <input type="checkbox" className="mt-0.5" checked={sch.enabled} onChange={(e) => setSch({ ...sch, enabled: e.target.checked })} />
-            <span><b>Auto-backup on කරන්න</b><br /><span className="text-slate-500">රෑ 12 පටන් පැය {sch.intervalHours}කට වරක් ඉබේම ගනී</span></span>
+            <span><b>Auto-backup on කරන්න</b><br /><span className="text-slate-500">Save කරපු වේලාවෙන් ඊළඟ පැයෙන් පටන් ගෙන පැය {sch.intervalHours}කට වරක් ඉබේම ගනී</span></span>
           </label>
           <div>
             <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">දවසට පැය කීයකට වරක්ද?</label>
@@ -1122,12 +1122,12 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             <div className="mt-1 text-[10px] text-slate-400">24න් බෙදෙන ගාණක් තෝරන්න (1, 2, 3, 4, 6, 8, 12, 24)</div>
           </div>
           <div>
-            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">දවසේ යන වෙලාවන් (රෑ 12 පටන්)</label>
+            <label className="text-[10.5px] font-bold uppercase tracking-wide text-slate-400">ඊළඟට යන වෙලාවන්</label>
             <div className="mt-1 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[11.5px] font-bold leading-relaxed text-indigo-700">
-              {scheduleTimesOfDay(sch.intervalHours).join(" · ")}
+              {(sch.savedAt ? upcomingRunTimes(sch) : upcomingRunTimes({ ...sch, savedAt: new Date().toISOString() })).join(" · ")}
             </div>
             <div className="mt-1 text-[10px] text-slate-400">
-              දවසට {scheduleTimesOfDay(sch.intervalHours).length} වරක් · ශ්‍රී ලංකා වේලාවෙන්
+              දවසට {Math.round(24 / sch.intervalHours)} වරක් · ශ්‍රී ලංකා වේලාවෙන් · පටන් ගැන්ම save කරපු වේලාවෙන්
             </div>
           </div>
           <div>
@@ -1248,7 +1248,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           <div className="text-[12px] font-extrabold text-slate-800">📧 ඊමේල් වාර්තාව (සාර්ථක / අසාර්ථක)</div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
             හැම auto-backup එකකටම පස්සේ <b>file නම · file වර්ගය · file ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස</b> සහිත
-            email එකක් යයි. (යැවීම: FormSubmit → වැඩ නොකළොත් ඉබේම SMTP.) ලිපින එකතු කරන්නේ{" "}
+            email එකක් යයි. (යැවීම: SilentForms → වැඩ නොකළොත් ඉබේම SMTP.) ලිපින එකතු කරන්නේ{" "}
             <a href="/admin/emails" className="font-extrabold text-indigo-700 underline">Admin → Emails → “Auto Backup Reports”</a> එකෙන්.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">

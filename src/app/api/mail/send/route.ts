@@ -2,7 +2,7 @@
 //  POST /api/mail/send — site එකේ email එකක් යවන එකම තැන
 // ----------------------------------------------------------------------------
 //  · SMTP (Gmail App Password) configure කරලා තියෙනවා නම් **SMTP** එකෙන් යයි
-//  · නැත්නම් / fail වුණොත් **FormSubmit** (formsubmit.co) එකෙන් යයි
+//  · ප්‍රධාන සේවාව **SilentForms**; fail වුණොත් **SMTP** එකෙන් යයි
 //  · Auth: admin/superadmin Bearer token හෝ x-backup-secret (cron)
 // ============================================================================
 
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     smtpConfigured: Boolean(smtp),
     smtp: smtp ? { host: smtp.host, port: smtp.port, user: smtp.user, fromName: smtp.fromName, fromEmail: smtp.fromEmail } : null,
-    formSubmitHint: "FormSubmit (formsubmit.co) — සේවාව down වුණොත් SMTP එකක් දාන්න",
+    silentFormsHint: "SilentForms — access key එක Admin → Emails එකේ ‘SilentForms’ card එකෙන් save කරන්න",
   });
 }
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
     if (!rateLimit(ip, wanted)) return json({ ok: false, reason: "rate_limited" }, 429);
     const all = await routeEmailsServer(wanted);
     if (!all.length) return json({ ok: false, reason: "no_recipients" }, 400);
-    // 🔒 `only` — client එකේදී FormSubmit එකෙන් යැවීමට නොහැකි වුණු ලිපින විතරක් ඉල්ලන්න පුළුවන්.
+    // 🔒 `only` — client එකේදී යැවීමට නොහැකි වුණු ලිපින විතරක් ඉල්ලන්න පුළුවන්.
     //    නමුත් ඒවා **route එකට දාලා තියෙන ලිපිනම** විය යුතුයි (එහෙනම් විතරයි) — open relay නොවේ.
     const wantedOnly = Array.isArray(body?.only) ? (body.only as unknown[]).map((x) => String(x).trim().toLowerCase()) : [];
     const recipients = wantedOnly.length

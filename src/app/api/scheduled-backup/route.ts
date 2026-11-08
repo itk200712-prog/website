@@ -26,7 +26,7 @@ import {
   backupDueDecision,
   lkMidnightMs,
   parseScheduleSettings,
-  scheduleTimesOfDay,
+  nextRunLabel,
   SCHEDULE_LAST_SUCCESS_KEY,
   SCHEDULE_SECRET_KEYS,
   SCHEDULE_SETTING_KEYS,
@@ -531,7 +531,7 @@ export async function POST(req: NextRequest) {
           durationMs: Date.now() - startedAt,
           failures: [detail],
           encrypted,
-          schedule: `Every ${settings.intervalHours}h from 00:00 (LK)`,
+          schedule: `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
         },
         emails,
         async (to, subject, text) => (await sendMail({ to, subject, text })).ok
@@ -571,7 +571,7 @@ export async function POST(req: NextRequest) {
   const detail = [
     force
       ? "Manual test run"
-      : `Every ${settings.intervalHours}h from 00:00 (LK) — slots: ${scheduleTimesOfDay(settings.intervalHours).join(", ")}`,
+      : `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
     `FULL ZIP = manual backup (schema + logins + ${built.images} images + registers)`,
     encrypted ? "🔒 Encrypted (Encryption Password)" : "Not encrypted",
     encryptWarning,
@@ -605,7 +605,7 @@ export async function POST(req: NextRequest) {
         encrypted,
         schedule: force
           ? "Manual test run"
-          : `Every ${settings.intervalHours}h from 00:00 (LK) — slots: ${scheduleTimesOfDay(settings.intervalHours).join(", ")}`,
+          : `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
       },
       emails,
       async (to, subject, text) => (await sendMail({ to, subject, text })).ok
