@@ -58,17 +58,25 @@ git push -u origin main
 - 🗑️ delete කළ විට upload කළ image එක storage එකෙනුත් ඉවත් වේ
 - ↑ ↓ පිළිවෙල වෙනස් කරන්න · උපරිම images 10ක් · **Save Settings** ඔබන්න
 
-## පියවර 6 — SilentForms සක්‍රීය කිරීම (site එකේ හැම email එකක්ම)
+## පියවර 6 — Email delivery සැකසීම (SilentForms / SMTP)
 
-1. **Admin → Emails** එකේ උඩම තියෙන **📨 SilentForms** card එකට යන්න
-2. **Access Key** එක ඒ කොටුවේ paste කරලා **Access Key සුරකින්න** ඔබන්න
-   (key එක server එකේ `backup_secrets` එකේ තමයි තියෙන්නේ — backup එකට ඉබේම එකතු වේ)
-3. **Test email එකක් යවන්න** ඔබලා ඔයාගේ inbox එකේ පණිවිඩය එනවද බලන්න
-4. ඉන් පසු Contact form · Membership · Live Chat · Messages · Business · Backup reports
-   **හැම email එකක්ම** SilentForms (`https://silentforms.com/api/submit`) හරහා යයි
-5. SilentForms down වුණොත් ඉබේම **SMTP** එකට මාරු වෙනවා — ඒකට පහළින් තියෙන
-   **📮 Mail Server (SMTP)** card එකේ Gmail App Password එක දාන්න
-6. FormSubmit (formsubmit.co) සම්පූර්ණයෙන්ම ඉවත් කරලා තියෙනවා — දැන් ඒක පාවිච්චි වෙන්නේ නෑ
+### SilentForms තබාගන්න නම්
+1. https://silentforms.com/sign-in → key හිමියාගේ email එකෙන් sign in → අදාළ form එක විවෘත කරන්න.
+2. **Email me every submission** ON කරන්න. Form paused නම් unpause කරන්න; domain restrictions පරීක්ෂා කරන්න.
+3. වෙනත් inbox වලටත් ඕන නම් **Extra recipients → Add recipient**. ඒ inbox වලට ආ confirmation links click කරන්න. Waiting for confirmation නම් ලිපි ලැබෙන්නේ නෑ (extra recipients උපරිම 5).
+4. Site **Admin → Emails → SilentForms** → තමන්ගේ key එක Save → **SilentForms Test**.
+5. Key owner / confirmed extra recipients ගේ Inbox, Spam, All Mail බලන්න. Admin එකේ Test ලිපිනයෙන් recipient වෙනස් නොවේ.
+6. HTTP success = submission accepted පමණයි. Inbox delivery තහවුරු නෑ. Dashboard confirmation/email settings site Admin panel එකෙන් වෙනස් කළ නොහැක.
+
+### Site Admin එකේ ලිපින වලටම යවන්න SMTP
+1. Gmail → Google Account → Security → 2-Step Verification ON → https://myaccount.google.com/apppasswords → නව App Password (සාමාන්‍ය Gmail password නොවේ).
+2. **Admin → Emails → Mail Server (SMTP)**: Gmail address, App Password, From name, `smtp.gmail.com`, port `465`, From email = එම Gmail එක.
+3. **SMTP සුරකින්න** → **SMTP Test — saved settings**. මේ Test එක SilentForms වෙත fallback නොවේ; SMTP error එකම පෙන්වයි.
+4. Inbox එකට ආ පසු provider තේරීමෙන් **① SMTP → ② SilentForms** Save කරන්න. SilentForms HTTP success වුණත් inbox එකට නොආවොත් automatic fallback දුවන්නේ නැති නිසා SMTP primary තේරීම වැදගත්.
+5. **Auto Backup Reports** card එකේ ලිපින Save → Admin → Backup → test run → History බලන්න.
+6. History/email දෙකේ size එක සෑදූ final compressed ZIP bytes ගණනෙන්ම ගනී. `36.7 MB (36,700,000 bytes)` යනු format උදාහරණයක් පමණයි; ස්ථිර size එකක් නොවේ. 1 MB = 1,000,000 bytes (MiB display වල වෙනසක් පේන්න පුළුවන්). ZIP එක email attachment නොවේ.
+
+Instant inbox delivery කිසිම provider එකකින් සහතික කළ නොහැක. Provider accepted එක inbox delivered කියා නොසලකන්න.
 
 ## පියවර 7 — WhatsApp Password Recovery
 

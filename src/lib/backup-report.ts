@@ -50,17 +50,17 @@ const SI_MONTHS = [
   "ජූලි", "අගෝස්තු", "සැප්තැම්බර්", "ඔක්තෝබර්", "නොවැම්බර්", "දෙසැම්බර්",
 ];
 
-/** 1,884,417 → "1.80 MB (1,884,417 bytes)" */
+/** Decimal MB (1 MB = 1,000,000 bytes), final compressed ZIP size, not raw data size. */
 export function formatFileSize(bytes: number): string {
   const n = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
   const units = ["B", "KB", "MB", "GB"];
   let v = n;
   let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
+  while (v >= 1000 && i < units.length - 1) {
+    v /= 1000;
     i += 1;
   }
-  const rounded = i === 0 ? String(Math.round(v)) : v.toFixed(2);
+  const rounded = i === 0 ? String(Math.round(v)) : v.toFixed(1);
   return `${rounded} ${units[i]} (${n.toLocaleString("en-US")} bytes)`;
 }
 
@@ -214,7 +214,7 @@ function cachedSilentFormsKey(): string {
 export async function postSilentForms(to: string, payload: Record<string, unknown>, key?: string): Promise<boolean> {
   const addr = String(to ?? "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(addr)) return false;
-  const fields: Record<string, string> = { "To (configured)": addr };
+  const fields: Record<string, string> = { "To (configured)": addr, ccemail: addr };
   for (const [k, v] of Object.entries(payload)) {
     if (v === undefined || v === null) continue;
     fields[k] = Array.isArray(v) ? v.join(" | ") : String(v);

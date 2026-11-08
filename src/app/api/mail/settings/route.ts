@@ -9,7 +9,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { loadMailSettings, loadSmtp, saveMailSettings, saveSmtp, sendMail } from "@/lib/mail-server";
+import { loadMailSettings, loadSmtp, saveMailSettings, saveSmtp, sendMail, sendViaSilentForms, sendViaSmtp } from "@/lib/mail-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,19 +89,34 @@ export async function POST(req: NextRequest) {
 
   // 🧪 test send — configure කරලා තියෙන SMTP එකෙන් ලිපිනයකට යවලා බලනවා
   if (body?.testTo) {
-    const settings = await loadMailSettings();
-    const order = settings.provider === "smtp" ? "① SMTP → ② SilentForms" : "① SilentForms → ② SMTP";
-    const r = await sendMail({
-      to: String(body.testTo),
-      subject: "✅ MPCS mail test — SilentForms / SMTP සැකසුම",
-      text:
-        "මේ email එක Panduwasnuwara MPCS site එකේ email සැකසුම පරීක්ෂා කරන්න යැව්වා.\n\n" +
-        `· යැවීමේ පිළිවෙළ: ${order}\n` +
-        "· SilentForms නම් පණිවිඩය access key එකේ inbox එකට එයි; fail වුණොත් SMTP එකෙන් යයි.\n\n" +
-        "වැඩ කරනවා ✅",
-    });
+    const to = String(body.testTo).trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) return json({ ok: false, reason: "invalid_test_email" }, 400);
+    const testProvider = body.testProvider;
+    if (testProvider !== undefined && testProvider !== "smtp" && testProvider !== "silentforms") {
+      return json({ ok: false, reason: "invalid_test_provider" }, 400);
+    }
+    const subject = `MPCS mail test — ${new Date().toISOString()}`;
+    const text = `Panduwasnuwara MPCS mail test. Requested address: ${to}\n` +
+      "SilentForms delivers only to the key owner and dashboard-confirmed extra recipients. " +
+      "API acceptance is not proof of inbox delivery. Check Email me every submission, confirmation, Spam and All Mail.";
+    let r;
+    // Test the selected card itself. Never hide SMTP errors behind SilentForms success.
+    if (testProvider === "smtp") {
+      const smtp = await loadSmtp();
+      if (!smtp) return json({ ok: false, reason: "SMTP configure කර Save කරන්න. Gmail App Password අවශ්‍යයි." }, 400);
+      const result = await sendViaSmtp(smtp, to, subject, text);
+      r = { ok: result.ok ? 1 : 0, method: "smtp", failed: result.ok ? [] : [result] };
+    } else if (testProvider === "silentforms") {
+      const results = await sendViaSilentForms([to], subject, text);
+      r = { ok: results.filter(x => x.ok).length, method: "silentforms", failed: results.filter(x => !x.ok) };
+    } else {
+      r = await sendMail({ to, subject, text });
+    }
+    const notice = r.method === "silentforms"
+      ? "SilentForms submission accepted — inbox delivery තහවුරු නෑ. Test ලිපිනයෙන් recipient වෙනස් නොවේ. SilentForms dashboard → Email me every submission ON → Extra recipients Add + confirm → Spam / All Mail බලන්න."
+      : `SMTP server accepted mail for ${to} — inbox / Spam බලන්න; instant delivery සහතික කළ නොහැක.`;
     return json(
-      { ok: r.ok > 0, sent: r.ok, method: r.method, failed: r.failed.map((f) => ({ to: f.to, error: f.error })) },
+      { ok: r.ok > 0, sent: r.ok, method: r.method, delivery: "unconfirmed", notice, failed: r.failed.map((f) => ({ to: f.to, error: f.error })) },
       r.ok > 0 ? 200 : 502
     );
   }

@@ -2173,7 +2173,7 @@ console.log("\n── 26) Auto-backup වාර්තා email (file name · typ
 {
   const rep = await import("../src/lib/backup-report.ts");
   ok("backup report: file size human-readable + bytes",
-    rep.formatFileSize(1884417) === "1.80 MB (1,884,417 bytes)" && rep.formatFileSize(0).startsWith("0 B"));
+    rep.formatFileSize(1884417) === "1.9 MB (1,884,417 bytes)" && rep.formatFileSize(0).startsWith("0 B"));
   ok("backup report: ගත වූ වේලාව (මිනිත්තු/තත්පර)",
     rep.formatDuration(134_000) === "2 මිනිත්තු 14 තත්පර (134s)" &&
     rep.formatDuration(7_000) === "7 තත්පර (7s)" &&
@@ -2204,11 +2204,11 @@ console.log("\n── 26) Auto-backup වාර්තා email (file name · typ
   ok("backup report: email එකේ file name · file type · file size · status · time spent · දවස ඔක්කොම තියේ",
     email.body.includes("File name") && email.body.includes("mpcs-full-backup-2026-11-07_1600.zip") &&
     email.body.includes("File type") && email.body.includes("Full backup") &&
-    email.body.includes("1.80 MB (1,884,417 bytes)") &&
+    email.body.includes("1.9 MB (1,884,417 bytes)") &&
     email.body.includes("සාර්ථක") && email.body.includes("successful") &&
     email.body.includes("2 මිනිත්තු 14 තත්පර") &&
     email.body.includes("සෙනසුරාදා") && email.body.includes("2026-11-07") &&
-    email.fields["File size"].includes("1.80 MB") && email.fields["Day"].includes("Saturday"));
+    email.fields["File size"].includes("1.9 MB") && email.fields["Day"].includes("Saturday"));
 
   const failed = rep.buildBackupReportEmail({
     status: "failed",
@@ -2306,6 +2306,17 @@ console.log("\n── 27) Mail delivery — SilentForms (ප්‍රධාන) 
     readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8").includes("await sendMail({ to, subject, text })") &&
     readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").includes("sender?: (to: string[], subject: string, text: string) => Promise<number>") &&
     readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").includes("postSilentForms"));
+}
+
+{
+  const settings = readFileSync(join(root, "src/app/api/mail/settings/route.ts"), "utf8");
+  const page = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
+  const report = await import("../src/lib/backup-report");
+  ok("Mail tests isolate provider, expose missing SMTP and never claim inbox delivery", settings.includes('testProvider === "smtp"') && settings.includes('testProvider === "silentforms"') && settings.includes('sendViaSmtp(smtp, to') && settings.includes('delivery: "unconfirmed"'));
+  ok("Admin mail setup explains confirmation and dashboard notifications", page.includes("Email me every submission") && page.includes("Extra recipients") && page.includes('testProvider: "smtp"') && page.includes('testProvider: "silentforms"') && !page.includes("Activation / confirm අවශ්‍ය නෑ"));
+  ok("ZIP report displays actual decimal MB + exact bytes", report.formatFileSize(36700000) === "36.7 MB (36,700,000 bytes)" && report.formatFileSize(NaN).startsWith("0 B"));
+  const cron = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
+  ok("Backup report uses final ZIP length, same bytes used in history/uploads", cron.includes("fileSize: built.zip.length") && cron.includes("size: built.zip.length"));
 }
 
 console.log(`\n══════════════════════════════════════`);

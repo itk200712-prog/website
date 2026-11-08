@@ -19,7 +19,7 @@ import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
 import { generateBackupZip, type BackupClient } from "@/lib/backup";
 import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils";
-import { sendBackupReport } from "@/lib/backup-report";
+import { sendBackupReport, formatFileSize } from "@/lib/backup-report";
 import { sendMail } from "@/lib/mail-server";
 import {
   autoBackupFileName,
@@ -585,6 +585,8 @@ export async function POST(req: NextRequest) {
   // 📧 වාර්තා email — file නම · වර්ගය · ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස
   //    (History එකට කලින් යවන්නේ යැවුණාද නැද්ද කියා history detail එකේ සටහන් කරන්න)
   let reportSent = 0;
+  let reportMethod = "none";
+  let reportError = "No Auto Backup Reports recipients configured";
   try {
     const emails = await loadBackupReportEmails();
     reportSent = await sendBackupReport(
@@ -608,13 +610,21 @@ export async function POST(req: NextRequest) {
           : `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
       },
       emails,
-      async (to, subject, text) => (await sendMail({ to, subject, text })).ok
+      async (to, subject, text) => {
+        const mail = await sendMail({ to, subject, text });
+        reportMethod = mail.method;
+        reportError = mail.failed.map(f => f.error).filter(Boolean).join("; ") || (mail.ok ? "" : "Provider unavailable / temporarily down");
+        return mail.ok;
+      }
     );
-  } catch {
+  } catch (error) {
+    reportError = (error as Error).message.slice(0, 300);
     /* email report එක අසාර්ථක වුණත් backup එක සාර්ථකයි — response එකට බලපෑමක් නෑ */
   }
 
-  const reportDetail = reportSent > 0 ? `Email report: ✅ sent (${reportSent})` : "Email report: ⚠ not sent";
+  const reportDetail = reportSent > 0
+    ? `Email report: provider accepted (${reportSent}, ${reportMethod}); inbox delivery unconfirmed${reportMethod === "silentforms" ? "; key owner + confirmed dashboard recipients only" : ""}${reportError ? `; Partial failure: ${reportError}` : ""}`
+    : `Email report: not accepted — ${reportError}`;
   await recordHistory({
     fileName,
     fileSize: built.zip.length,
@@ -633,6 +643,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     file: fileName,
     size: built.zip.length,
+    sizeFormatted: formatFileSize(built.zip.length),
     rows: built.totalRows,
     tables: built.tables,
     images: built.images,
@@ -640,6 +651,9 @@ export async function POST(req: NextRequest) {
     encrypted,
     destinations: done,
     emailReportsSent: reportSent,
+    emailReportMethod: reportMethod,
+    emailReportDelivery: "unconfirmed",
+    emailReportError: reportError,
     warnings: [encryptWarning, ...failed].filter(Boolean),
   });
 }

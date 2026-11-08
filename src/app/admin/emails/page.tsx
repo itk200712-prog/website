@@ -183,7 +183,7 @@ export default function AdminEmailsPage() {
     );
     setBusy("");
     show(r.sent > 0
-      ? `✅ ලිපින ${r.sent}කට test email යැවුණා (${methodName(r.method)})`
+      ? (r.method === "silentforms" ? "SilentForms submission accepted — key owner / confirmed recipients වෙත පමණයි; inbox delivery තහවුරු නෑ" : `SMTP accepted: ${r.sent} recipients — inbox / Spam බලන්න`)
       : `⚠ test email යැවීමට බැරි — ${r.failed?.[0]?.error ?? "ලිපින පරීක්ෂා කරන්න"}`);
   }
 
@@ -276,12 +276,12 @@ export default function AdminEmailsPage() {
       const res = await fetch("/api/mail/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ testTo: to }),
+        body: JSON.stringify({ testTo: to, testProvider: "silentforms" }),
       });
-      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; method?: string; reason?: string; failed?: { error?: string }[] };
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; notice?: string; method?: string; reason?: string; failed?: { error?: string }[] };
       show(
         j.ok
-          ? `✅ Test email යැවුණා (${methodName(j.method)}) — පණිවිඩය එන්නේ SilentForms key එකට සම්බන්ධ inbox එකට`
+          ? (j.notice ?? "SilentForms submission accepted — inbox delivery තහවුරු නෑ")
           : `⚠ Test එක fail — ${j.failed?.[0]?.error ?? j.reason ?? "access key එක පරීක්ෂා කරන්න"}`
       );
     } finally {
@@ -319,12 +319,12 @@ export default function AdminEmailsPage() {
       const res = await fetch("/api/mail/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(testTo ? { testTo } : smtp),
+        body: JSON.stringify(testTo ? { testTo, testProvider: "smtp" } : smtp),
       });
-      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; sent?: number; method?: string; configured?: boolean; reason?: string; failed?: { error?: string }[] };
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; notice?: string; sent?: number; method?: string; configured?: boolean; reason?: string; failed?: { error?: string }[] };
       if (testTo) {
         show(j.ok
-          ? `✅ Test email යැවුණා — ${testTo} (${methodName(j.method)} ✅)`
+          ? (j.notice ?? `SMTP server accepted — ${testTo}; inbox / Spam බලන්න`)
           : `⚠ Test එක fail — ${j.failed?.[0]?.error ?? j.reason ?? "සැකසුම පරීක්ෂා කරන්න"}`);
       } else if (j.ok) {
         setSmtpState({ configured: Boolean(j.configured), hasPassword: true });
@@ -422,7 +422,7 @@ export default function AdminEmailsPage() {
                 disabled={sfBusy !== "" || !(isEmail(sfTestTo) || isEmail(smtp.user))}
                 className="btn btn-outline !py-1.5 !px-3 !text-[11px]"
               >
-                <Send size={12} /> {sfBusy === "test" ? "යවමින්…" : "Test email එකක් යවන්න"}
+                <Send size={12} /> {sfBusy === "test" ? "යවමින්…" : "SMTP Test — saved settings"}
               </button>
             </div>
 
@@ -457,6 +457,21 @@ export default function AdminEmailsPage() {
         </div>
       </div>
 
+      <section className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-[12px] text-slate-700">
+        <h3 className="font-extrabold text-indigo-950">📬 Email නොඑනවා නම් — පියවරෙන් පියවර</h3>
+        <p className="mt-2 font-bold">Key saved ≠ inbox verified. SilentForms success = submission accepted පමණයි.</p>
+        <ol className="mt-2 list-decimal space-y-2 pl-5">
+          <li><a href="https://silentforms.com/sign-in" target="_blank" rel="noopener noreferrer" className="font-bold underline">SilentForms dashboard</a> එකට key හිමියාගේ email එකෙන් sign in කර අදාළ form එක විවෘත කරන්න.</li>
+          <li><b>Email me every submission</b> ON කරන්න. Form paused නොවන බවත් domain restrictions නිවැරදි බවත් බලන්න.</li>
+          <li>වෙනත් ලිපිනයකට ඕන නම් <b>Extra recipients → Add recipient</b>. එම inbox එකට ආ confirmation link එක click කරන්න. Waiting for confirmation නම් mail එන්නේ නෑ. උපරිම extra recipients 5යි.</li>
+          <li>මෙතන SilentForms key එක Save කර Test කරන්න. Test ලිපිනය type කිරීමෙන් පමණක් SilentForms recipient එක වෙනස් නොවේ. Key owner සහ confirmed recipients ගේ Inbox / Spam / All Mail බලන්න.</li>
+          <li>Admin එකේ route ලිපින වලටම යවන්න ඕන නම් පහළ SMTP card එකේ Gmail + App Password + smtp.gmail.com + 465 → Save → <b>SMTP Test</b>. SMTP test එක SilentForms හරහා යන්නේ නෑ.</li>
+          <li>SMTP test එක inbox එකට ආ පසු උඩ <b>① SMTP → ② SilentForms</b> තෝරන්න. Auto Backup Reports card එකේ අවශ්‍ය ලිපින Save කරන්න.</li>
+          <li>Admin → Backup → test run කර History බලන්න. Report size = සෑදූ අවසන් ZIP එකේ actual bytes; උදා: <b>36.7 MB (36,700,000 bytes)</b>. ZIP attachment එකක් email කරන්නේ නෑ.</li>
+        </ol>
+        <p className="mt-2">සේවාව mail එක භාරගත්තත් instant inbox delivery සහතික කරන්න බැහැ. SilentForms dashboard සැකසුම් මේ Admin panel එකෙන් වෙනස් කළ නොහැක.</p>
+      </section>
+
       {/* 📮 Mail Server (SMTP) — SilentForms fail වුණොත් email යවන්න */}
       <div className={`mb-5 rounded-2xl border p-4 ${smtpState?.configured ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/70"}`}>
         <div className="flex flex-wrap items-start gap-3">
@@ -470,7 +485,7 @@ export default function AdminEmailsPage() {
             <p className="mt-1 text-[11.5px] leading-relaxed text-slate-600">
               හැම email එකක්ම මුලින්ම යන්නේ <b>SilentForms</b> හරහා (උඩ card එක). ඒක fail වුණොත් / down වුණොත්
               <b>ඉබේම මේ SMTP එකට මාරු වෙනවා</b>. ඒ නිසා <b>Gmail App Password</b> එකක් දාලා තිබ්බොත්
-              site එකේ කිසිම email එකක් නැති වෙන්නේ නෑ — යන්නේ ඔයාගේ ගිණුමෙන්මයි (වෙන් වෙන් ලිපින වලට).
+              Admin එකේ ලිපින වෙත SMTP යවන්න පුළුවන්. SilentForms HTTP success වුණත් inbox එකට නොආවොත් fallback එක දුවන්නේ නෑ; එවිට ① SMTP තෝරන්න.
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <input value={smtp.user} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} type="email" placeholder="Gmail ලිපිනය (උදා: induwara633@gmail.com)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
@@ -489,7 +504,7 @@ export default function AdminEmailsPage() {
                 <Save size={12} /> {smtpBusy === "save" ? "සුරකිමින්…" : "SMTP සුරකින්න"}
               </button>
               <button onClick={() => void saveSmtpSettings(smtp.user || "")} disabled={smtpBusy !== "" || !isEmail(smtp.user)} className="btn btn-outline !py-1.5 !px-3 !text-[11px]">
-                <Send size={12} /> {smtpBusy === "test" ? "යවමින්…" : "Test email එකක් යවන්න"}
+                <Send size={12} /> {smtpBusy === "test" ? "යවමින්…" : "SMTP Test — saved settings"}
               </button>
               <button onClick={() => setSmtp((s) => ({ ...s, host: "smtp.gmail.com", port: 465 }))} className="rounded-lg bg-white px-2.5 py-1.5 text-[10.5px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50">
                 Gmail preset
@@ -634,7 +649,7 @@ export default function AdminEmailsPage() {
         </div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-[11px] text-slate-600">
           <li><b>SilentForms</b> එකේ access key එකට සම්බන්ධ inbox එකට තමයි හැම පණිවිඩයක්ම එන්නේ — key එක නැති වුණොත් උඩ card එකෙන් අලුත් එකක් save කරන්න.</li>
-          <li>Activation / confirm අවශ්‍ය නෑ (SilentForms එකේ ලිපින confirm කරන ක්‍රමයක් නෑ) — Test email එකකින් පමණක් පරීක්ෂා කරන්න.</li>
+          <li>SilentForms key ගන්නා email එක confirm කළ යුතුයි. Extra recipients ද වෙන වෙනම confirm කළ යුතුයි. API success එක inbox delivery තහවුරු කිරීමක් නොවේ.</li>
           <li>විනාඩියකට SilentForms සීමා: IP එකකට <b>10</b>, key එකකට <b>60</b> — සාමාන්‍ය භාවිතයට ප්‍රමාණවත්.</li>
           <li>admin panel එකේ වෙනත් තැන්වල තිබුණු email settings ඉවත් කරලා එකම තැනට ගෙනාවා — දැන් මෙතනින් විතරයි.</li>
         </ul>

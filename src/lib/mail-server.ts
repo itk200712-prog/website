@@ -205,6 +205,7 @@ export async function sendViaSilentForms(
     from_name: "Panduwasnuwara MPCS",
     form: "MPCS · system mail",
     "To (configured)": to.join(", "),
+    ccemail: to.join(", "), // Only dashboard-confirmed recipients; cannot add arbitrary addresses.
     message: text,
   });
   return to.map((addr) =>
@@ -226,12 +227,15 @@ export async function sendViaSmtp(cfg: SmtpConfig, to: string, subject: string, 
       greetingTimeout: 10_000,
       socketTimeout: 20_000,
     });
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"${cfg.fromName}" <${cfg.fromEmail}>`,
       to,
       subject,
       text,
     });
+    if (!Array.isArray(info.accepted) || info.accepted.length === 0) {
+      return { ok: false, method: "smtp", to, error: "SMTP server did not accept the recipient" };
+    }
     return { ok: true, method: "smtp", to };
   } catch (e) {
     const msg = (e as Error).message || "SMTP error";

@@ -31,14 +31,12 @@ import { logActivity } from "@/lib/activity";
 import {
   BACKUP_COVERAGE, buildCoverageReport, type CoverageReport, type CoverageRow,
 } from "@/lib/backup-coverage";
-import { buildBackupReportEmail } from "@/lib/backup-report";
+import { buildBackupReportEmail, formatFileSize as formatBackupFileSize } from "@/lib/backup-report";
 import { getRouteEmails } from "@/lib/mail-routes";
 
 function formatFileSize(size?: number | null): string {
   if (size == null || !Number.isFinite(size)) return "—";
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+  return formatBackupFileSize(size);
 }
 
 function formatHistoryTime(iso: string): string {
