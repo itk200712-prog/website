@@ -3,9 +3,9 @@
 // ============================================================================
 //  Central email routing — ㉕
 //  හැම "mail එකක් එන තැනක්" ම Admin → Emails එකෙන් පාලනය වේ.
-//  Route එකකට ලිපින 1–4ක් (default 2) දාන්න පුළුවන් — හැම ලිපිනයකටම යවයි.
+//  Route එකකට ලිපින 1–10ක් (default 2) දාන්න පුළුවන් — හැම ලිපිනයකටම යවයි.
 //
-//  storage: system_settings.mail_route_<route>_<n>   (n = 1..4)
+//  storage: system_settings.mail_route_<route>_<n>   (n = 1..10)
 //  (වෙනම table එකක් / SQL run කිරීමක් අවශ්‍ය නෑ — system_settings දැනටමත් තියෙනවා)
 // ============================================================================
 
@@ -25,7 +25,8 @@ export type MailRouteDef = {
   useNotifyList?: boolean;
 };
 
-export const MAIL_SLOTS = 4;
+export { MAIL_SLOTS } from "@/lib/mail-config";
+import { MAIL_SLOTS } from "@/lib/mail-config";
 export const DEFAULT_SLOTS = 2;
 
 export const MAIL_ROUTES: MailRouteDef[] = [

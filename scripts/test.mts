@@ -2265,6 +2265,18 @@ console.log("\n── 27) SMTP-only mail delivery ──");
   ok("Backup size formatting remains correct", rep.formatFileSize(36700000) === "36.7 MB (36,700,000 bytes)");
 }
 
+{
+  const config = await import("../src/lib/mail-config");
+  const routes = readFileSync(join(root, "src/lib/mail-routes-server.ts"), "utf8");
+  const clientRoutes = readFileSync(join(root, "src/lib/mail-routes.ts"), "utf8");
+  const page = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
+  const settings = readFileSync(join(root, "src/app/api/mail/settings/route.ts"), "utf8");
+  const cron = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
+  ok("Mail recipients: shared limit 10 covers seven emails in UI, public routes and backup reports", config.MAIL_SLOTS === 10 && routes.includes("length: MAIL_SLOTS") && clientRoutes.includes('import { MAIL_SLOTS }') && page.includes("values.length < MAIL_SLOTS") && cron.includes('return routeEmailsServer("backup")'));
+  ok("SMTP: known provider mismatch caught, custom Workspace domains allowed", !!config.smtpConfigurationIssue({ host: "smtp.gmail.com", user: "test@mail.com" }) && config.smtpConfigurationIssue({ host: "smtp.gmail.com", user: "test@company.example" }) === null);
+  ok("SMTP: identity change requires fresh credentials and errors persist visibly", settings.includes("identityChanged && !pass") && page.includes("setSmtpResult") && page.includes('role="alert"') && page.includes("Object.entries(SMTP_PRESETS)"));
+}
+
 console.log(`\n══════════════════════════════════════`);
 console.log(`  RESULT: ${pass} passed, ${fail} failed`);
 console.log(`══════════════════════════════════════\n`);

@@ -71,7 +71,7 @@ git push -u origin main
    - From email = යවන Gmail එකම
 4. **SMTP සුරකින්න**. Blank password එකෙන් දැනට saved password මැකෙන්නේ නෑ. Password එක server-side `backup_secrets` තුළයි; GET response එකෙන් password එවන්නේ නෑ. Full backup/export/import එකට ඇතුළත්.
 5. **SMTP Test — saved settings** → Inbox / Spam / All Mail බලන්න. වෙනත් test recipient ලිපිනයක් දාන්නත් පුළුවන්.
-6. එක් එක් කාරණාවේ card එකේ ලැබිය යුතු ලිපින දාලා **Save → Test**. Recipient email සඳහා වෙනම SMTP accounts/passwords/keys අවශ්‍ය නැහැ. එක sender account එකෙන් යවයි. දැනට card එකකට උපරිම ලිපින 4යි.
+6. එක් එක් කාරණාවේ card එකේ ලැබිය යුතු ලිපින දාලා **Save → Test**. Recipient email සඳහා වෙනම SMTP accounts/passwords/keys අවශ්‍ය නැහැ. එක sender account එකෙන් යවයි. Card එකකට උපරිම ලිපින 10යි. ලිපින 7කට ඕන නම් එම card එකේ තවත් ලිපිනයක් ඔබමින් 7ම දාලා Save කරන්න. එක් එක් recipient එක වෙනම SMTP message එකක් ලබයි; අනෙක් recipients ලැයිස්තුව නොපෙන්වයි.
 7. **Auto Backup Reports** card එකේ recipients Save → Admin → Backup → test run → History බලන්න. Actual ZIP size = final compressed bytes. උදා: `36.7 MB (36,700,000 bytes)`; ZIP එක email attachment නොවේ.
 
 **SMTP පමණයි:** provider selector, access-key forms සහ වෙනත් mail services/fallback නැහැ. SMTP නැත්නම් / auth error / recipient rejection නම් error පෙන්වයි. එක recipient fail වුණත් අනෙක් ලිපිනවල send දිගටම සිදුවේ. Form data/Admin messages වෙනම සුරැකේ.
@@ -176,3 +176,13 @@ git push
 - Project folder එක **Downloads එකේ නෙවෙයි**, නිතර මකෙන්නේ නැති තැනක (උදා: `C:\mpcs-site`) තියාගන්න — එතකොට හැම update එකකදීම අලුත් folder හොයන්න ඕන නෑ
 - පරණ `.env.local` file එක **කිසිවිටෙක GitHub එකට push කරන්න එපා** ⚠️
 - අවුලක් ආවොත්: `git status` කියලා screenshot එකක් මට එවන්න
+
+## SMTP 535 BadCredentials / provider mismatch
+
+- `@mail.com` සහ `@gmail.com` වෙනස් providers. `@mail.com` username එක `smtp.gmail.com` වෙත යැවීමෙන් වැරදි login එකක් ලැබේ. Site එක ලිපිනය ඉබේම වෙනස් නොකරයි.
+- Gmail භාවිත කරන්න නම් සැබෑ Gmail / Google Workspace sender username එක + එම ගිණුමේ 2-Step Verification/App Password + `smtp.gmail.com:465` + නිවැරදි From email දාන්න.
+- Mail.com තබාගන්න නම් Mail.com preset → `smtp.mail.com:465` (හෝ 587 STARTTLS) + Mail.com account එකට අදාළ SMTP credentials. SMTP access/account restrictions provider එකෙන් තහවුරු කරන්න. Gmail App Password එක Mail.com account එකකට භාවිත කළ නොහැක.
+- Sender username / host වෙනස් කරන විට password එකත් නැවත දාන්න; වෙනත් ගිණුමේ saved password එක වැරදි server එකකට යවන්නේ නෑ.
+- Save → Test. 535 දිගටම ආවොත් නිවැරදි account එකෙන් අලුත් credentials සාදන්න. Site code එකෙන් වැරදි password එක නිවැරදි කළ නොහැක; password chat එකට එවන්න එපා.
+- Auto Backup Reports card එකට recipient emails 7ම Add → Save → Test. SMTP password එක එක sender එකට පමණයි. සැබෑ backup report අවශ්‍ය නම් Admin → Backup → test run → History + inbox බලන්න.
+- Official Mail.com SMTP data: https://support.mail.com/premium/imap/server.html

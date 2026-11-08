@@ -12,7 +12,8 @@ import { rateLimit, routeEmailsServer, SERVER_MAIL_ROUTES, type ServerMailRoute 
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Ten private recipients are sent in bounded batches; allow room for SMTP timeouts.
+export const maxDuration = 180;
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
 const SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();

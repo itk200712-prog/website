@@ -1,5 +1,6 @@
 // Admin-only SMTP settings and test endpoint. Passwords are never returned.
 import { NextRequest, NextResponse } from "next/server";
+import { smtpConfigurationIssue } from "@/lib/mail-config";
 import { loadSmtp, saveSmtp, sendMail, cleanupRetiredMailSettings } from "@/lib/mail-server";
 
 export const runtime = "nodejs";
@@ -56,6 +57,7 @@ export async function GET(req: NextRequest) {
     fromName: smtp?.fromName ?? "Panduwasnuwara MPCS",
     fromEmail: smtp?.fromEmail ?? "",
     hasPassword: Boolean(smtp?.pass),
+    configurationIssue: smtp ? smtpConfigurationIssue(smtp) : null,
   });
 }
 
@@ -99,6 +101,13 @@ export async function POST(req: NextRequest) {
   let pass = body.pass ? String(body.pass) : undefined; // blank preserves saved password
   if (host?.toLowerCase() === "smtp.gmail.com" && pass) pass = pass.replace(/\s/g, "");
   if (!pass) pass = undefined;
+  const existing = await loadSmtp();
+  const candidateUser = body.user === undefined ? existing?.user : String(body.user).trim();
+  const candidateHost = host ?? existing?.host;
+  const configurationIssue = smtpConfigurationIssue({ host: candidateHost, user: candidateUser });
+  if (configurationIssue) return json({ ok: false, reason: configurationIssue }, 400);
+  const identityChanged = existing && (candidateUser?.toLowerCase() !== existing.user.toLowerCase() || candidateHost?.toLowerCase() !== existing.host.toLowerCase());
+  if (identityChanged && !pass) return json({ ok: false, reason: "SMTP sender / host වෙනස් කළ නිසා අදාළ ගිණුමේ අලුත් password / App Password එකත් ඇතුළත් කර Save කරන්න. පරණ ගිණුමේ password එක අලුත් server එකට භාවිත නොකරයි." }, 400);
   const error = await saveSmtp({
     host, port, user: body.user === undefined ? undefined : String(body.user).trim(), pass,
     fromName: body.fromName === undefined ? undefined : String(body.fromName).trim(),

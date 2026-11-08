@@ -7,6 +7,8 @@
 //    · SMTP පමණයි; not-configured / send failure පැහැදිලිව වාර්තා කරයි
 // ============================================================================
 
+import { MAIL_SLOTS } from "@/lib/mail-config";
+
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
 const SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
 
@@ -47,7 +49,7 @@ async function rowsFor(keys: string[]): Promise<Map<string, string>> {
 
 /** route එකක ලිපින (Admin → Emails එකේ දාලා තියෙන ඒවා) */
 export async function routeEmailsServer(route: ServerMailRoute): Promise<string[]> {
-  const keys = ["mail_route_" + route + "_1", "mail_route_" + route + "_2", "mail_route_" + route + "_3", "mail_route_" + route + "_4"];
+  const keys = Array.from({ length: MAIL_SLOTS }, (_, i) => `mail_route_${route}_${i + 1}`);
   const map = await rowsFor([...keys, ...FALLBACKS[route]]);
   const own = keys.map((k) => map.get(k) ?? "").filter(Boolean);
   if (own.length) return Array.from(new Set(own));

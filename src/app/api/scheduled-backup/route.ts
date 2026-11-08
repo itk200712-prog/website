@@ -20,6 +20,7 @@ import ws from "ws";
 import { generateBackupZip, type BackupClient } from "@/lib/backup";
 import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils";
 import { sendBackupReport, formatFileSize } from "@/lib/backup-report";
+import { routeEmailsServer } from "@/lib/mail-routes-server";
 import { sendMail } from "@/lib/mail-server";
 import {
   autoBackupFileName,
@@ -418,20 +419,7 @@ async function recordHistory(input: {
  * (mail_route_backup_1..4). එකක්වත් දාලා නැත්නම් contact_email_1/2 වලට යයි.
  */
 async function loadBackupReportEmails(): Promise<string[]> {
-  const rows = ((await restGet("system_settings?select=key,value&key=like.mail_route_backup_*", SERVICE_KEY)) ?? []) as {
-    key: string;
-    value: string;
-  }[];
-  const own = rows
-    .sort((a, b) => a.key.localeCompare(b.key))
-    .map((r) => String(r.value ?? "").trim())
-    .filter(Boolean);
-  if (own.length) return Array.from(new Set(own));
-  const fb = ((await restGet(
-    "system_settings?select=key,value&key=in.(contact_email_1,contact_email_2)",
-    SERVICE_KEY
-  )) ?? []) as { key: string; value: string }[];
-  return Array.from(new Set(fb.map((r) => String(r.value ?? "").trim()).filter(Boolean)));
+  return routeEmailsServer("backup");
 }
 
 /** GET — Admin card එකේ status එකට (රහස් කිසිවක් එවන්නේ නෑ) */

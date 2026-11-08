@@ -2,7 +2,7 @@
 
 // ============================================================================
 // Admin → Emails — ㉕  (හැම email notification එකක්ම එකම තැනක)
-//  එක් එක් "කාරනාව" (route) එකට ලිපින 1–4ක් — හැම ලිපිනයකටම email යයි.
+//  එක් එක් "කාරනාව" (route) එකට ලිපින 1–10ක් — හැම ලිපිනයකටම email යයි.
 //  · Membership Applications  · Contact / Inquiry Form
 //  · Live Chat Requests        · Website Message Box · Business Unit Inquiries
 //  · Auto Backup Reports (සාර්ථක/අසාර්ථක වාර්තා)
@@ -18,6 +18,7 @@ import {
   DEFAULT_SLOTS, MAIL_ROUTES, MAIL_SLOTS, clearMailRouteCache, isEmail, mailKey,
   type MailRouteKey,
 } from "@/lib/mail-routes";
+import { SMTP_PRESETS, smtpConfigurationIssue } from "@/lib/mail-config";
 import { authedClient } from "@/lib/supabase/client";
 
 type Draft = Record<MailRouteKey, string[]>;
@@ -175,6 +176,8 @@ export default function AdminEmailsPage() {
   const [smtpState, setSmtpState] = useState<{ configured: boolean; hasPassword: boolean } | null>(null);
   const [smtpTestTo, setSmtpTestTo] = useState("");
   const [smtpBusy, setSmtpBusy] = useState("");
+  const [smtpResult, setSmtpResult] = useState("");
+  const smtpIssue = smtpConfigurationIssue(smtp);
 
   const loadSmtp = useCallback(async () => {
     try {
@@ -193,6 +196,8 @@ export default function AdminEmailsPage() {
   useEffect(() => { void loadSmtp(); }, [loadSmtp]);
 
   async function saveSmtpSettings(testTo?: string) {
+    if (smtpIssue) { setSmtpResult(smtpIssue); return; }
+    setSmtpResult("");
     setSmtpBusy(testTo ? "test" : "save");
     try {
       const sb = await authedClient();
@@ -205,6 +210,7 @@ export default function AdminEmailsPage() {
       });
       const j = (await res.json().catch(() => ({}))) as { ok?: boolean; notice?: string; sent?: number; method?: string; configured?: boolean; warning?: string; reason?: string; failed?: { error?: string }[] };
       if (testTo) {
+        setSmtpResult(j.ok ? j.notice ?? "SMTP accepted — Inbox / Spam බලන්න." : j.failed?.[0]?.error ?? j.reason ?? "SMTP test failed");
         show(j.ok
           ? (j.notice ?? `SMTP server accepted — ${testTo}; inbox / Spam බලන්න`)
           : `⚠ Test එක fail — ${j.failed?.[0]?.error ?? j.reason ?? "සැකසුම පරීක්ෂා කරන්න"}`);
@@ -213,9 +219,11 @@ export default function AdminEmailsPage() {
         setSmtp((s) => ({ ...s, pass: "" }));
         show(`✅ SMTP සැකසුම සුරැකුණා — site එකේ සියලු email දැන් SMTP හරහා පමණයි${j.warning ? ` · ⚠ ${j.warning}` : ""}`);
       } else {
+        setSmtpResult(j.reason ?? "SMTP save failed");
         show(`⚠ සුරැකීමේ දෝෂයක්: ${j.reason ?? "unknown"}`);
       }
     } catch (error) {
+      setSmtpResult((error as Error).message);
       show(`⚠ SMTP request failed — ${(error as Error).message}`);
     } finally {
       setSmtpBusy("");
@@ -237,7 +245,7 @@ export default function AdminEmailsPage() {
           <li><a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="font-bold underline">App Password</a> එකක් Create කරගන්න. සාමාන්‍ය Gmail password එක දාන්න එපා.</li>
           <li>පහළ Gmail address + App Password + From name + <b>smtp.gmail.com</b> + <b>465</b> පුරවන්න. From email = එම Gmail ලිපිනයම. <b>SMTP සුරකින්න</b>.</li>
           <li><b>SMTP Test — saved settings</b> ඔබලා එම inbox එකේ Inbox / Spam / All Mail බලන්න. වෙනම test ලිපිනයක් දාන්නත් පුළුවන්.</li>
-          <li>අදාළ කාරණාවල card වල ලැබිය යුතු email ලිපින දාලා <b>Save → Test</b>. Recipient ලිපිනවල passwords හෝ keys අවශ්‍ය නෑ. එක SMTP sender එකෙන් සියලු ලිපිනවලට යවයි.</li>
+          <li>අදාළ කාරණාවල card වල ලැබිය යුතු email ලිපින දාලා <b>Save → Test</b>. Recipient ලිපිනවල passwords හෝ keys අවශ්‍ය නෑ. <b>තවත් ලිපිනයක්</b> ඔබා එකම card එකට ලිපින 7ක් දාලා Save කරන්න (උපරිම 10යි). එක SMTP sender එකෙන් එක් එක් ලිපිනයට වෙනම email යවයි; recipient list එක වෙනත් recipients ට නොපෙන්වයි.</li>
           <li><b>Auto Backup Reports</b> ලිපින Save → Admin → Backup → test run. Report එකේ size එක final ZIP bytes ගණනයි.</li>
         </ol>
         <p className="mt-2">SMTP configure කරලා නැත්නම් හෝ send fail වුණොත් පැහැදිලි error එකක් පෙන්වයි. වෙනත් mail සේවාවකට fallback නැහැ. Server accepted = inbox delivered නොවේ; instant delivery සහතික කළ නොහැක.</p>
@@ -250,19 +258,27 @@ export default function AdminEmailsPage() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[13.5px] font-extrabold text-slate-900">
-              📮 Mail Server (SMTP) {smtpState?.configured ? "— ✅ සක්‍රීය" : "— ⚠ තාම set කරලා නෑ"}
+              📮 Mail Server (SMTP) {smtpState?.configured ? "— Settings saved (login verified නොවේ)" : "— ⚠ තාම set කරලා නෑ"}
             </div>
             <p className="mt-1 text-[11.5px] leading-relaxed text-slate-600">
               Site එකේ සියලු email සහ backup reports යවන්නේ <b>මෙම SMTP sender ගිණුමෙන් පමණයි</b>.
               එක් එක් recipient email සඳහා වෙනම SMTP account හෝ access key අවශ්‍ය නැහැ. Configure කරලා Save කළ පසු Test කරන්න.
             </p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <input value={smtp.user} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} type="email" placeholder="Gmail ලිපිනය (උදා: induwara633@gmail.com)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
-              <input value={smtp.pass} onChange={(e) => setSmtp({ ...smtp, pass: e.target.value })} type="password" autoComplete="new-password" placeholder={smtpState?.hasPassword ? "App Password — වෙනස් කරන්න ඕන නම් විතරයි" : "Gmail App Password (අකුරු 16)"} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+              <input value={smtp.user} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} type="email" aria-label="SMTP sender username" placeholder="Sender email / SMTP username" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+              <input value={smtp.pass} onChange={(e) => setSmtp({ ...smtp, pass: e.target.value })} type="password" autoComplete="new-password" aria-label="SMTP password" placeholder={smtpState?.hasPassword ? "Saved password — sender/host වෙනස් නම් අලුත් එක දාන්න" : "SMTP password / Gmail App Password"} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
               <input value={smtp.fromName} onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })} placeholder="පෙන්වන නම (From)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
               <input value={smtp.host} onChange={(e) => setSmtp({ ...smtp, host: e.target.value })} placeholder="smtp.gmail.com" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
               <input value={smtp.port} onChange={(e) => setSmtp({ ...smtp, port: parseInt(e.target.value, 10) || 465 })} type="number" placeholder="465" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
               <input value={smtp.fromEmail} onChange={(e) => setSmtp({ ...smtp, fromEmail: e.target.value })} type="email" placeholder="From ලිපිනය (හිස් නම් උඩ ලිපිනයම)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12px] outline-none focus:border-indigo-400" />
+            </div>
+            {smtpIssue && <div role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[12px] leading-relaxed text-rose-800">⚠ {smtpIssue}</div>}
+            {!!smtpResult && <div role="status" aria-live="polite" className="mt-3 whitespace-pre-wrap break-words rounded-xl border border-slate-200 bg-white p-3 text-[12px] leading-relaxed text-slate-700">{smtpResult}</div>}
+            <div className="mt-2 rounded-xl bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900">
+              <b>535 BadCredentials:</b> Saved settings තිබීම login සාර්ථකයි කියන එක නොවේ. <b>@mail.com ≠ @gmail.com</b>.
+              Gmail sender නම් smtp.gmail.com + එම Gmail ගිණුමේ අලුත් App Password භාවිත කරන්න.
+              Mail.com sender නම් Mail.com preset (smtp.mail.com) + එම ගිණුමේ SMTP credentials/access අවශ්‍යයි.
+              Sender/host වෙනස් කළොත් password එකත් අලුතින් දාලා Save කරන්න. අපි ලිපිනය ඉබේම වෙනස් කරන්නේ නැහැ.
             </div>
             <div className="mt-2 rounded-xl bg-white/80 px-3 py-2 text-[11px] leading-relaxed text-slate-600 ring-1 ring-slate-200">
               🔒 <b>SMTP ONLY:</b> credentials server එකේ <code>backup_secrets</code> තුළයි; full backup එකට ඇතුළත්.
@@ -276,12 +292,11 @@ export default function AdminEmailsPage() {
               <button onClick={() => void saveSmtpSettings(smtpTestTo.trim() || smtp.user)} disabled={smtpBusy !== "" || !isEmail(smtpTestTo.trim() || smtp.user)} className="btn btn-outline !py-1.5 !px-3 !text-[11px]">
                 <Send size={12} /> {smtpBusy === "test" ? "යවමින්…" : "SMTP Test — saved settings"}
               </button>
-              <button onClick={() => setSmtp((s) => ({ ...s, host: "smtp.gmail.com", port: 465 }))} className="rounded-lg bg-white px-2.5 py-1.5 text-[10.5px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50">
-                Gmail preset
-              </button>
+              {Object.entries(SMTP_PRESETS).map(([key, preset]) => <button key={key} type="button" onClick={() => setSmtp(s => ({ ...s, host: preset.host, port: preset.port }))}
+                className="rounded-lg bg-white px-2.5 py-1.5 text-[10.5px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50">{preset.label} preset</button>)}
               {smtpState?.configured && (
                 <span className="rounded-full bg-white px-2.5 py-1 text-[10.5px] font-bold text-emerald-700 ring-1 ring-emerald-200">
-                  SMTP configured ✅ (inbox verified නොවේ)
+                  SMTP settings saved · authentication/inbox verified නොවේ
                 </span>
               )}
             </div>
@@ -308,7 +323,7 @@ export default function AdminEmailsPage() {
             {activeCount} email slots · {MAIL_ROUTES.length} කාරනා
           </div>
           <div className="text-[11px] text-slate-600">
-            එක SMTP sender ගිණුමෙන් එක් එක් recipient වෙත වෙන වෙනම email යවයි. එක් ලිපිනයක් fail වුණත් අනෙක් ලිපිනවල යැවීම දිගටම සිදුවේ.
+            එක SMTP sender ගිණුමෙන් එක් එක් recipient වෙත වෙන වෙනම email යවයි. Card එකකට උපරිම ලිපින {MAIL_SLOTS}යි; ලිපින 7ක් එකම card එකට එක් කළ හැක. එක් ලිපිනයක් fail වුණත් අනෙක් ලිපිනවල යැවීම දිගටම සිදුවේ.
           </div>
         </div>
         <button onClick={() => void load()} disabled={loading} className="btn btn-outline !py-1.5 !px-3 !text-[11px]">

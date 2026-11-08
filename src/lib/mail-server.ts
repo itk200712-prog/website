@@ -1,5 +1,7 @@
 // Server-side SMTP-only mail. Credentials are stored in backup_secrets, never in the browser.
 import nodemailer from "nodemailer";
+import { smtpConfigurationIssue } from "@/lib/mail-config";
+export { SMTP_PRESETS } from "@/lib/mail-config";
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
 const SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
@@ -23,13 +25,6 @@ export type SmtpConfig = {
   fromEmail: string;
   secure: boolean;
 };
-
-/** SMTP ලෙස වැඩ කරන පොදු presets (Admin card එකේ shortcut buttons) */
-export const SMTP_PRESETS = {
-  gmail: { host: "smtp.gmail.com", port: 465, secure: true },
-  outlook: { host: "smtp-mail.outlook.com", port: 587, secure: false },
-  yahoo: { host: "smtp.mail.yahoo.com", port: 465, secure: true },
-} as const;
 
 function svcHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, ...extra };
@@ -136,6 +131,8 @@ export async function cleanupRetiredMailSettings(): Promise<boolean> {
 
 /** SMTP එකකින් යවයි */
 export async function sendViaSmtp(cfg: SmtpConfig, to: string, subject: string, text: string): Promise<MailResult> {
+  const configurationIssue = smtpConfigurationIssue(cfg);
+  if (configurationIssue) return { ok: false, method: "smtp", to, error: configurationIssue };
   let transporter: ReturnType<typeof nodemailer.createTransport> | undefined;
   try {
     transporter = nodemailer.createTransport({
@@ -161,6 +158,13 @@ export async function sendViaSmtp(cfg: SmtpConfig, to: string, subject: string, 
   } catch (e) {
     const msg = (e as Error).message || "SMTP error";
     const safeMessage = cfg.pass ? msg.split(cfg.pass).join("[redacted]") : msg;
+    const failure = e as Error & { code?: string; responseCode?: number };
+    if (failure.code === "EAUTH" || failure.responseCode === 535 || /\b535\b|BadCredentials|Invalid login/i.test(safeMessage)) {
+      const advice = cfg.host.toLowerCase() === "smtp.gmail.com"
+        ? "Gmail username එක නිවැරදිද බලන්න. එම ගිණුමේ 2-Step Verification ON කර අලුත් 16-character App Password එකක් සාදා මෙතන Save කරන්න. සාමාන්‍ය Gmail password එක නොවේ."
+        : "SMTP username/password සහ එම provider එකේ SMTP access සක්‍රීයද බලන්න. Gmail App Password එක වෙනත් provider එකකට භාවිත කරන්න බැහැ.";
+      return { ok: false, method: "smtp", to, error: `SMTP authentication failed (${failure.responseCode ?? (/535/.test(safeMessage) ? 535 : "EAUTH")}) — ${advice}` };
+    }
     return { ok: false, method: "smtp", to, error: safeMessage.slice(0, 300) };
   } finally { transporter?.close(); }
 }
