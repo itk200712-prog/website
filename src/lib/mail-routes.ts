@@ -194,9 +194,8 @@ async function sendViaServerRoute(
 /**
  * 📨 route එකක ලිපින වලට email යවයි.
  *
- * ⚠ හැම යැවීමක්ම **server එකෙන්** (`/api/mail/send`) — SilentForms **access key එක
- *   browser එකට කවදාවත් එන්නේ නෑ**. පිළිවෙළ server එකේම තීරණය වේ:
- *   ① SilentForms (key එකෙන්) → ② වැඩ නොකළොත් SMTP → ③ දෙකම නෑ නම් form එක Admin → Messages එකට save වේ.
+ * හැම යැවීමක්ම server SMTP route එකෙන් පමණයි. Credentials browser එකට නොඑයි.
+ * Send අසාර්ථක වුණත් form data Admin → Messages/DB තුළ සුරැකේ.
  */
 export async function sendToRoute(route: MailRouteKey, payload: Record<string, unknown>): Promise<number> {
   const list = await getRouteEmails(route);

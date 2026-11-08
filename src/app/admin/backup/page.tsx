@@ -329,7 +329,7 @@ export default function AdminBackupPage() {
         encrypted: false,
         schedule: `Every ${sch.intervalHours}h from save time (next: ${nextRunLabel(sch)}) — TEST`,
       });
-      // 📮 server route — SilentForms (ප්‍රධාන සේවාව) → fail වුණොත් SMTP
+      // 📮 server route — SMTP only
       const sb = await authedClient();
       const { data: sess } = await sb.auth.getSession();
       const token = sess?.session?.access_token ?? "";
@@ -341,8 +341,8 @@ export default function AdminBackupPage() {
       const j = (await res.json().catch(() => ({}))) as { sent?: number; method?: string; failed?: { error?: string }[] };
       const sent = Number(j?.sent ?? 0);
       show(sent > 0
-        ? `✅ Test report එක ${sent} ලිපිනයකට යැවුණා (${j.method === "smtp" ? "SMTP" : "SilentForms"}) — inbox/spam බලන්න`
-        : `⚠ Email යැවීම අසාර්ථක — ${j.failed?.[0]?.error ?? "Admin → Emails එකේ SilentForms access key එක හෝ SMTP දාන්න"}`);
+        ? `✅ Test report එක ${sent} ලිපිනයකට යැවුණා (SMTP) — inbox/spam බලන්න`
+        : `⚠ Email යැවීම අසාර්ථක — ${j.failed?.[0]?.error ?? "Admin → Emails එකේ SMTP configure කරන්න"}`);
     } finally {
       setReportBusy(false);
     }
@@ -1246,7 +1246,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           <div className="text-[12px] font-extrabold text-slate-800">📧 ඊමේල් වාර්තාව (සාර්ථක / අසාර්ථක)</div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
             හැම auto-backup එකකටම පස්සේ <b>file නම · file වර්ගය · file ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස</b> සහිත
-            email එකක් යයි. (යැවීම: SilentForms → වැඩ නොකළොත් ඉබේම SMTP.) ලිපින එකතු කරන්නේ{" "}
+            email එකක් යයි. (යැවීම: SMTP පමණයි; fail වුණොත් error වාර්තා වේ.) ලිපින එකතු කරන්නේ{" "}
             <a href="/admin/emails" className="font-extrabold text-indigo-700 underline">Admin → Emails → “Auto Backup Reports”</a> එකෙන්.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">

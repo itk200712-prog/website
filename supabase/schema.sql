@@ -1547,3 +1547,8 @@ drop policy if exists notify_emails_admin on public.notify_emails;
 create policy notify_emails_admin on public.notify_emails for all using (public.is_admin()) with check (public.is_admin());
 
 notify pgrst, 'reload schema';
+
+-- SMTP-only mail migration: retire obsolete provider preferences/access keys.
+-- SMTP credentials, mail-route recipients and all unrelated backup secrets are preserved.
+delete from public.backup_secrets
+where key like 'silentforms%' or key = 'mail_provider';

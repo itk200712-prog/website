@@ -1,31 +1,33 @@
 import assert from 'node:assert/strict';
 import nodemailer from 'nodemailer';
 
-// Mock service configuration BEFORE imports: no live DB, real recipients, or external mail.
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://mail-test.invalid';
+// Isolated service mocks only: no live database writes, external HTTP calls or real mail.
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://smtp-test.invalid';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon';
-const { sendViaSilentForms, sendViaSmtp, sendMail, loadRecipientKeys, saveRecipientKey, recipientKeyMetadata, RECIPIENT_KEY_PREFIX } = await import('../src/lib/mail-server');
+const { sendViaSmtp, sendMail, cleanupRetiredMailSettings } = await import('../src/lib/mail-server');
 const { formatFileSize, sendBackupReport } = await import('../src/lib/backup-report');
 const { NextRequest } = await import('next/server');
 const { GET, POST } = await import('../src/app/api/mail/settings/route');
+const { POST: sendPost } = await import('../src/app/api/mail/send/route');
 const originalFetch = globalThis.fetch;
 const originalTransport = nodemailer.createTransport;
-const db = new Map<string, string>([['silentforms_access_key', 'global_key_NEVER_USE_1234'], ['mail_provider', 'silentforms']]);
-const posts: Record<string, string>[] = [];
-const writes: Record<string, string>[][] = [];
+const db = new Map<string, string>([
+  ['silentforms_access_key', 'retired-placeholder'], ['silentforms_recipient:old@example.com', 'retired-placeholder'],
+  ['mail_provider', 'retired-provider'], ['backup_cron_secret', 'keep-cron'], ['gemini_api_key', 'keep-ai'],
+]);
 const smtpTo: string[] = [];
-const sfErrors = new Map<string, number>();
 const smtpErrors = new Set<string>();
-let role = 'admin';
-let keyReads = 0;
+const writes: Record<string, string>[][] = [];
+let role = 'admin', closed = 0, calls = 0, maxConcurrent = 0, concurrent = 0;
+let dbError = false, cleanupError = false;
 let passed = 0;
+const recipients = Array.from({ length: 7 }, (_, i) => `recipient${i + 1}@example.com`);
 const pass = (name: string) => { passed++; console.log(`PASS ${name}`); };
-const keyFor = (n: number) => `recipient_${n}_secret_1234567890`;
-const config = { host: 'test.invalid', port: 465, secure: true, user: 'test@example.com', pass: 'dummy', fromName: 'MPCS', fromEmail: 'test@example.com' };
+const config = { host: 'smtp.gmail.com', port: 465, secure: true, user: 'sender@example.com', pass: 'dummy-password', fromName: 'MPCS', fromEmail: 'sender@example.com' };
 const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 function request(body?: unknown, authorized = true) {
-  return new NextRequest('https://mail-test.invalid/api/mail/settings', {
+  return new NextRequest('https://smtp-test.invalid/api/mail/settings', {
     method: body === undefined ? 'GET' : 'POST',
     headers: { ...(authorized ? { Authorization: 'Bearer test-session' } : {}), 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -34,162 +36,138 @@ function request(body?: unknown, authorized = true) {
 try {
   globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
     const u = new URL(String(url));
-    if (u.hostname === 'silentforms.com') {
-      const payload = JSON.parse(String(init?.body));
-      posts.push(payload);
-      const status = sfErrors.get(payload.accessKey);
-      return status ? response({ status: 'error', message: `Mock provider ${status}` }, status) : response({ status: 'success' });
-    }
-    assert.equal(u.hostname, 'mail-test.invalid');
+    assert.equal(u.hostname, 'smtp-test.invalid', 'No secondary/external HTTP mail service is permitted');
     if (u.pathname === '/auth/v1/user') return response({ id: '12345678-1234-1234-1234-123456789abc' });
     if (u.pathname === '/rest/v1/profiles') return response([{ role }]);
     assert.equal(u.pathname, '/rest/v1/backup_secrets');
+    if (init?.method === 'DELETE') {
+      assert.equal(u.searchParams.get('or'), '(key.like.silentforms*,key.eq.mail_provider)');
+      if (cleanupError) return response({ message: 'cleanup unavailable' }, 503);
+      for (const key of db.keys()) if (key.startsWith('silentforms') || key === 'mail_provider') db.delete(key);
+      return new Response(null, { status: 204 });
+    }
     if (init?.method === 'POST') {
+      if (dbError) return response({ message: 'Mock schema write error', code: '42703' }, 400);
       const rows = JSON.parse(String(init.body));
       writes.push(rows);
       for (const row of rows) { assert.deepEqual(Object.keys(row).sort(), ['key', 'value']); db.set(row.key, row.value); }
       return new Response(null, { status: 204 });
     }
-    keyReads++;
     const filter = u.searchParams.get('key') ?? '';
-    return response(Array.from(db, ([key, value]) => ({ key, value })).filter(row => filter.startsWith('like.')
-      ? row.key.startsWith(RECIPIENT_KEY_PREFIX)
-      : filter.slice(4, -1).split(',').includes(row.key)));
+    return response(Array.from(db, ([key, value]) => ({ key, value })).filter(row => filter.slice(4, -1).split(',').includes(row.key)));
   }) as typeof fetch;
-  nodemailer.createTransport = (() => ({ sendMail: async ({ to }: { to: string }) => {
-    smtpTo.push(to);
-    if (smtpErrors.has(to)) throw new Error('SMTP authentication / recipient failure');
-    return { accepted: [to] };
-  } })) as typeof originalTransport;
+  const installTransport = () => {
+    nodemailer.createTransport = ((options: Record<string, unknown>) => {
+      assert.equal(options.requireTLS, !options.secure);
+      return { close: () => { closed++; }, sendMail: async ({ to }: { to: string }) => {
+        calls++; concurrent++; maxConcurrent = Math.max(maxConcurrent, concurrent);
+        await Promise.resolve();
+        concurrent--; smtpTo.push(to);
+        if (smtpErrors.has(to)) throw new Error('SMTP authentication / recipient failure');
+        return { accepted: [to] };
+      } };
+    }) as typeof originalTransport;
+  };
+  installTransport();
 
-  const before = keyReads;
   assert.equal((await GET(request(undefined, false))).status, 403);
-  assert.equal((await POST(request({ recipientEmail: 'one@example.com', recipientAccessKey: keyFor(1) }, false))).status, 403);
-  assert.equal(keyReads, before);
+  assert.equal((await POST(request({ host: 'smtp.gmail.com' }, false))).status, 403);
   assert.equal(writes.length, 0);
-  pass('Unauthenticated secret reads/writes denied before DB access');
-  role = 'member';
-  assert.equal((await GET(request())).status, 403);
-  assert.equal((await POST(request({ recipientEmail: 'one@example.com', recipientAccessKey: keyFor(1) }))).status, 403);
-  role = 'admin';
-  pass('Non-admin secret access denied');
+  role = 'member'; assert.equal((await GET(request())).status, 403);
+  assert.equal((await POST(request({ host: 'smtp.gmail.com' }))).status, 403);
+  role = 'admin'; pass('Unauthenticated and non-admin settings access denied');
 
-  assert.equal(await saveRecipientKey(' ONE@Example.COM ', keyFor(1)), null);
-  assert.equal(db.get(RECIPIENT_KEY_PREFIX + 'one@example.com'), keyFor(1));
-  assert.equal((await loadRecipientKeys()).get('one@example.com'), keyFor(1));
-  pass('Normalized email mapping persists and reloads');
-  for (let n = 2; n <= 7; n++) assert.equal(await saveRecipientKey(`person${n}@example.com`, keyFor(n)), null);
-  assert.equal((await loadRecipientKeys()).size, 7);
-  pass('Seven independent recipient mappings save without overwriting each other');
+  const missing = await sendMail({ to: recipients, subject: 'Test', text: 'Test' });
+  assert.equal(missing.ok, 0); assert.equal(missing.failed.length, 7);
+  assert.equal(missing.method, 'none'); assert.equal(calls, 0);
+  pass('No SMTP configuration → explicit failure for every recipient, no fallback');
 
-  assert.equal(await saveRecipientKey('bad-email', keyFor(1)), 'invalid_recipient_email');
-  assert.equal(await saveRecipientKey('one@example.com', 'bad'), 'invalid_access_key');
-  assert.equal((await POST(request({ recipientEmail: 'one@example.com', recipientAccessKey: {} }))).status, 400);
-  assert.equal(db.get(RECIPIENT_KEY_PREFIX + 'one@example.com'), keyFor(1));
-  pass('Invalid email/key/payload cannot overwrite saved mapping');
-
-  const metadata = await recipientKeyMetadata();
-  assert.equal(metadata['one@example.com'].configured, true);
-  assert.ok(!JSON.stringify(metadata).includes(keyFor(1)));
-  const getResult = await GET(request());
-  const publicBody = await getResult.text();
-  assert.equal(getResult.status, 200);
-  for (let n = 1; n <= 7; n++) assert.ok(!publicBody.includes(keyFor(n)));
-  assert.ok(!publicBody.includes(db.get('silentforms_access_key')!));
-  pass('Admin GET returns masked previews only, never stored full keys');
-
-  const recipients = ['one@example.com', ...Array.from({ length: 6 }, (_, i) => `person${i + 2}@example.com`)];
-  posts.length = 0;
-  const seven = await sendViaSilentForms([...recipients, ' ONE@EXAMPLE.COM '], 'Test', 'ZIP size: 36.7 MB');
-  assert.equal(seven.length, 7);
-  assert.equal(posts.length, 7);
-  for (let i = 0; i < recipients.length; i++) {
-    const post = posts.find(p => p['To (configured)'] === recipients[i]);
-    assert.equal(post?.accessKey, keyFor(i + 1));
-    assert.equal(post?.sf_extra, '');
-    assert.equal(post?.ccemail, undefined);
+  for (const payload of [{ provider: 'smtp' }, { recipientEmail: recipients[0], recipientAccessKey: 'obsolete' }, { accessKey: 'obsolete' }, {}, null, []]) {
+    assert.equal((await POST(request(payload))).status, 400);
   }
-  assert.ok(seven.every(r => r.ok));
-  pass('Seven emails → seven matching keys; no shared CC, no duplicate normalized recipient');
+  assert.equal(writes.length, 0); pass('Retired provider/key payloads and empty settings rejected');
 
-  posts.length = 0;
-  const missing = await sendViaSilentForms(['missing@example.com'], 'Test', 'Test');
-  assert.equal(missing[0].ok, false);
-  assert.equal(posts.length, 0);
-  pass('Missing mapping never uses unrelated global/default key');
+  for (const payload of [{ port: 0 }, { port: 65536 }, { port: 1.5 }, { host: 'https://smtp.gmail.com' }, { fromEmail: 'invalid' }, { pass: {} }, { secure: 'yes' }]) {
+    assert.equal((await POST(request(payload))).status, 400);
+  }
+  pass('Invalid SMTP fields rejected before DB writes');
 
-  sfErrors.set(keyFor(2), 403);
-  const partial = await sendViaSilentForms([recipients[0], recipients[1]], 'Test', 'Test');
-  assert.equal(partial.find(r => r.to === recipients[0])?.ok, true);
-  assert.equal(partial.find(r => r.to === recipients[1])?.ok, false);
-  pass('Bad key affects its own address only');
-  for (const [key, value] of Object.entries({ smtp_host: 'smtp.test.invalid', smtp_port: '465', smtp_user: 'test@example.com', smtp_pass: 'dummy' })) db.set(key, value);
-  posts.length = 0; smtpTo.length = 0;
-  const mixed = await sendMail({ to: [recipients[0], recipients[1], 'missing@example.com'], subject: 'Test', text: 'Test' });
-  assert.equal(mixed.ok, 3);
-  assert.equal(mixed.failed.length, 0);
-  assert.equal(mixed.method, 'mixed');
-  assert.deepEqual(smtpTo.sort(), [recipients[1], 'missing@example.com'].sort());
-  assert.equal(mixed.results.length, 3);
-  pass('Partial SF success retries ONLY failed/missing addresses via SMTP');
+  const saved = await POST(request({ ...config, pass: 'abcd efgh ijkl mnop' }));
+  assert.equal(saved.status, 200); const savedBody = await saved.json();
+  assert.equal(savedBody.provider, 'smtp'); assert.equal(savedBody.configured, true);
+  assert.equal(db.get('smtp_pass'), 'abcdefghijklmnop'); assert.equal(db.get('smtp_secure'), 'true');
+  assert.ok(!db.has('mail_provider')); assert.ok(!db.has('silentforms_access_key')); assert.ok(!db.has('silentforms_recipient:old@example.com'));
+  assert.equal(db.get('backup_cron_secret'), 'keep-cron'); assert.equal(db.get('gemini_api_key'), 'keep-ai');
+  pass('SMTP save uses key/value schema, normalizes Gmail App Password and removes only retired mail secrets');
 
-  db.set('mail_provider', 'smtp');
-  sfErrors.clear(); smtpErrors.add(recipients[1]); posts.length = 0; smtpTo.length = 0;
-  const reverse = await sendMail({ to: recipients.slice(0, 2), subject: 'Test', text: 'Test' });
-  assert.equal(reverse.ok, 2);
-  assert.equal(reverse.method, 'mixed');
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].accessKey, keyFor(2));
-  pass('SMTP-primary partial failure retries ONLY failed address with its own SF key');
-  db.set('mail_provider', 'silentforms'); smtpErrors.clear();
+  assert.equal((await POST(request({ pass: '', fromName: 'New name' }))).status, 200);
+  assert.equal(db.get('smtp_pass'), 'abcdefghijklmnop');
+  assert.equal((await POST(request({ host: 'smtp.gmail.com', pass: '    ' }))).status, 200);
+  assert.equal(db.get('smtp_pass'), 'abcdefghijklmnop');
+  pass('Blank or all-space Gmail password preserves the saved password');
 
-  sfErrors.set(keyFor(2), 429); posts.length = 0;
-  await sendViaSilentForms(recipients.slice(0, 2), 'Test', 'Test');
-  posts.length = 0;
-  const cooldown = await sendViaSilentForms(recipients.slice(0, 2), 'Test', 'Test');
-  assert.equal(cooldown[0].ok, true);
-  assert.equal(cooldown[1].ok, false);
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].accessKey, keyFor(1));
-  sfErrors.clear(); await saveRecipientKey(recipients[1], keyFor(2));
-  pass('Rate-limit cooldown isolated per key and reset on explicit re-save');
+  const state = await GET(request()); assert.equal(state.status, 200);
+  const stateText = await state.text();
+  assert.ok(!stateText.includes('abcdefghijklmnop')); assert.ok(!stateText.includes('keep-cron'));
+  assert.equal(JSON.parse(stateText).hasPassword, true);
+  assert.deepEqual(Object.keys(JSON.parse(stateText)).sort(), ['configured','fromEmail','fromName','hasPassword','host','ok','port','provider','user'].sort());
+  pass('Settings GET returns SMTP metadata only, never password or retired provider state');
 
-  posts.length = 0; smtpTo.length = 0;
-  const isolated = await POST(request({ testTo: recipients[1], testProvider: 'silentforms' }));
-  assert.equal(isolated.status, 200);
-  assert.equal(posts[0].accessKey, keyFor(2));
-  assert.equal(smtpTo.length, 0);
-  assert.equal((await isolated.json()).delivery, 'unconfirmed');
-  pass('Per-row test uses that saved key without SMTP fallback; delivery is unconfirmed');
+  smtpTo.length = 0;
+  const all = await sendMail({ to: [...recipients, ' RECIPIENT1@EXAMPLE.COM ', 'invalid'], subject: 'Test', text: 'Test' });
+  assert.equal(all.ok, 7); assert.equal(all.failed.length, 0); assert.equal(all.method, 'smtp');
+  assert.equal(all.results.length, 7); assert.equal(smtpTo.length, 7); assert.ok(maxConcurrent <= 3);
+  assert.equal(closed, calls); pass('Seven recipients use one SMTP sender, normalize/dedupe, bound connections and close transports');
 
-  posts.length = 0; smtpErrors.add(recipients[1]);
-  const smtpTest = await POST(request({ testTo: recipients[1], testProvider: 'smtp' }));
-  assert.equal(smtpTest.status, 502);
-  assert.equal(posts.length, 0);
-  smtpErrors.clear();
-  pass('SMTP test errors never hidden by SF fallback');
+  smtpErrors.add(recipients[1]); smtpTo.length = 0;
+  const partial = await sendMail({ to: recipients, subject: 'Test', text: 'Test' });
+  assert.equal(partial.ok, 6); assert.equal(partial.failed.length, 1); assert.equal(partial.failed[0].to, recipients[1]);
+  assert.equal(smtpTo.length, 7); assert.equal(closed, calls);
+  pass('One rejected recipient does not drop others or trigger alternate-provider calls');
 
-  const removal = await POST(request({ recipientEmail: 'ONE@example.com', recipientAccessKey: '' }));
-  assert.equal(removal.status, 200);
-  assert.equal((await loadRecipientKeys()).has('one@example.com'), false);
-  assert.equal((await loadRecipientKeys()).size, 6);
-  assert.equal(db.get(RECIPIENT_KEY_PREFIX + recipients[1]), keyFor(2));
-  assert.equal((await sendViaSilentForms(['one@example.com'], 'Test', 'Test'))[0].ok, false);
-  pass('Explicit key removal affects only that normalized address and cannot revive global fallback');
+  const testFailed = await POST(request({ testTo: recipients[1] }));
+  assert.equal(testFailed.status, 502); const failedBody = await testFailed.json(); assert.equal(failedBody.method, 'smtp');
+  assert.match(failedBody.failed[0].error, /SMTP authentication/);
+  smtpErrors.clear(); pass('SMTP Test returns actual failure, never false fallback success');
 
-  nodemailer.createTransport = (() => ({ sendMail: async () => ({ accepted: [] }) })) as typeof originalTransport;
-  assert.equal((await sendViaSmtp(config, 'one@example.com', 'Test', 'Test')).ok, false);
-  pass('SMTP empty accepted list is failure');
+  const testSuccess = await POST(request({ testTo: recipients[0] }));
+  assert.equal(testSuccess.status, 200); assert.equal((await testSuccess.json()).delivery, 'unconfirmed');
+  assert.equal((await POST(request({ testTo: 'invalid' }))).status, 400);
+  pass('SMTP Test validates recipient and never claims confirmed inbox delivery');
 
-  assert.equal(formatFileSize(Buffer.alloc(36_700_000).byteLength), '36.7 MB (36,700,000 bytes)');
+  const sendResult = await sendPost(request({ to: recipients, subject: 'Test', text: 'Test' }));
+  assert.equal(sendResult.status, 200); assert.equal((await sendResult.json()).sent, 7);
+  assert.equal((await sendPost(request({ to: recipients, subject: 'Test', text: 'Test' }, false))).status, 401);
+  pass('Authenticated send endpoint handles seven recipients; anonymous arbitrary relay denied');
+
+  assert.equal((await POST(request({ port: 587 }))).status, 200); assert.equal(db.get('smtp_secure'), 'false');
+  assert.equal((await sendMail({ to: recipients[0], subject: 'Test', text: 'Test' })).ok, 1);
+  pass('Port 587 config uses required STARTTLS');
+
+  dbError = true;
+  const writeFailure = await POST(request({ fromName: 'Will fail' }));
+  assert.equal(writeFailure.status, 500); assert.match((await writeFailure.json()).reason, /Mock schema write error/);
+  dbError = false; pass('Real database save failure reason is surfaced');
+
+  cleanupError = true;
+  const cleanupWarning = await POST(request({ fromName: 'Saved despite cleanup warning' }));
+  assert.equal(cleanupWarning.status, 200); assert.ok((await cleanupWarning.json()).warning);
+  assert.equal(await cleanupRetiredMailSettings(), false);
+  cleanupError = false; pass('Cleanup failure warns without losing successful SMTP save');
+
+  nodemailer.createTransport = (() => ({ close() {}, sendMail: async () => ({ accepted: [] }) })) as typeof originalTransport;
+  assert.equal((await sendViaSmtp(config, recipients[0], 'Test', 'Test')).ok, false);
+  pass('Empty SMTP accepted list is a failure');
+  nodemailer.createTransport = (() => ({ close() {}, sendMail: async () => { throw new Error(`Auth failed ${config.pass}`); } })) as typeof originalTransport;
+  const redacted = await sendViaSmtp(config, recipients[0], 'Test', 'Test'); assert.equal(redacted.ok, false);
+  assert.ok(!redacted.error?.includes(config.pass)); pass('SMTP errors redact credentials');
+  installTransport();
+
+  assert.equal(formatFileSize(36_700_000), '36.7 MB (36,700,000 bytes)');
   let reportText = '';
-  const count = await sendBackupReport({ status: 'success', fileName: 'real.zip', fileSize: 36_700_000, durationMs: 1000 }, recipients, async (to, _subject, text) => {
-    assert.equal(to.length, 7); reportText = text; return to.length;
-  });
-  assert.equal(count, 7); assert.match(reportText, /36\.7 MB \(36,700,000 bytes\)/);
-  pass('Backup report uses server sender for all recipients and actual ZIP byte count');
+  const reports = await sendBackupReport({ status: 'success', fileName: 'actual.zip', fileSize: 36_700_000, durationMs: 1000 }, recipients,
+    async (to, subject, text) => { reportText = text; return (await sendMail({ to, subject, text })).ok; });
+  assert.equal(reports, 7); assert.match(reportText, /36\.7 MB \(36,700,000 bytes\)/);
+  pass('Backup reports use SMTP for all recipients and preserve actual compressed ZIP size');
   console.log(`\nRESULT: ${passed} behavioral tests passed`);
-} finally {
-  globalThis.fetch = originalFetch;
-  nodemailer.createTransport = originalTransport;
-}
+} finally { globalThis.fetch = originalFetch; nodemailer.createTransport = originalTransport; }

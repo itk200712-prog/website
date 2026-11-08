@@ -1,17 +1,9 @@
-// ============================================================================
-//  /api/mail/settings — Admin → Emails → “SilentForms” + “Mail Server (SMTP)” cards
-// ----------------------------------------------------------------------------
-//  GET  → දැනට තියෙන සැකසුම (password/access key එවන්නේ නෑ — තියෙනවද + masked preview)
-//  POST → { accessKey?, provider? } SilentForms සැකසුම · host/port/user/pass/from SMTP
-//         (service-role → backup_secrets — backup එකට ඉබේම එකතු වේ)
-//  POST → { recipientEmail, recipientAccessKey } per-email key; { testTo, testProvider } isolated test
-//  Auth: admin/superadmin Bearer token
-// ============================================================================
-
+// Admin-only SMTP settings and test endpoint. Passwords are never returned.
 import { NextRequest, NextResponse } from "next/server";
-import { loadMailSettings, loadSmtp, saveMailSettings, saveSmtp, sendMail, sendViaSilentForms, sendViaSmtp, recipientKeyMetadata, saveRecipientKey } from "@/lib/mail-server";
+import { loadSmtp, saveSmtp, sendMail, cleanupRetiredMailSettings } from "@/lib/mail-server";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
@@ -55,23 +47,8 @@ async function auth(req: NextRequest): Promise<boolean> {
 export async function GET(req: NextRequest) {
   if (!(await auth(req))) return json({ ok: false, reason: "forbidden" }, 403);
   const smtp = await loadSmtp();
-  const sf = await loadMailSettings();
-  const key = sf.key;
-  let recipientKeys;
-  try { recipientKeys = await recipientKeyMetadata(); }
-  catch { return json({ ok: false, reason: "recipient_keys_load_failed" }, 503); }
   return json({
-    ok: true,
-    silentforms: {
-      configured: sf.saved,       // admin save කරපු key එකක් තියෙනවද
-      saved: sf.saved,
-      usingDefault: !sf.saved && Boolean(key),
-      provider: sf.provider,
-      preview: key ? `${key.slice(0, 8)}…${key.slice(-6)}` : "",
-      length: key.length,
-    },
-    recipientKeys,
-    provider: sf.provider,
+    ok: true, provider: "smtp",
     configured: Boolean(smtp),
     host: smtp?.host ?? "",
     port: smtp?.port ?? 465,
@@ -91,86 +68,48 @@ export async function POST(req: NextRequest) {
     return json({ ok: false, reason: "bad_json" }, 400);
   }
 
-  // Separate row per normalized email; auth is checked before all secret operations.
-  if (body?.recipientEmail !== undefined) {
-    if (typeof body.recipientEmail !== "string" || typeof body.recipientAccessKey !== "string") return json({ ok: false, reason: "invalid_recipient_key_payload" }, 400);
-    const error = await saveRecipientKey(body.recipientEmail, body.recipientAccessKey);
-    if (error) return json({ ok: false, reason: error }, error.startsWith("invalid_") ? 400 : 500);
-    try { return json({ ok: true, recipientKeys: await recipientKeyMetadata() }); }
-    catch { return json({ ok: false, reason: "Saved, but metadata refresh failed. Refresh page." }, 503); }
-  }
+  if (!body || Array.isArray(body)) return json({ ok: false, reason: "bad_json_object" }, 400);
+  const allowed = new Set(["host", "port", "user", "pass", "fromName", "fromEmail", "secure", "testTo"]);
+  if (Object.keys(body).some(key => !allowed.has(key))) return json({ ok: false, reason: "unsupported_fields — SMTP settings only" }, 400);
+  if (Object.keys(body).length === 0) return json({ ok: false, reason: "empty_settings" }, 400);
 
-  // 🧪 test send — configure කරලා තියෙන SMTP එකෙන් ලිපිනයකට යවලා බලනවා
-  if (body?.testTo) {
+  if (body.testTo !== undefined) {
     const to = String(body.testTo).trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) return json({ ok: false, reason: "invalid_test_email" }, 400);
-    const testProvider = body.testProvider;
-    if (testProvider !== undefined && testProvider !== "smtp" && testProvider !== "silentforms") {
-      return json({ ok: false, reason: "invalid_test_provider" }, 400);
-    }
-    const subject = `MPCS mail test — ${new Date().toISOString()}`;
-    const text = `Panduwasnuwara MPCS mail test. Requested address: ${to}\n` +
-      "SilentForms delivers only to the key owner and dashboard-confirmed extra recipients. " +
-      "API acceptance is not proof of inbox delivery. Check Email me every submission, confirmation, Spam and All Mail.";
-    let r;
-    // Test the selected card itself. Never hide SMTP errors behind SilentForms success.
-    if (testProvider === "smtp") {
-      const smtp = await loadSmtp();
-      if (!smtp) return json({ ok: false, reason: "SMTP configure කර Save කරන්න. Gmail App Password අවශ්‍යයි." }, 400);
-      const result = await sendViaSmtp(smtp, to, subject, text);
-      r = { ok: result.ok ? 1 : 0, method: "smtp", failed: result.ok ? [] : [result] };
-    } else if (testProvider === "silentforms") {
-      const legacyKey = body.useGlobalKey === true ? (await loadMailSettings()).key : undefined;
-      const results = await sendViaSilentForms([to], subject, text, legacyKey);
-      r = { ok: results.filter(x => x.ok).length, method: "silentforms", failed: results.filter(x => !x.ok) };
-    } else {
-      r = await sendMail({ to, subject, text });
-    }
-    const notice = r.method === "silentforms"
-      ? (body.useGlobalKey === true
-        ? "Legacy global-key submission accepted — goes to that key owner, not necessarily the typed email. Inbox delivery unconfirmed."
-        : "SilentForms submission accepted — inbox delivery තහවුරු නෑ. මේ email එකට අදාළ key එකම save කළ බව බලන්න. SilentForms → Email me every submission ON → Inbox / Spam බලන්න.")
-      : r.method === "mixed" ? "SilentForms + SMTP accepted pending recipients; inbox delivery unconfirmed."
-      : `SMTP server accepted mail for ${to} — inbox / Spam බලන්න; instant delivery සහතික කළ නොහැක.`;
-    return json(
-      { ok: r.ok > 0, sent: r.ok, method: r.method, delivery: "unconfirmed", notice, failed: r.failed.map((f) => ({ to: f.to, error: f.error })) },
-      r.ok > 0 ? 200 : 502
-    );
-  }
-
-  // 📨 SilentForms access key / provider save
-  if (body?.accessKey !== undefined || body?.provider !== undefined) {
-    const accessKey = body?.accessKey === undefined ? undefined : String(body.accessKey ?? "").trim();
-    if (accessKey !== undefined && accessKey !== "" && !/^[a-zA-Z0-9_-]{16,128}$/.test(accessKey)) {
-      return json({ ok: false, reason: "invalid_access_key" }, 400);
-    }
-    const provider = body?.provider === undefined ? undefined : String(body.provider) === "smtp" ? "smtp" as const : "silentforms" as const;
-    const mkErr = await saveMailSettings({ accessKey, provider });
-    if (mkErr) return json({ ok: false, reason: mkErr }, 500);
-    const after = await loadMailSettings();
-    return json({
-      ok: true,
-      silentforms: {
-        configured: after.saved,
-        saved: after.saved,
-        usingDefault: !after.saved && Boolean(after.key),
-        provider: after.provider,
-        preview: after.key ? `${after.key.slice(0, 8)}…${after.key.slice(-6)}` : "",
-        length: after.key.length,
-      },
+    const result = await sendMail({
+      to, subject: `MPCS SMTP test — ${new Date().toISOString()}`,
+      text: `Panduwasnuwara MPCS — SMTP mail test.\nRecipient: ${to}\nSMTP server acceptance does not guarantee inbox delivery. Check Inbox / Spam / All Mail.`,
     });
+    return json({ ok: result.ok > 0, sent: result.ok, method: result.method, delivery: "unconfirmed",
+      notice: result.ok ? `SMTP server accepted mail for ${to} — Inbox / Spam බලන්න; instant delivery සහතික කළ නොහැක.` : undefined,
+      failed: result.failed.map(({ to, error }) => ({ to, error })),
+    }, result.ok > 0 ? 200 : 502);
   }
-
-  const err = await saveSmtp({
-    host: body?.host ? String(body.host) : undefined,
-    port: body?.port ? Number(body.port) : undefined,
-    user: body?.user ? String(body.user) : undefined,
-    pass: body?.pass ? String(body.pass) : undefined,
-    fromName: body?.fromName ? String(body.fromName) : undefined,
-    fromEmail: body?.fromEmail ? String(body.fromEmail) : undefined,
-    secure: typeof body?.secure === "boolean" ? (body.secure as boolean) : undefined,
+  for (const key of ["host", "user", "pass", "fromName", "fromEmail"]) {
+    if (body[key] !== undefined && typeof body[key] !== "string") return json({ ok: false, reason: `invalid_${key}` }, 400);
+  }
+  const emailValid = (v: unknown) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v ?? "").trim());
+  if (body.host !== undefined && !/^[a-zA-Z0-9.-]{1,253}$/.test(String(body.host).trim())) return json({ ok: false, reason: "invalid_host" }, 400);
+  if (body.user !== undefined && !String(body.user).trim()) return json({ ok: false, reason: "invalid_user" }, 400);
+  if (body.fromEmail !== undefined && String(body.fromEmail).trim() && !emailValid(body.fromEmail)) return json({ ok: false, reason: "invalid_from_email" }, 400);
+  if (body.port !== undefined && (!Number.isInteger(Number(body.port)) || Number(body.port) < 1 || Number(body.port) > 65535)) return json({ ok: false, reason: "invalid_port" }, 400);
+  if (body.secure !== undefined && typeof body.secure !== "boolean") return json({ ok: false, reason: "invalid_secure" }, 400);
+  const port = body.port === undefined ? undefined : Number(body.port);
+  const host = body.host === undefined ? undefined : String(body.host).trim();
+  let pass = body.pass ? String(body.pass) : undefined; // blank preserves saved password
+  if (host?.toLowerCase() === "smtp.gmail.com" && pass) pass = pass.replace(/\s/g, "");
+  if (!pass) pass = undefined;
+  const error = await saveSmtp({
+    host, port, user: body.user === undefined ? undefined : String(body.user).trim(), pass,
+    fromName: body.fromName === undefined ? undefined : String(body.fromName).trim(),
+    fromEmail: body.fromEmail === undefined ? undefined : String(body.fromEmail).trim(),
+    secure: port === 465 ? true : port === 587 ? false : typeof body.secure === "boolean" ? body.secure : undefined,
   });
-  if (err) return json({ ok: false, reason: err }, 500);
+  if (error) return json({ ok: false, reason: error }, 500);
+  const legacyCleaned = await cleanupRetiredMailSettings();
   const smtp = await loadSmtp();
-  return json({ ok: true, configured: Boolean(smtp), host: smtp?.host ?? "", port: smtp?.port ?? 465, user: smtp?.user ?? "" });
+  return json({ ok: true, provider: "smtp", configured: Boolean(smtp), host: smtp?.host ?? "", port: smtp?.port ?? 465,
+    user: smtp?.user ?? "", legacyCleaned,
+    warning: legacyCleaned ? undefined : "SMTP saved. Old unused mail settings cleanup failed; saving again will retry.",
+  });
 }

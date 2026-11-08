@@ -58,34 +58,27 @@ git push -u origin main
 - 🗑️ delete කළ විට upload කළ image එක storage එකෙනුත් ඉවත් වේ
 - ↑ ↓ පිළිවෙල වෙනස් කරන්න · උපරිම images 10ක් · **Save Settings** ඔබන්න
 
-## පියවර 6 — Email delivery සැකසීම (SilentForms / SMTP)
+## පියවර 6 — SMTP ONLY email සැකසීම
 
-### එක් එක් email ලිපිනයට වෙනම SilentForms key එකක්
-1. https://silentforms.com/get-access-key → Email 1 දාලා එම inbox එකේ confirmation link එක click කර key එක ගන්න.
-2. Email 2, 3… 6/7 සඳහාත් වෙන වෙනම එම පියවර කරන්න. Key එක අදාළ inbox එකේම විය යුතුයි; site එකට ownership verify කරන්න provider API එකක් නැහැ.
-3. එක් එක් form එකේ https://silentforms.com/sign-in → **Email me every submission ON**. Paused නොවන බවත් domain restrictions නිවැරදි බවත් බලන්න.
-4. Site **Admin → Emails** → අදාළ කාරණාවේ email ලිපිනය ලියන්න → card **Save**. Email ලිපිනයක් හා key එකක් save කිරීම වෙන වෙනමයි.
-5. එම email පේළිය යට ඇති key කොටුවට **එම email එකේ key** paste → **Save key**. **KEY SAVED ✅** පෙනෙයි. අනිත් email වල keys මෙයට දාන්න එපා.
-6. **Test key** → එම inbox එකේ Inbox / Spam / All Mail පරීක්ෂා කරන්න. Test එක uses saved mapping only; SMTP fallback නැහැ. API success = provider accepted, inbox verified නොවේ.
-7. අනෙක් email පේළි සඳහාත් ඒ ආකාරයට Save key + Test key කරන්න. එකම email ලිපිනය කාරණා කිහිපයක තිබුණත් key එක එකවරක් save කළාම ඇති. Email ලිපිනය වෙනස් කළොත් එයට අදාළ වෙනම key එක Save කරන්න.
-8. Provider order එකේ **① SilentForms → ② SMTP** තෝරන්න. Notifications සඳහා global/default key fallback නෑ. Global key card එක legacy manual test පමණයි. Missing key නම් ඒ ලිපිනයට error පෙන්වයි / SMTP configured නම් එයට fallback වේ.
-9. **Auto Backup Reports** card එකේ ලිපින + එම keys Save → Admin → Backup → test run. Reports හරියටම එම mappings භාවිත කරයි; size එක final ZIP bytes ගණනයි.
-10. **Remove key** කරන්නේ ඒ email එකේ key mapping එක විතරයි. Email route ලිපිනය වෙනමයි; පරණ email එකක key එක අලුත් email එකට ඉබේම මාරු නොවේ.
+1. යවන Gmail ගිණුමේ Google Account → Security → **2-Step Verification ON**.
+2. https://myaccount.google.com/apppasswords → app name `MPCS Website` → Create → අකුරු 16ක App Password copy කරන්න. සාමාන්‍ය Gmail password එක භාවිත නොකරන්න; App Password chat එකක share නොකරන්න.
+3. **Admin → Emails → Mail Server (SMTP)** පුරවන්න:
+   - Gmail address = යවන Gmail එක
+   - App Password = ඉහත ලබාගත් එක
+   - From name = `Panduwasnuwara MPCS`
+   - Host = `smtp.gmail.com`
+   - Port = `465` (TLS); `587` නම් STARTTLS භාවිත වේ
+   - From email = යවන Gmail එකම
+4. **SMTP සුරකින්න**. Blank password එකෙන් දැනට saved password මැකෙන්නේ නෑ. Password එක server-side `backup_secrets` තුළයි; GET response එකෙන් password එවන්නේ නෑ. Full backup/export/import එකට ඇතුළත්.
+5. **SMTP Test — saved settings** → Inbox / Spam / All Mail බලන්න. වෙනත් test recipient ලිපිනයක් දාන්නත් පුළුවන්.
+6. එක් එක් කාරණාවේ card එකේ ලැබිය යුතු ලිපින දාලා **Save → Test**. Recipient email සඳහා වෙනම SMTP accounts/passwords/keys අවශ්‍ය නැහැ. එක sender account එකෙන් යවයි. දැනට card එකකට උපරිම ලිපින 4යි.
+7. **Auto Backup Reports** card එකේ recipients Save → Admin → Backup → test run → History බලන්න. Actual ZIP size = final compressed bytes. උදා: `36.7 MB (36,700,000 bytes)`; ZIP එක email attachment නොවේ.
 
-**Extra recipients අවශ්‍ය නැහැ** — වෙන වෙනම owner keys නිසා ඒ ක්‍රමය මත රඳා නොපවතී. කලින් SilentForms dashboard එකේ extra recipients තිබේ නම් අනවශ්‍ය copies යා හැක; ඒවා dashboard එකෙන් remove කරන්න.
-Keys server-only `backup_secrets` rows තුළයි; full backup/export/import සමඟ ඇතුළත්. නව SQL අවශ්‍ය නැහැ. Saved full keys GET response එකෙන් නොඑයි; masked preview පමණයි.
+**SMTP පමණයි:** provider selector, access-key forms සහ වෙනත් mail services/fallback නැහැ. SMTP නැත්නම් / auth error / recipient rejection නම් error පෙන්වයි. එක recipient fail වුණත් අනෙක් ලිපිනවල send දිගටම සිදුවේ. Form data/Admin messages වෙනම සුරැකේ.
 
-**Rate limits:** විනාඩියකට IP එකකට 10 / key එකකට 60. සියලු keys එක් site එකකින් යවන නිසා IP සීමාවත් අදාළයි. Repeated Test නිසා 429 ආවොත් ටිකක් ඉඳලා retry කරන්න. SMTP fallback යන්නේ fail වූ recipients වෙත පමණයි; සාර්ථක ලිපිනවලට ආයේ යවන්නේ නෑ.
+SMTP Save කළ විට පරණ භාවිත නොවන mail-provider රහස් rows පමණක් cleanup වේ; SMTP credentials, routes සහ වෙනත් රහස් මැකෙන්නේ නෑ. නව SQL run කිරීමක් අවශ්‍ය නැහැ. පරණ backup එකක් restore කළත් retired settings email යැවීමට භාවිත වෙන්නේ නෑ.
 
-### Site Admin එකේ ලිපින වලටම යවන්න SMTP
-1. Gmail → Google Account → Security → 2-Step Verification ON → https://myaccount.google.com/apppasswords → නව App Password (සාමාන්‍ය Gmail password නොවේ).
-2. **Admin → Emails → Mail Server (SMTP)**: Gmail address, App Password, From name, `smtp.gmail.com`, port `465`, From email = එම Gmail එක.
-3. **SMTP සුරකින්න** → **SMTP Test — saved settings**. මේ Test එක SilentForms වෙත fallback නොවේ; SMTP error එකම පෙන්වයි.
-4. Inbox එකට ආ පසු provider තේරීමෙන් **① SMTP → ② SilentForms** Save කරන්න. SilentForms HTTP success වුණත් inbox එකට නොආවොත් automatic fallback දුවන්නේ නැති නිසා SMTP primary තේරීම වැදගත්.
-5. **Auto Backup Reports** card එකේ ලිපින Save → Admin → Backup → test run → History බලන්න.
-6. History/email දෙකේ size එක සෑදූ final compressed ZIP bytes ගණනෙන්ම ගනී. `36.7 MB (36,700,000 bytes)` යනු format උදාහරණයක් පමණයි; ස්ථිර size එකක් නොවේ. 1 MB = 1,000,000 bytes (MiB display වල වෙනසක් පේන්න පුළුවන්). ZIP එක email attachment නොවේ.
-
-Instant inbox delivery කිසිම provider එකකින් සහතික කළ නොහැක. Provider accepted එක inbox delivered කියා නොසලකන්න.
+**Server accepted ≠ inbox delivered.** Instant delivery සහතික කළ නොහැක. Inbox/Spam පරීක්ෂා කරන්න; authentication error නම් App Password නැවත සාදන්න.
 
 ## පියවර 7 — WhatsApp Password Recovery
 

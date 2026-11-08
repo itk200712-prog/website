@@ -119,7 +119,7 @@ const STATUS_META: Record<BackupReportStatus, { emoji: string; si: string; en: s
 
 /**
  * යවන email එකේ subject + body එක හදයි.
- * (SilentForms එකට plain text විදිහට යවයි — Sinhala අකුරු හැම email client එකකම පේනවා.)
+ * (SMTP හරහා plain text විදිහට යවයි — Sinhala අකුරු හැම email client එකකම පේනවා.)
  */
 export function buildBackupReportEmail(input: BackupReportInput): {
   subject: string;
@@ -172,7 +172,7 @@ export function buildBackupReportEmail(input: BackupReportInput): {
   lines.push("මේ email එක ඉබේම යැවුණේ auto-backup schedule එකෙන්.");
 
   const body = lines.join("\n");
-  // SilentForms fields (subject line එකද අතින් තබයි)
+  // Report fields (subject line එකද අතින් තබයි)
   const fields: Record<string, string> = {
     _subject: subject,
     _template: "table",
@@ -197,7 +197,7 @@ export function buildBackupReportEmail(input: BackupReportInput): {
 }
 
 /** Legacy helper name retained; all browser reports use the authenticated server sender now. */
-export async function postSilentForms(to: string, payload: Record<string, unknown>): Promise<boolean> {
+export async function postBackupReport(to: string, payload: Record<string, unknown>): Promise<boolean> {
   try {
     const { authedClient } = await import("@/lib/supabase/client");
     const sb = await authedClient();
@@ -217,8 +217,8 @@ export async function postSilentForms(to: string, payload: Record<string, unknow
 /**
 
  * හැම ලිපිනයකටම වාර්තාව යවයි — @returns යැවූ ගණන
- * @param sender optional — server එකේදී SilentForms/SMTP දෙන්න (`(to, subject, text) => Promise<number>`).
- *               නොදුන්නොත් browser එකේදී SilentForms (Admin → Emails එකේ save කරපු key එකෙන්).
+ * @param sender optional — server එකේදී SMTP sender දෙන්න (`(to, subject, text) => Promise<number>`).
+ *               නොදුන්නොත් browser එකෙන් authenticated server SMTP route එකට යවයි.
  */
 export async function sendBackupReport(
   input: BackupReportInput,
@@ -232,7 +232,7 @@ export async function sendBackupReport(
   let ok = 0;
   await Promise.all(
     list.map(async (to) => {
-      if (await postSilentForms(to, fields)) ok += 1;
+      if (await postBackupReport(to, fields)) ok += 1;
     })
   );
   return ok;

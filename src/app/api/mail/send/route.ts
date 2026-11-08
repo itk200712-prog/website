@@ -2,7 +2,7 @@
 //  POST /api/mail/send — site එකේ email එකක් යවන එකම තැන
 // ----------------------------------------------------------------------------
 //  · SMTP (Gmail App Password) configure කරලා තියෙනවා නම් **SMTP** එකෙන් යයි
-//  · ප්‍රධාන සේවාව **SilentForms**; fail වුණොත් **SMTP** එකෙන් යයි
+//  · **SMTP ONLY**; no fallback provider
 //  · Auth: admin/superadmin Bearer token හෝ x-backup-secret (cron)
 // ============================================================================
 
@@ -78,7 +78,6 @@ export async function GET(req: NextRequest) {
     ok: true,
     smtpConfigured: Boolean(smtp),
     smtp: smtp ? { host: smtp.host, port: smtp.port, user: smtp.user, fromName: smtp.fromName, fromEmail: smtp.fromEmail } : null,
-    silentFormsHint: "SilentForms — access key එක Admin → Emails එකේ ‘SilentForms’ card එකෙන් save කරන්න",
   });
 }
 

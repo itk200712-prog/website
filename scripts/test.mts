@@ -135,8 +135,7 @@ const wa = `https://wa.me/${seed.SETTINGS.whatsapp_number}?text=${encodeURICompo
 ok("wa.me/94742352670 link", wa.startsWith("https://wa.me/94742352670?text="));
 
 console.log("\n── 6) email service endpoint (req #1) ──");
-const fs = "https://silentforms.com/api/submit";
-ok("silentforms.com/api/submit", fs === "https://silentforms.com/api/submit");
+ok("mail service is SMTP-only", readFileSync(join(root, "src/lib/mail-server.ts"), "utf8").includes("nodemailer.createTransport"));
 
 console.log("\n── 7) Default business template (req #4) ──");
 const fresh = seed.BUSINESSES.find((b) => b.slug === "ristbury-tiara");
@@ -557,9 +556,8 @@ const adminMessagesSrc = readFileSync(join(root, "src/app/admin/messages/page.ts
 const adminEmailsSrc = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
 ok("mail: dedicated 'message' route exists with livechat/contact fallback",
   mailRoutesSrc.includes('key: "message"') && mailRoutesSrc.includes('"mail_route_livechat_1", "live_chat_email", "contact_email_1"'));
-ok("mail: SilentForms success එක status/success/ok වලින් විතරයි ගණන් ගන්නේ",
-  readFileSync(join(root, "src/lib/silentforms.ts"), "utf8").includes('json?.status === "success"') &&
-  readFileSync(join(root, "src/lib/silentforms.ts"), "utf8").includes('json?.success === true'));
+ok("mail: SMTP recipient acceptance is checked before success",
+  readFileSync(join(root, "src/lib/mail-server.ts"), "utf8").includes("info.accepted.length === 0"));
 ok("mail: Message tab emails via 'message' route + visitor confirmation",
   liveChatSrc.includes('sendToRoute("message", payload)') && liveChatSrc.includes("_autoresponse") && liveChatSrc.includes("payload.email = visitorEmail"));
 ok("mail: Message tab claims success only when saved or emailed",
@@ -2235,99 +2233,36 @@ console.log("\n── 26) Auto-backup වාර්තා email (file name · typ
     mailSrc.includes("return `mail_route_${route}_${n}`;"));
 }
 
-console.log("\n── 27) Mail delivery — SilentForms (ප්‍රධාන) + SMTP (උපසේවා) ──");
+console.log("\n── 27) SMTP-only mail delivery ──");
 {
   const ms = readFileSync(join(root, "src/lib/mail-server.ts"), "utf8");
   const mrs = readFileSync(join(root, "src/lib/mail-routes-server.ts"), "utf8");
   const sendRoute = readFileSync(join(root, "src/app/api/mail/send/route.ts"), "utf8");
-  const setRoute = readFileSync(join(root, "src/app/api/mail/settings/route.ts"), "utf8");
-  const mailSrc = readFileSync(join(root, "src/lib/mail-routes.ts"), "utf8");
-  const sfSrc = readFileSync(join(root, "src/lib/silentforms.ts"), "utf8");
-  const emailsPage = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
-  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { dependencies: Record<string, string> };
-
-  ok("mail: nodemailer dependency + SMTP transport (Gmail App Password)", 
-    Boolean(pkg.dependencies.nodemailer) && ms.includes("import nodemailer from \"nodemailer\"") &&
-    ms.includes("nodemailer.createTransport") && ms.includes("smtp.gmail.com"));
-  ok("mail: SMTP රහස් backup_secrets එකේ (service role) — browser bundle එකට යන්නේ නෑ",
-    ms.includes("backup_secrets") && ms.includes("SUPABASE_SERVICE_ROLE_KEY") &&
-    ms.includes('smtp_pass') && ms.includes("loadSmtp"));
-
-  ok("SilentForms: https://silentforms.com/api/submit ට JSON POST + access key",
-    sfSrc.includes('export const SILENTFORMS_ENDPOINT = "https://silentforms.com/api/submit"') &&
-    sfSrc.includes('"Content-Type": "application/json"') && sfSrc.includes("accessKey") &&
-    sfSrc.includes("export async function postToSilentForms"));
-  ok("SilentForms: access key default එකක් + Admin save කරන එකට මුල් තැන (settings)",
-    sfSrc.includes("SILENTFORMS_DEFAULT_KEY") && sfSrc.includes("SILENTFORMS_KEY_SETTING") &&
-    sfSrc.includes("MAIL_PROVIDER_SETTING") && sfSrc.includes("resolveSilentFormsKey") &&
-    sfSrc.includes("bf4a0621f8f5f3d1360a356ad57a15dc623b96d52412b27e87cc6f75f64f189b"));
-  ok("SilentForms key save: backup_secrets එකේ තියෙන columns (key, value) විතරයි — 400 නෑ", 
-    ms.includes("async function upsertSecretRows") &&
-    ms.includes("rows.map((r) => ({ key: r.key, value: r.value }))") &&
-    !/updated_at\s*:/.test(ms) &&
-    ms.includes("save failed (${res.status})"));
-  ok("SilentForms: 401/403/429 දෝෂ පැහැදිලිව හඳුනාගනී (key වැරදි / rate limit)",
-    sfSrc.includes("res.status === 401") && sfSrc.includes("res.status === 403") && sfSrc.includes("res.status === 429"));
-  ok("FormSubmit සම්පූර්ණයෙන්ම ඉවත් — කිසිම තැනක formsubmit.co නෑ", 
-    !ms.toLowerCase().includes("formsubmit") && !mailSrc.toLowerCase().includes("formsubmit") &&
-    !sendRoute.toLowerCase().includes("formsubmit") && !setRoute.toLowerCase().includes("formsubmit") &&
-    !emailsPage.toLowerCase().includes("formsubmit") &&
-    !readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").toLowerCase().includes("formsubmit") &&
-    !readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8").toLowerCase().includes("formsubmit"));
-
-  ok("/api/mail/send: admin Bearer හෝ cron secret — නැත්නම් යවන්නේ නෑ (open relay නෑ)",
-    sendRoute.includes("userIsAdmin") && sendRoute.includes("cronSecretOk") &&
-    sendRoute.includes("if (!authed) return json({ ok: false, reason: \"unauthorized\" }, 401)"));
-  ok("/api/mail/send: public forms වලට route එකකින් විතරයි — ලිපින server එකේම හොයයි + rate limit",
-    sendRoute.includes("SERVER_MAIL_ROUTES.includes(wanted)") &&
-    sendRoute.includes("routeEmailsServer(wanted)") && sendRoute.includes("rateLimit(ip, wanted)") &&
-    mrs.includes("export const SERVER_MAIL_ROUTES") && mrs.includes("MAX_PER_WINDOW"));
-  ok("/api/mail/settings: SilentForms access key save + SMTP save + test send (admin පමණයි)",
-    setRoute.includes("saveMailSettings(") && setRoute.includes("body?.accessKey") &&
-    setRoute.includes("saveSmtp(") && setRoute.includes("body?.testTo") && setRoute.includes("userIsAdmin"));
-
-  ok("site forms: හැම යැවීමක්ම server එකෙන් — access key එක browser එකට යන්නේ නෑ", 
-    mailSrc.includes("async function sendViaServerRoute") && mailSrc.includes('fetch("/api/mail/send"') &&
-    !mailSrc.includes("silentforms.com") && !mailSrc.includes("SILENTFORMS_DEFAULT_KEY") &&
-    mailSrc.includes("export async function sendToRoute"));
-  ok("server mail: cooldown එක එක් එක් key එකට පමණයි — අනෙක් ලිපින නවතින්නේ නෑ",
-    ms.includes("SF_DOWN_FOR_MS = 15 * 60 * 1000") && ms.includes("sfDownUntil = new Map<string, number>()") &&
-    ms.includes("markSilentFormsDown(key)") && ms.includes("clearSilentFormsDown(key)") && ms.includes("silentFormsDown(key)") &&
-    ms.includes('const order: MailProvider[] = settings.provider === "smtp" ? ["smtp", "silentforms"] : ["silentforms", "smtp"]'));
-  ok("server mail: එක් එක් ලිපිනයට එහිම key එක — partial fallback යන්නේ fail වුණු ලිපිනවලට පමණයි",
-    ms.includes("export async function loadRecipientKeys") && ms.includes("export async function saveRecipientKey") &&
-    ms.includes("const key = keys.get(to)") && ms.includes("const pending = list.filter(email => !final.get(email)?.ok)") &&
-    ms.includes("sendViaSilentForms(pending, input.subject, input.text)") && !ms.includes("input.text, settings.key"));
-  ok("Admin → Emails: 📨 SilentForms card (access key + configured badge) + 📮 SMTP card",
-    emailsPage.includes("SilentForms — ප්‍රධාන email සේවාව") && emailsPage.includes("Access Key සුරකින්න") &&
-    emailsPage.includes("mail/settings") && emailsPage.includes("Mail Server (SMTP)") &&
-    emailsPage.includes("App Password") && emailsPage.includes("myaccount.google.com/apppasswords"));
-  ok("auto-backup emails: SilentForms → SMTP sender එකෙන් යවයි (scheduled route + backup report)",
-    readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8").includes("await sendMail({ to, subject, text })") &&
-    readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").includes("sender?: (to: string[], subject: string, text: string) => Promise<number>") &&
-    readFileSync(join(root, "src/lib/backup-report.ts"), "utf8").includes("postSilentForms"));
-}
-
-{
   const settings = readFileSync(join(root, "src/app/api/mail/settings/route.ts"), "utf8");
+  const routes = readFileSync(join(root, "src/lib/mail-routes.ts"), "utf8");
   const page = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
-  const report = await import("../src/lib/backup-report");
-  ok("Mail tests isolate provider, expose missing SMTP and never claim inbox delivery", settings.includes('testProvider === "smtp"') && settings.includes('testProvider === "silentforms"') && settings.includes('sendViaSmtp(smtp, to') && settings.includes('delivery: "unconfirmed"'));
-  ok("Admin mail setup explains confirmation and dashboard notifications", page.includes("Email me every submission") && page.includes("Extra recipients") && page.includes('testProvider: "smtp"') && page.includes('testProvider: "silentforms"') && !page.includes("Activation / confirm අවශ්‍ය නෑ"));
-  ok("ZIP report displays actual decimal MB + exact bytes", report.formatFileSize(36700000) === "36.7 MB (36,700,000 bytes)" && report.formatFileSize(NaN).startsWith("0 B"));
-  const cron = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
-  ok("Backup report uses final ZIP length, same bytes used in history/uploads", cron.includes("fileSize: built.zip.length") && cron.includes("size: built.zip.length"));
-}
-
-{
-  const page = readFileSync(join(root, "src/app/admin/emails/page.tsx"), "utf8");
-  const editor = readFileSync(join(root, "src/components/recipient-mail-key.tsx"), "utf8");
-  const server = readFileSync(join(root, "src/lib/mail-server.ts"), "utf8");
-  const route = readFileSync(join(root, "src/app/api/mail/settings/route.ts"), "utf8");
   const backup = readFileSync(join(root, "src/lib/backup-report.ts"), "utf8");
-  ok("Recipient keys: every valid email row has its own editor, saved state + masked preview", page.includes("<RecipientMailKey") && editor.includes("Save key") && editor.includes("Test key") && editor.includes("Remove key") && editor.includes("KEY SAVED"));
-  ok("Recipient keys: authenticated API only, dedicated backup_secrets row per normalized address", route.includes("recipientKeys") && route.includes("saveRecipientKey(body.recipientEmail, body.recipientAccessKey)") && server.includes('RECIPIENT_KEY_PREFIX = "silentforms_recipient:"') && server.includes("RECIPIENT_KEY_PREFIX + email"));
-  ok("Backup reports: no key/localStorage or direct provider call in browser", !backup.includes("localStorage") && !backup.includes("resolveSilentFormsKey") && backup.includes('fetch("/api/mail/send"') && !page.includes('localStorage?.setItem("mpcs_silentforms_key"'));
+  const cron = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  ok("SMTP: nodemailer dependency, server transport and TLS/STARTTLS", !!pkg.dependencies.nodemailer && ms.includes("nodemailer.createTransport") && ms.includes("requireTLS: !cfg.secure") && ms.includes("smtp.gmail.com"));
+  ok("SMTP secrets: backup_secrets + service role, no password in settings GET", ms.includes("SUPABASE_SERVICE_ROLE_KEY") && ms.includes('smtp_pass') && settings.includes("hasPassword: Boolean(smtp?.pass)") && !settings.slice(settings.indexOf("export async function GET"), settings.indexOf("export async function POST")).includes("pass:"));
+  ok("SMTP save: schema columns key/value only, detailed error", ms.includes("rows.map((r) => ({ key: r.key, value: r.value }))") && !/updated_at\s*:/.test(ms) && ms.includes("save failed (${res.status})"));
+  ok("Mail send: recipient dedupe, explicit missing SMTP error and bounded batches", ms.includes("Array.from(new Set") && ms.includes("if (!smtp)") && ms.includes("i += 3") && ms.includes("sendViaSmtp(smtp, to"));
+  ok("Mail send: only SMTP method, no provider loop or fallback sender", !ms.includes("MailProvider") && !ms.includes("sendViaSilentForms") && !ms.includes("loadMailSettings") && !ms.includes("for (const step"));
+  ok("Mail send: rejects recipient nonacceptance and closes transporter", ms.includes("info.accepted.length === 0") && ms.includes("transporter?.close()"));
+  ok("Mail send: admin Bearer or cron auth retained", sendRoute.includes("userIsAdmin") && sendRoute.includes("cronSecretOk") && sendRoute.includes('if (!authed) return json({ ok: false, reason: "unauthorized" }, 401)'));
+  ok("Public forms: server recipient resolution and rate limiting retained", sendRoute.includes("SERVER_MAIL_ROUTES.includes(wanted)") && sendRoute.includes("routeEmailsServer(wanted)") && sendRoute.includes("rateLimit(ip, wanted)") && mrs.includes("MAX_PER_WINDOW"));
+  ok("Settings API: admin-only SMTP save/test and rejects unknown provider/key payloads", settings.includes("userIsAdmin") && settings.includes("unsupported_fields") && settings.includes("saveSmtp(") && settings.includes("body.testTo") && settings.includes('provider: "smtp"'));
+  ok("Settings API: validates port and preserves blank App Password", settings.includes("invalid_port") && settings.includes("if (!pass) pass = undefined") && settings.includes("port === 587 ? false"));
+  ok("Admin UI: only SMTP card + setup instructions + recipients", page.includes("SMTP ONLY") && page.includes("Mail Server (SMTP)") && page.includes("myaccount.google.com/apppasswords") && page.includes("SMTP test recipient") && !/silentforms|RecipientMailKey|Save key/i.test(page));
+  ok("Retired client/server integration modules deleted", !existsSync(join(root, "src/lib/silentforms.ts")) && !existsSync(join(root, "src/components/recipient-mail-key.tsx")));
+  ok("No retired provider endpoints/client imports in live mail paths", !/silentforms\.com|formsubmit\.co|lib\/silentforms/i.test(ms + sendRoute + settings + routes + page + backup));
+  ok("Forms and browser backup reports use server route, no stored client keys", routes.includes('fetch("/api/mail/send"') && backup.includes('fetch("/api/mail/send"') && !backup.includes("localStorage"));
+  ok("Backup reports use same server SMTP sender for success/failure", cron.includes("await sendMail({ to, subject, text })") && backup.includes("sender?: (to: string[], subject: string, text: string) => Promise<number>"));
+  ok("Backup reports retain exact final ZIP size", cron.includes("fileSize: built.zip.length") && cron.includes("size: built.zip.length"));
+  ok("Retired settings cleanup is service-role scoped and only follows SMTP Save", ms.includes("export async function cleanupRetiredMailSettings") && ms.includes('method: "DELETE"') && settings.includes("await cleanupRetiredMailSettings()"));
+  const rep = await import("../src/lib/backup-report");
+  ok("Backup size formatting remains correct", rep.formatFileSize(36700000) === "36.7 MB (36,700,000 bytes)");
 }
 
 console.log(`\n══════════════════════════════════════`);
