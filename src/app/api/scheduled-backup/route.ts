@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
+import { readRemoteMedia } from "@/lib/backup-media-server";
 import { generateBackupZip, type BackupClient } from "@/lib/backup";
 import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils";
 import { formatFileSize, type BackupReportInput } from "@/lib/backup-report";
@@ -167,6 +168,7 @@ async function buildFullBackupZip(
     encryptPassword: encryptPassword || undefined,
     assetBaseUrl,
     cronSecret: cronSecret || undefined,
+    readMedia: async (url) => { const media = await readRemoteMedia(url); return { b64: media.bytes.toString("base64"), type: media.type }; },
     onMeta: (m) => {
       meta = m;
     },

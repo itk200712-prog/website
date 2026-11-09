@@ -19,7 +19,7 @@ import {
   restoreBackup, setBackupSecret, verifyRestore, type BackupHistoryEntry,
 } from "@/lib/backup";
 import {
-  BACKUP_FORMAT_VERSION, BACKUP_HISTORY_KEEP, decryptBackupText, isEncryptedBackupText, sha256Hex, summarizeInserts,
+  BACKUP_FORMAT_VERSION, BACKUP_HISTORY_KEEP, decryptBackupText, isEncryptedBackupText, sha256Hex, summarizeInserts, readBackupTableCounts,
   type BackupManifest, type ParsedInsert,
 } from "@/lib/backup-utils";
 import {
@@ -110,6 +110,8 @@ export default function AdminBackupPage() {
     encrypted: boolean;
     /** Format v3: ZIP එකේ site-assets/public/ files (restore එකට යවයි) */
     siteAssets: { path: string; bytes: Uint8Array }[];
+    mediaFiles: { path: string; bytes: Uint8Array }[];
+    tableCounts: Record<string, number>;
     /** Format v3: ZIP එකේ site-source/ design files ගාණ (CSS/cursor ඇතුළුව — hash verify වේ) */
     siteSourceCount: number;
     /** database.sql එක ඇතුළේ site-public/ image rows ගාණ (.sql import එකකදීත් පෙනේ) */
@@ -372,7 +374,8 @@ export default function AdminBackupPage() {
         .from("profiles")
         .select("*", { count: "exact", head: true })
         .not("password_display", "is", null)
-        .neq("password_display", "");
+        .neq("password_display", "")
+        .not("auth_email", "is", null).neq("auth_email", "");
 
       // storage images + public assets + source files (backup ZIP එකට යන ගාණම)
       let meta: { images?: number; siteAssets?: number; siteSource?: number } | null = null;
@@ -453,7 +456,8 @@ export default function AdminBackupPage() {
       let rawSql: string;
       let manifest: BackupManifest | null = null;
       // Format v3 site update package (site-assets + site-source) — පරණ backup වල නෑ
-      let siteAssets: { path: string; bytes: Uint8Array }[] = [];
+      const siteAssets: { path: string; bytes: Uint8Array }[] = [];
+      const mediaFiles: { path: string; bytes: Uint8Array }[] = [];
       let siteSourceCount = 0;
       let siteHashState: "verified" | "mismatch" | "unchecked" | "none" = "none";
       if (/\.zip$/i.test(file.name)) {
@@ -465,19 +469,27 @@ export default function AdminBackupPage() {
         rawSql = await entry.async("string");
         const manEntry = zip.file("manifest.json") ?? zip.file(/manifest\.json$/i)[0];
         if (manEntry) {
-          try { manifest = JSON.parse(await manEntry.async("string")) as BackupManifest; } catch { manifest = null; }
+          try { manifest = JSON.parse(await manEntry.async("string")) as BackupManifest; } catch { throw new Error("manifest.json is corrupt — import stopped"); }
+          // Verify every declared file, including missing files, schema and media.
+          for (const [name, info] of Object.entries(manifest.files ?? {})) {
+            const entry = zip.file(name);
+            if (!entry) throw new Error(`Backup file missing: ${name}`);
+            const bytes = await entry.async("uint8array");
+            if (bytes.length !== info.size || await sha256Hex(bytes) !== info.sha256) throw new Error(`Backup integrity check failed: ${name}`);
+          }
         }
         // 🌐 Format v3: site design/update files ටිකත් ගෙන manifest hash වලින් verify කරයි.
         // public assets (icons/images) restore එකට තියා ගනී; source files (CSS/cursor)
         // hash එකෙන් තහවුරු කර ගාණ විතරක් තියා ගනී (code එක apply වෙන්නේ deploy එකෙන්).
         const siteEntries = Object.values(zip.files).filter(
-          (f) => !f.dir && (f.name.startsWith("site-assets/public/") || f.name.startsWith("site-source/"))
+          (f) => !f.dir && (f.name.startsWith("site-assets/public/") || f.name.startsWith("site-source/") || f.name.startsWith("media/"))
         );
         let hashChecked = 0;
         let hashMismatch = false;
         for (const f of siteEntries) {
           const bytes = await f.async("uint8array");
           if (f.name.startsWith("site-assets/public/")) siteAssets.push({ path: f.name, bytes });
+          else if (f.name.startsWith("media/")) mediaFiles.push({ path: f.name.slice("media/".length), bytes });
           else siteSourceCount++;
           const expectedHash = manifest?.files?.[f.name]?.sha256 ?? "";
           if (expectedHash) {
@@ -515,7 +527,8 @@ export default function AdminBackupPage() {
         sql = await decryptBackupText(rawSql, encPw);
         if (manifest?.databasePlainSha256) {
           const okHash = (await sha256Hex(sql)) === manifest.databasePlainSha256;
-          manifestMsg += okHash ? " · 🔓 decrypt + hash හරි" : " · ⚠ decrypt වුණත් plain hash ගැළපෙන්නේ නෑ!";
+          if (!okHash) throw new Error("Decrypted SQL integrity check failed — import stopped");
+          manifestMsg += " · 🔓 decrypt + hash හරි";
         }
       }
 
@@ -529,6 +542,9 @@ export default function AdminBackupPage() {
         if (pi >= 0 && String(ins.values[pi] ?? "").startsWith("site-public/")) sitePublicSqlCount++;
       }
       const { tables: rawTables, totalRows } = summarizeInserts(inserts);
+      const tableCounts = { ...readBackupTableCounts(sql), ...(manifest?.tableCounts ?? {}) };
+      // Empty gallery/news/etc. must be restored as EMPTY, not left unchanged.
+      for (const [name, rows] of Object.entries(tableCounts)) if (rows === 0 && !rawTables.some((t) => t.name === name)) rawTables.push({ name, rows: 0 });
       const knownOrder = BACKUP_TABLES.map((t) => t.name);
       const tables = rawTables
         .map((t) => ({ ...t, known: knownOrder.includes(t.name) }))
@@ -540,7 +556,7 @@ export default function AdminBackupPage() {
       for (const t of tables) sel[t.name] = t.known;
       setSelected(sel);
       setConfirmText("");
-      setPreview({ fileName: file.name, fileSize: file.size, inserts, tables, totalRows, manifest, manifestMsg, encrypted, siteAssets, siteSourceCount, sitePublicSqlCount, siteHashState });
+      setPreview({ fileName: file.name, fileSize: file.size, inserts, tables, totalRows, manifest, manifestMsg, encrypted, siteAssets, mediaFiles, tableCounts, siteSourceCount, sitePublicSqlCount, siteHashState });
       setAnim(null);
       const siteNote = siteAssets.length || siteSourceCount || sitePublicSqlCount
         ? ` · 🌐 site update files ${siteAssets.length + siteSourceCount}ක් (CSS/cursor/icons${siteHashState === "verified" ? " · hash හරි ✅" : ""})`
@@ -596,22 +612,26 @@ export default function AdminBackupPage() {
         preview.inserts,
         (msg, pct) => setAnim({ pct: 50 + Math.round(pct * 0.5), msg, done: false }),
         // 🌐 Format v3: ZIP එකේ site-assets (icons/images) ටිකත් restore එකට යවයි
-        { onlyTables: chosen, siteAssets: preview.siteAssets }
+        { onlyTables: chosen, siteAssets: preview.siteAssets, mediaFiles: preview.mediaFiles, tableCounts: preview.tableCounts }
       );
       const total = Object.values(restored).reduce((a, b) => a + b, 0);
       // 🔎 Import verify — backup එකේ ගාණ vs දැන් DB එකේ ඇත්ත ගාණ
       let verifyMsg = "";
+      let verifyFailed = false;
       try {
         const expectedCounts: Record<string, number> = {};
         for (const t of preview.tables) if (!chosen || chosen.includes(t.name)) expectedCounts[t.name] = t.rows;
         const check = await verifyRestore(expectedCounts);
         const bad = check.filter((c) => !c.ok);
+        verifyFailed = bad.length > 0;
         verifyMsg = bad.length
           ? ` · ⚠ verify: ${bad.map((b) => `${b.table} ${b.actual}/${b.expected}`).join(", ")}`
           : ` · ✅ verify හරි (${check.length} tables)`;
       } catch (e) {
+        verifyFailed = true;
         verifyMsg = ` · (verify කරන්න බැරි වුණා: ${(e as Error).message})`;
       }
+      if (verifyFailed) errors.push(`Restore verification incomplete${verifyMsg}`);
       void logActivity("BACKUP_IMPORT", `${preview.fileName} — restored ${Object.keys(restored).length} tables / ${total} rows${restoredSiteAssets ? ` / site files ${restoredSiteAssets}` : ""}${partial ? " (partial)" : ""}`);
       const importEntry = await recordBackupHistory({
         action: "import",
@@ -625,7 +645,7 @@ export default function AdminBackupPage() {
       });
       if (importEntry) setHistory((xs) => [importEntry, ...xs].slice(0, BACKUP_HISTORY_KEEP));
       setPreview(null);
-      setAnim({ pct: 100, msg: `Restored ${total} rows ✅`, done: true });
+      setAnim({ pct: 100, msg: `Restored ${total} rows ${errors.length ? "⚠" : "✅"}`, done: true });
       setTimeout(() => setAnim(null), 2200);
       show(errors.length
         ? `⚠ Restored with ${errors.length} issue(s): ${errors[0]}`
@@ -726,6 +746,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             <input type="checkbox" className="mt-0.5" checked={encryptDl} onChange={(e) => setEncryptDl(e.target.checked)} />
             <span>
               🔒 database.sql එක <b>වෙනම Encryption password</b> එකෙන් encrypt කරන්න — ආරක්ෂාව වැඩියි
+              <span className="block text-[11px] text-amber-700">Uploaded images එය තුළ ආරක්ෂා වේ. Excel/CSV/public/source files encrypt නොවේ; ZIP එක රහසිගතව තබාගන්න.</span>
               {secrets?.encryption
                 ? " (password එක යට Backup Passwords අංශයේ වෙනම පේනවා; Import කරද්දී එයම අවශ්‍යයි)"
                 : " (Encryption password එක තවම set කර නැත්නම් දැනට Download password එකම භාවිතා වේ)"}
@@ -1038,7 +1059,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           <>
             <div className={`mt-3 rounded-2xl border p-4 text-[12px] font-bold ${coverage.complete ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
               {coverage.complete
-                ? `✅ හැම කොටසක්ම backup එකට එනවා — ${coverage.total} විතරයි බලලා තහවුරු කළා (${coverage.ok}ක දත්ත තියෙනවා${coverage.empty ? ` · ${coverage.empty}ක දත්ත තාම නෑ` : ""})`
+                ? `✅ Backup inventory ගණන් ලබාගත්තා (file download සාර්ථකත්වය export වෙලාවේ පරීක්ෂා වේ) — ${coverage.total} විතරයි බලලා තහවුරු කළා (${coverage.ok}ක දත්ත තියෙනවා${coverage.empty ? ` · ${coverage.empty}ක දත්ත තාම නෑ` : ""})`
                 : `⚠ කොටස් ${coverage.unknown}ක ගාණ ගන්න බැරි වුණා — ආයේ උත්සාහ කරන්න`}
               {coverageAt && <span className="ml-2 font-normal text-[10.5px] opacity-70">({formatHistoryTime(coverageAt)})</span>}
             </div>

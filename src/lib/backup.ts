@@ -18,6 +18,10 @@ import {
   type ParsedInsert,
 } from "@/lib/backup-utils";
 
+import { orderBackupRows } from "@/lib/backup-row-order";
+import { SCHEMA_BACKUP_TABLES, SCHEMA_SELF_REFERENCES } from "@/lib/backup-catalog.generated";
+import { MEDIA_INDEX_PATH, safeMediaPath, scanMediaReferences, mediaArchivePath, rewriteMediaValue, listStoragePaths, type MediaRef } from "@/lib/backup-media";
+
 export { parseBackupSql } from "@/lib/backup-utils";
 export type { ParsedInsert };
 
@@ -30,38 +34,8 @@ export type BackupTable = { name: string; pk: string };
  */
 export type BackupClient = Awaited<ReturnType<typeof authedClient>>;
 
-export const BACKUP_TABLES: BackupTable[] = [
-  { name: "profiles", pk: "id" },
-  { name: "member_rows", pk: "id" },
-  { name: "voter_rows", pk: "id" },
-  { name: "data_files", pk: "id" },
-  { name: "special_download_access", pk: "id" },
-  { name: "data_imports", pk: "id" },
-  { name: "membership_applications", pk: "id" },
-  { name: "board_members", pk: "id" },
-  { name: "business_units", pk: "id" },
-  { name: "business_services", pk: "id" },
-  { name: "business_contacts", pk: "id" },
-  { name: "business_branches", pk: "id" },
-  { name: "news", pk: "id" },
-  { name: "gallery_items", pk: "id" },
-  { name: "gallery_comments", pk: "id" },
-  { name: "fuel_prices", pk: "type" },
-  { name: "fuel_stock", pk: "id" },
-  { name: "system_settings", pk: "key" },
-  { name: "notify_emails", pk: "id" },
-  { name: "messages", pk: "id" },
-  { name: "f28_members", pk: "id" },
-  { name: "f28_items", pk: "id" },
-  { name: "admin_activity_logs", pk: "id" },
-  { name: "backup_history", pk: "id" },
-  { name: "backup_secrets", pk: "key" },
-  { name: "site_images_backup", pk: "path" },
-  // ⑳ Live Chat (2-way) — sessions, messages, usage log
-  { name: "chat_sessions", pk: "id" },
-  { name: "chat_messages", pk: "id" },
-  { name: "live_chat_events", pk: "id" },
-];
+// Build-time canonical catalog includes future tables and FK-safe ordering.
+export const BACKUP_TABLES: BackupTable[] = SCHEMA_BACKUP_TABLES.map((table) => ({ ...table }));
 
 function decodeDisplayPw(enc: string): string {
   try {
@@ -193,53 +167,48 @@ function ddlFor(t: BackupTable, cols: ColType[]): string {
 }
 
 /* --------------------------------------------------------- image scan ---- */
-const IMG_RE = /https?:\/\/[^"'\s)]+?\/storage\/v1\/object\/public\/site-images\/([^"'\s?)]+)/g;
-
-/** rows ඇතුළේ තියෙන site-images URL සේරම — nested JSON ඇතුළේ තියෙන ඒවත් (bot avatar / hero වගේ) */
+/** Public/signed/authenticated URLs, relative storage URLs and nested/stringified JSON. */
 export function scanImagePathsInRows(tables: { name: string; rows: Record<string, unknown>[] }[]): string[] {
-  const paths = new Set<string>();
-  for (const t of tables)
-    for (const r of t.rows) {
-      // මුළු row එකම string කරලා scan කළාම nested object/array ඇතුළේ URL එකක්වත් මගහැරෙන්නෑ
-      const s = JSON.stringify(r);
-      if (!s.includes("site-images/")) continue;
-      IMG_RE.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = IMG_RE.exec(s))) {
-        try { paths.add(decodeURIComponent(m[1])); } catch { paths.add(m[1]); }
-      }
-    }
-  return [...paths];
+  return [...new Set(scanMediaReferences(tables).filter((r) => r.bucket === "site-images").map((r) => r.key!))];
 }
 
-/** storage bucket එකේ සියලු ගොනු — folder කොච්චර ගැඹුරට තිබුණත්, pagination සහිතව */
 async function listAllStorageFiles(client?: BackupClient): Promise<string[]> {
-  const out: string[] = [];
-  try {
-    const sb = client ?? (await authedClient());
-    async function walk(prefix: string, depth: number): Promise<void> {
-      if (depth > 6) return;
-      for (let offset = 0; offset < 10000; offset += 100) {
-        const { data, error } = await sb.storage.from("site-images").list(prefix, { limit: 100, offset });
-        if (error || !data?.length) break;
-        for (const f of data) {
-          const p = prefix ? `${prefix}/${f.name}` : f.name;
-          if (f.id === null) await walk(p, depth + 1); // folder එකක්
-          else out.push(p);
-        }
-        if (data.length < 100) break;
-      }
-    }
-    await walk("", 0);
-  } catch { /* listing නැත්නම් scan එකෙන් ආපු ඒවා ඇති */ }
-  return out;
+  const sb = client ?? await authedClient();
+  return listStoragePaths(async (prefix, offset) => {
+    const { data, error } = await sb.storage.from("site-images").list(prefix, { limit: 100, offset, sortBy: { column: "name", order: "asc" } });
+    if (error) throw new Error(`Storage listing failed (${prefix || "/"}): ${error.message}`);
+    if (!data) throw new Error("Storage listing returned no result");
+    return data;
+  });
 }
 
-async function collectImagePaths(tables: { name: string; rows: Record<string, unknown>[] }[], client?: BackupClient): Promise<string[]> {
-  const paths = new Set<string>(scanImagePathsInRows(tables));
-  // bucket list එකත් (දත්ත වල reference නැති, අයින් වෙන්න තිබුණු ගොනුත් backup වේ)
-  for (const p of await listAllStorageFiles(client)) paths.add(p);
-  return [...paths];
+export type BackupMediaReader = (url: string) => Promise<{ b64: string; type: string }>;
+async function readExternalBackupMedia(url: string, reader?: BackupMediaReader, assetBaseUrl?: string, cronSecret?: string): Promise<{ b64: string; type: string }> {
+  if (reader) return reader(url);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (cronSecret) headers["x-backup-secret"] = cronSecret;
+  else {
+    const sb = await authedClient();
+    const { data } = await sb.auth.getSession();
+    if (!data.session?.access_token) throw new Error("Backup media requires a superadmin session");
+    headers.Authorization = `Bearer ${data.session.access_token}`;
+  }
+  let bytes: Uint8Array | undefined;
+  let offset = 0, expectedHash = "", type = "";
+  do {
+    const res = await fetch(`${resolveAssetBaseUrl(assetBaseUrl)}/api/backup/media`, { method: "POST", headers, body: JSON.stringify({ url, offset }), cache: "no-store" });
+    const part = await res.json() as { error?: string; b64: string; total: number; type: string; sha256: string };
+    if (!res.ok || part.error) throw new Error(part.error || `Media proxy HTTP ${res.status}`);
+    if (!Number.isSafeInteger(part.total) || part.total < 0 || part.total > 32 * 1024 * 1024 || !/^[a-f0-9]{64}$/.test(part.sha256)) throw new Error("Invalid media proxy response");
+    if (!bytes) { bytes = new Uint8Array(part.total); expectedHash = part.sha256; type = part.type; }
+    if (part.sha256 !== expectedHash || part.total !== bytes.length) throw new Error("Remote media changed during backup; retry");
+    const chunk = b64ToBytes(part.b64);
+    if ((!chunk.length && part.total !== 0) || offset + chunk.length > bytes.length) throw new Error("Invalid media chunk");
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  } while (offset < bytes.length);
+  if (await sha256Hex(bytes) !== expectedHash) throw new Error("Remote media integrity check failed");
+  return { b64: bytesToB64(bytes), type };
 }
 
 function bytesToB64(buf: Uint8Array): string {
@@ -256,16 +225,13 @@ function b64ToBytes(b64: string): Uint8Array {
   return buf;
 }
 
-async function fetchBase64(url: string): Promise<{ b64: string; type: string } | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const type = res.headers.get("content-type") || "image/jpeg";
-    const buf = new Uint8Array(await res.arrayBuffer());
-    return { b64: bytesToB64(buf), type };
-  } catch {
-    return null;
-  }
+async function fetchBase64(url: string): Promise<{ b64: string; type: string }> {
+  const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`Public asset download failed: HTTP ${res.status} (${new URL(url).pathname})`);
+  const type = res.headers.get("content-type") || "application/octet-stream";
+  if (type.includes("text/html") && !/\.html?(?:[?#]|$)/i.test(url)) throw new Error(`Public asset returned HTML instead of a file: ${new URL(url).pathname}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  return { b64: bytesToB64(bytes), type };
 }
 
 /* ------------------------------------------- SITE PUBLIC ASSETS (v3) --- */
@@ -318,7 +284,7 @@ export async function fetchPublicAssets(assetBaseUrl?: string): Promise<SiteAsse
     const fetched = await Promise.all(
       batch.map(async (p) => {
         const f = await fetchBase64(`${base}/${p}`);
-        return f ? { path: p, archivePath: `site-public/${p}`, b64: f.b64, type: f.type } : null;
+        return { path: p, archivePath: `site-public/${p}`, b64: f.b64, type: f.type };
       })
     );
     for (const f of fetched) if (f) out.push(f);
@@ -368,7 +334,7 @@ async function fetchSchemaSql(baseUrl?: string, cronSecret?: string): Promise<st
 /**
  * 🗂 Site design/update source snapshot එක (backup ZIP එකේ `site-source/`) —
  * server-only route එකකින් fetch වේ. Fail වුණොත් හිස් list එකක් එවයි
- * (backup එක නවත්තන්නේ නෑ, manifest එකේ 0 කියා පෙනේ).
+ * (full ZIP builder එක හිස් snapshot එකක් නම් backup එක නවත්වයි).
  */
 async function fetchSiteSourceSnapshot(
   baseUrl?: string,
@@ -434,11 +400,13 @@ END $$;`);
 export async function generateBackupSql(
   onProgress: (msg: string, pct: number) => void,
   client?: BackupClient,
-  assetBaseUrl?: string // Format v3: public/ assets fetch කරන site base URL එක (scheduled එක request origin එක දෙයි)
+  assetBaseUrl?: string,
+  mediaOptions?: { readMedia?: BackupMediaReader; cronSecret?: string },
 ): Promise<{
   sql: string;
   tableCounts: Record<string, number>;
   imageCount: number;
+  mediaRows: { path: string; b64: string; type: string }[];
   /** Format v3: ZIP එකේ site-assets/ files විදිහටත් දාන්න public assets ටික */
   siteAssets: SiteAssetFile[];
   /** ZIP registers වලට ආයෙත් fetch නොකර පාවිච්චි කරන්න (දෙපාරක් ගන්න එක නවත්වයි) */
@@ -473,10 +441,12 @@ export async function generateBackupSql(
 
   async function fetchTableRows(t: (typeof BACKUP_TABLES)[number]): Promise<{ rows: Record<string, unknown>[]; warning?: string }> {
     const rows: Record<string, unknown>[] = [];
-    for (let from = 0; from < 2_000_000; from += 4000) {
+    let expected: number | null = null;
+    for (let from = 0; ; from += 4000) {
       const pages = await Promise.all(
-        [0, 1, 2, 3].map((i) => sb.from(t.name).select("*").range(from + i * 1000, from + i * 1000 + 999))
+        [0, 1, 2, 3].map((i) => sb.from(t.name).select("*", from === 0 && i === 0 ? { count: "exact" } : {}).order(t.pk, { ascending: true }).range(from + i * 1000, from + i * 1000 + 999))
       );
+      if (from === 0) expected = pages[0].count;
       let shortPage = false;
       for (const pg of pages) {
         if (pg.error) return { rows, warning: `-- ⚠ ${t.name}: ${pg.error.message}` };
@@ -489,6 +459,7 @@ export async function generateBackupSql(
       }
       if (shortPage) break;
     }
+    if (expected !== null && expected !== rows.length) return { rows, warning: `-- ${t.name}: row count changed or pagination was truncated (${rows.length}/${expected}); retry backup` };
     return { rows };
   }
 
@@ -510,14 +481,15 @@ export async function generateBackupSql(
     }
   }
   await Promise.all(Array.from({ length: Math.min(3, BACKUP_TABLES.length) }, () => gatherWorker()));
-  for (const w of gatherWarnings) if (w) lines.push(w);
+  const tableFailures = gatherWarnings.filter(Boolean);
+  if (tableFailures.length) throw new Error(`Full backup stopped — unreadable/incomplete tables: ${tableFailures.join("; ")}`);
 
   // 🔁 EXPORT dedupe — board_members / gallery_items වල duplicate rows ZIP එකට යන්නේ නෑ
   //    (site එකේ පේන ලෙසම: එකම නම / එකම image එක වරක් විතරයි). Merge කරද්දී හිස් තැන් පිරෙනවා.
   for (const g of gathered) {
     if (!g) continue;
     const before = g.rows.length;
-    g.rows = dedupeTableRows(g.name, g.rows);
+    g.rows = orderBackupRows(g.name, dedupeTableRows(g.name, g.rows), SCHEMA_SELF_REFERENCES);
     if (g.rows.length !== before) {
       lines.push(`-- 🔁 ${g.name}: duplicate ${before - g.rows.length}ක් merge කළා (${before} → ${g.rows.length})`);
     }
@@ -531,36 +503,59 @@ export async function generateBackupSql(
     lines.push(``);
   }
 
-  // images
-  onProgress("Downloading site images…", 55);
-  const paths = await collectImagePaths(gathered, client);
-  let imgRows: { path: string; b64: string; type: string }[] = [];
-  // එකවර 10 ගණනේ බාගත කරයි (manual එකත් වේගවත් වෙනවා, server auto-backup එකටත් ඕනෙමයි) — පිළිවෙළ එලෙසමයි
-  for (let i = 0; i < paths.length; i += 10) {
-    onProgress(`Image ${Math.min(i + 10, paths.length)}/${paths.length}…`, 55 + Math.round((i / Math.max(paths.length, 1)) * 30));
-    const batch = paths.slice(i, i + 10);
-    const fetched = await Promise.all(
-      batch.map(async (p) => {
-        const url = `${(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "")}/storage/v1/object/public/site-images/${p}`;
-        const f = await fetchBase64(url);
-        return f ? { path: p, b64: f.b64, type: f.type } : null;
-      })
-    );
-    for (const f of fetched) if (f) imgRows.push(f);
+  // Capture bytes, not only URLs. Authenticated storage SDK reads work for
+  // private/signed objects too; public HTTP fetches used to silently drop photos.
+  onProgress("Downloading all stored files and referenced media…", 55);
+  const liveTables = gathered.filter((t) => t.name !== "site_images_backup");
+  const refs = scanMediaReferences(liveTables, PUBLIC_ASSET_PATHS);
+  const paths = await listAllStorageFiles(sb);
+  const aliases = new Map<string, string>();
+  const tasks = new Map<string, MediaRef>();
+  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+  for (const path of paths) tasks.set(path, { source: "", bucket: "site-images", key: path });
+  for (const ref of refs) {
+    if (ref.local) { aliases.set(ref.source, mediaArchivePath(ref)!); continue; }
+    let path = mediaArchivePath(ref);
+    // A storage URL on another project must NOT download the same key from
+    // this project. Capture its actual bytes and rewrite by the exact alias.
+    const ownStorage = ref.bucket && (ref.source.startsWith("/storage/") || (() => { try { return new URL(ref.source.startsWith("//") ? `https:${ref.source}` : ref.source).origin === new URL(base).origin; } catch { return false; } })());
+    if (!ownStorage) {
+      const hash = await sha256Hex(ref.source);
+      const ext = (() => { try { return new URL(ref.source.startsWith("//") ? `https:${ref.source}` : ref.source).pathname.match(/\.[a-zA-Z0-9]{1,8}$/)?.[0] ?? ""; } catch { return ""; } })();
+      path = ref.bucket && ref.bucket !== "site-images" ? `site-buckets/${ref.bucket}/backup-restored/${hash}${ext}` : `referenced-media/${hash}${ext}`;
+    }
+    if (!path) throw new Error("Could not archive media reference");
+    aliases.set(ref.source, path);
+    if (!tasks.has(path)) tasks.set(path, ownStorage ? ref : { source: ref.source });
   }
-
-  // Format v3: repo එකේ public/ files ටිකත් (uploaded icons ඇතුළුව) image rows
-  // විදිහට එකතු කරයි — storage එකේ `site-public/` යටතේ දැනටමත් තියන ඒවා
-  // තිබුණත් අලුත්ම deployed file එකෙන් overwrite වේ (path එකෙන් dedupe).
-  onProgress("Adding site icons & public images…", 86);
+  const imgRows: { path: string; b64: string; type: string }[] = [];
+  const entries = [...tasks];
+  for (let i = 0; i < entries.length; i += 6) {
+    onProgress(`File ${Math.min(i + 6, entries.length)}/${entries.length}…`, 55 + Math.round((i / Math.max(entries.length, 1)) * 28));
+    const files = await Promise.all(entries.slice(i, i + 6).map(async ([path, ref]) => {
+      try {
+        if (ref.bucket && ref.key) {
+          const { data, error } = await sb.storage.from(ref.bucket).download(ref.key);
+          if (error || !data) throw new Error(error?.message ?? "No file returned");
+          const bytes = new Uint8Array(await data.arrayBuffer());
+          return { path, b64: bytesToB64(bytes), type: data.type || contentTypeForPath(path) };
+        }
+        return { path, ...await readExternalBackupMedia(ref.source, mediaOptions?.readMedia, assetBaseUrl, mediaOptions?.cronSecret) };
+      } catch (e) { throw new Error(`Full backup stopped — media ${path}: ${(e as Error).message}`); }
+    }));
+    imgRows.push(...files);
+  }
+  onProgress("Adding all public files…", 86);
   const siteAssets = await fetchPublicAssets(assetBaseUrl);
-  if (siteAssets.length) {
-    const byPath = new Map(imgRows.map((r) => [r.path, r]));
-    for (const a of siteAssets) byPath.set(a.archivePath, { path: a.archivePath, b64: a.b64, type: a.type });
-    imgRows = [...byPath.values()];
-  } else {
-    lines.push(`-- ⚠ site public assets fetch කරගන්න බැරි වුණා (site URL එකෙන්) — icons/images ටික මේ backup එකේ නෑ`);
-  }
+  const byPath = new Map(imgRows.map((r) => [r.path, r]));
+  for (const a of siteAssets) byPath.set(a.archivePath, { path: a.archivePath, b64: a.b64, type: a.type });
+  const mediaRows = [...byPath.values()];
+  if (aliases.size) byPath.set(MEDIA_INDEX_PATH, { path: MEDIA_INDEX_PATH, type: "application/json", b64: bytesToB64(new TextEncoder().encode(JSON.stringify(Object.fromEntries(aliases)))) });
+  imgRows.splice(0, imgRows.length, ...byPath.values());
+  // A restored cache may contain OLD bytes. Never emit those after fresh image
+  // INSERTs: ON CONFLICT previously overwrote the new photos with stale data.
+  const imageCache = gathered.find((t) => t.name === "site_images_backup");
+  if (imageCache) imageCache.rows = [];
 
   // image INSERTs
   lines.push(`-- ------------------------------- IMAGES -------------------------------`);
@@ -608,10 +603,12 @@ export async function generateBackupSql(
   const tableCounts: Record<string, number> = {};
   for (const g of gathered) tableCounts[g.name] = g.rows.length;
   tableCounts["site_images_backup"] = imgRows.length;
+  for (const [name, count] of Object.entries(tableCounts)) lines.push(`-- Backup-Table: ${name} ${count}`);
   return {
     sql: lines.join("\n"),
     tableCounts,
-    imageCount: imgRows.length,
+    imageCount: mediaRows.length,
+    mediaRows,
     siteAssets,
     registerRows: {
       members: gathered.find((g) => g.name === "member_rows")?.rows ?? [],
@@ -628,12 +625,15 @@ export async function restoreBackup(
   inserts: ParsedInsert[],
   onProgress: (msg: string, pct: number) => void,
   opts?: {
+    tableCounts?: Record<string, number>; // includes EMPTY tables in a full snapshot
+    client?: BackupClient; // dependency injection for isolated restore tests
     onlyTables?: string[]; // partial restore — තෝරගත් tables විතරක් (නැත්නම් සියල්ලම)
     /** Format v3: ZIP එකේ site-assets/public/ files — SQL එකේ නැති ඒවා storage එකට restore වේ */
     siteAssets?: { path: string; bytes: Uint8Array }[];
+    mediaFiles?: { path: string; bytes: Uint8Array }[];
   }
 ): Promise<{ restored: Record<string, number>; errors: string[]; siteAssets: number }> {
-  const sb = await authedClient();
+  const sb = opts?.client ?? await authedClient();
   const restored: Record<string, number> = {};
   const errors: string[] = [];
 
@@ -644,18 +644,22 @@ export async function restoreBackup(
     if (!byTable.has(ins.table)) byTable.set(ins.table, []);
     byTable.get(ins.table)!.push(row);
   }
+  for (const [name, count] of Object.entries(opts?.tableCounts ?? {})) {
+    if (BACKUP_TABLES.some((t) => t.name === name) && count === 0 && !byTable.has(name)) byTable.set(name, []);
+  }
   // 🔁 IMPORT dedupe — පරණ backup එකක duplicate board/gallery rows තිබුණත් ඒවා
   //    නැවත හැදෙන්නේ නෑ. (board_members_email_uniq index එකත් කැඩෙන්නේ නෑ.)
   let dedupedRows = 0;
   for (const [name, rows] of byTable) {
-    const clean = dedupeTableRows(name, rows);
+    const clean = orderBackupRows(name, dedupeTableRows(name, rows), SCHEMA_SELF_REFERENCES);
     if (clean.length !== rows.length) dedupedRows += rows.length - clean.length;
     byTable.set(name, clean);
   }
 
   // 1) storage images first (URL rewrite එකට)
   onProgress("Restoring images to storage…", 5);
-  const wantImages = !opts?.onlyTables || opts.onlyTables.includes("site_images_backup");
+  const selectedData = [...byTable].filter(([name]) => name !== "site_images_backup" && (!opts?.onlyTables || opts.onlyTables.includes(name))).map(([, rows]) => rows);
+  const wantImages = !opts?.onlyTables || opts.onlyTables.includes("site_images_backup") || scanMediaReferences(selectedData, PUBLIC_ASSET_PATHS).length > 0;
   const imgRows: Record<string, unknown>[] = wantImages ? [...(byTable.get("site_images_backup") ?? [])] : [];
   // Format v3: ZIP එකේ site-assets/public/ files ටික SQL image rows වලට merge
   // කරයි (SQL එකේ දැනටමත් තියන path එකක් නම් ඒකම තියේ — duplicate නෑ)
@@ -672,9 +676,40 @@ export async function restoreBackup(
       byTable.get("site_images_backup")!.push(row);
     }
   }
+  if (wantImages && opts?.mediaFiles?.length) {
+    const seen = new Set(imgRows.map((r) => String(r.path ?? "")));
+    for (const file of opts.mediaFiles) {
+      if (!safeMediaPath(file.path)) throw new Error("Unsafe media archive path");
+      if (seen.has(file.path)) continue;
+      const row = { path: file.path, data_base64: bytesToB64(file.bytes), content_type: contentTypeForPath(file.path) };
+      imgRows.push(row); seen.add(file.path);
+      if (!byTable.has("site_images_backup")) byTable.set("site_images_backup", []);
+      byTable.get("site_images_backup")!.push(row);
+    }
+  }
+  // Metadata is kept inside SQL (and inside SQL encryption); never published to
+  // a public bucket because old signed URL query strings can contain tokens.
+  const aliases = new Map<string, string>();
+  for (const row of imgRows.filter((r) => r.path === MEDIA_INDEX_PATH)) {
+    const index = JSON.parse(new TextDecoder().decode(b64ToBytes(String(row.data_base64 ?? "")))) as Record<string, unknown>;
+    for (const [source, path] of Object.entries(index)) {
+      if (typeof path !== "string" || !safeMediaPath(path)) throw new Error("Invalid media index");
+      aliases.set(source, path);
+    }
+  }
+  // Old backups may have duplicate cache INSERTs; prefer the first (fresh)
+  // image block over later stale DATA INSERTs for the same path.
+  const uniqueImages = new Map<string, Record<string, unknown>>();
+  for (const row of imgRows) if (!uniqueImages.has(String(row.path))) uniqueImages.set(String(row.path), row);
+  imgRows.splice(0, imgRows.length, ...[...uniqueImages.values()].filter((r) => r.path !== MEDIA_INDEX_PATH));
+  if (byTable.has("site_images_backup")) byTable.set("site_images_backup", [...uniqueImages.values()]);
   const siteAssetCount = imgRows.filter((r) => String(r.path ?? "").startsWith("site-public/")).length;
   const urlMap = new Map<string, string>(); // old url -> new url
-  const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+  for (const row of imgRows) {
+    if (!safeMediaPath(String(row.path ?? "")) || typeof row.data_base64 !== "string") throw new Error("Invalid image/file in backup");
+    // Zero-byte files are valid; missing/corrupt data is not. Validate ALL base64.
+    b64ToBytes(row.data_base64);
+  }
   for (let i = 0; i < imgRows.length; i++) {
     const r = imgRows[i];
     onProgress(`Image ${i + 1}/${imgRows.length} — ${String(r.path).slice(0, 40)}…`, 5 + Math.round((i / Math.max(imgRows.length, 1)) * 25));
@@ -684,52 +719,39 @@ export async function restoreBackup(
       const buf = new Uint8Array(bin.length);
       for (let j = 0; j < bin.length; j++) buf[j] = bin.charCodeAt(j);
       const blob = new Blob([buf], { type: String(r.content_type || "image/jpeg") });
-      const { error } = await sb.storage.from("site-images").upload(String(r.path), blob, { upsert: true });
+      const archived = String(r.path).match(/^site-buckets\/([^/]+)\/(.+)$/);
+      const bucket = archived?.[1] ?? "site-images";
+      const key = archived?.[2] ?? String(r.path);
+      // Other buckets must already exist with appropriate access policies. Never
+      // copy a private referenced document into the public site-images bucket.
+      const storage = sb.storage.from(bucket);
+      const { error } = await storage.upload(key, blob, { upsert: true });
       if (error) throw new Error(error.message);
-      const { data: pub } = sb.storage.from("site-images").getPublicUrl(String(r.path));
-      const newUrl = pub?.publicUrl ?? "";
+      let newUrl = "";
+      if (bucket === "site-images") newUrl = storage.getPublicUrl(key).data.publicUrl;
+      else {
+        const signed = await storage.createSignedUrl(key, 3600);
+        if (signed.error) throw new Error(signed.error.message);
+        newUrl = signed.data.signedUrl;
+      }
       // පරණ URL (backup rows වල තිබ්බ ඕන එකක්) path එකෙන් හඳුනාගමු — පස්සේ rewrite එකට
-      if (newUrl) urlMap.set(String(r.path), newUrl);
+      if (!newUrl) throw new Error("No restored public URL returned");
+      urlMap.set(String(r.path), newUrl);
     } catch (e) {
       errors.push(`image ${r.path}: ${(e as Error).message}`);
     }
   }
 
-  // old URL patterns -> path mapping (rows වල තියෙන https://xxx/site-images/<path>) — nested JSON ඇතුළුව
-  const pathOldUrl = new Map<string, string>(); // path -> old url found in data
-  for (const [, rows] of byTable)
-    for (const r of rows) {
-      const s = JSON.stringify(r);
-      if (!s.includes("site-images/")) continue;
-      IMG_RE.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = IMG_RE.exec(s))) {
-        try { pathOldUrl.set(decodeURIComponent(m[1]), m[0]); } catch { pathOldUrl.set(m[1], m[0]); }
-      }
-    }
-
-  function rewriteStr(s: string): string {
-    let out = s;
-    for (const [path, newUrl] of urlMap) {
-      const oldUrl = pathOldUrl.get(path);
-      if (oldUrl && oldUrl !== newUrl) out = out.split(oldUrl).join(newUrl);
-    }
-    return out;
-  }
-
-  function rewrite(val: unknown): unknown {
-    if (typeof val === "string") return rewriteStr(val);
-    // nested JSON (object/array) ඇතුළේ URL තිබුණොත් string කරලා rewrite කර ආපසු parse කරයි
-    if (val && typeof val === "object") {
-      const s = JSON.stringify(val);
-      if (!s.includes("site-images/")) return val;
-      const out = rewriteStr(s);
-      if (out !== s) {
-        try { return JSON.parse(out); } catch { return val; }
-      }
-    }
-    return val;
-  }
+  if (errors.length) throw new Error(`Restore stopped before database deletion — ${errors.join("; ")}`);
+  // Recursively rewrite every occurrence, including JSON-string settings and
+  // external Board photos recorded in the media index.
+  function rewrite(val: unknown): unknown { return rewriteMediaValue(val, urlMap, aliases); }
+  const selectedRefs = wantImages ? scanMediaReferences(selectedData, PUBLIC_ASSET_PATHS) : [];
+  const missing = selectedRefs.filter((ref) => {
+    const path = aliases.get(ref.source) ?? mediaArchivePath(ref);
+    return !path || !urlMap.has(path);
+  });
+  if (missing.length) throw new Error(`Restore stopped before database deletion — ${missing.length} referenced media file(s) missing from backup. Create a new complete backup or re-upload the missing files.`);
 
   // 2) wipe + insert — wipe එක reverse පිළිවෙළේ (children → parents), insert එක forward (parents → children)
   const ordered = BACKUP_TABLES.filter((t) => byTable.has(t.name)).filter(
@@ -743,7 +765,7 @@ export async function restoreBackup(
     if (NO_WIPE.has(t.name)) continue;
     // not(pk, is, null) — uuid/text ඕන pk එකකට වැඩ කරයි (පරණ neq("__backup_wipe__") එක uuid වල fail වුණා)
     const { error } = await sb.from(t.name).delete().not(t.pk, "is", null);
-    if (error) errors.push(`wipe ${t.name}: ${error.message}`);
+    if (error) throw new Error(`Restore stopped: wipe ${t.name}: ${error.message}. Some earlier tables may already have changed; use the safety backup.`);
   }
 
   for (let i = 0; i < ordered.length; i++) {
@@ -754,16 +776,13 @@ export async function restoreBackup(
       return o;
     });
     onProgress(`Restoring ${t.name} (${rows.length} rows)…`, 35 + Math.round((i / ordered.length) * 58));
-    let failed = false;
     for (let j = 0; j < rows.length; j += 200) {
       const { error } = await sb.from(t.name).upsert(rows.slice(j, j + 200), { onConflict: t.pk });
       if (error) {
-        errors.push(`${t.name}: ${error.message}`);
-        failed = true;
-        break;
+        throw new Error(`Restore stopped: ${t.name}: ${error.message}. Restore is not transactional; use the safety backup to recover.`);
       }
     }
-    if (!failed) restored[t.name] = rows.length;
+    restored[t.name] = rows.length;
   }
 
   // 2b) 📊 Restore එකෙන් පස්සේ system_settings වල සාමාජික/ඡන්ද ගණන් ඇත්තට sync කරයි
@@ -848,7 +867,7 @@ export async function restoreBackup(
     }
   }
 
-  onProgress("Restore complete ✅", 100);
+  onProgress(errors.length ? "Restore finished with issues ⚠" : "Restore complete ✅", 100);
   return { restored, errors, siteAssets: siteAssetCount };
 }
 
@@ -875,7 +894,9 @@ export async function verifyRestore(
       const actual = typeof res[idx]?.count === "number" ? (res[idx].count as number) : -1;
       const exp = expected[n] ?? 0;
       // dedupe/merge → අඩු වෙන්න පුළුවන්; නමුත් 0ක් වෙන්න හොඳ නෑ (exp > 0 නම්)
-      const ok = actual < 0 ? false : exp === 0 ? true : actual > 0;
+      const mergeOnly = ["profiles", "backup_secrets"].includes(n);
+      const target = n === "backup_history" ? Math.min(exp, BACKUP_HISTORY_KEEP) : exp;
+      const ok = actual >= 0 && (mergeOnly ? actual >= target : actual === target);
       out.push({ table: n, expected: exp, actual, ok });
     });
   }
@@ -1050,7 +1071,7 @@ export async function recordBackupHistory(input: {
 /* ============================================================================
  * FULL BACKUP ZIP — මුලු site එකම, එකක් නෑර:
  *   · schema.sql   (tables + RLS + functions + live chat DB logic)
- *   · database.sql (tables 28ම data + images base64 + LOGIN accounts/passwords)
+ *   · database.sql (managed app tables + file bytes + profile-based login recovery)
  *   · Members Register + Voters Register — XLSX + CSV
  *   · manifest.json (version + row counts + SHA-256 hashes) · RECOVERY.txt · README.txt
  *   · විකල්ප: database.sql එක password එකකින් encrypt කළ හැක (AES-GCM)
@@ -1064,6 +1085,7 @@ export async function generateBackupZip(
     assetBaseUrl?: string; // Format v3: public/ assets fetch කරන site base URL එක (නැත්නම් browser origin/env)
     cronSecret?: string; // Server backup (scheduled) එකේදී schema.sql ගන්න x-backup-secret
     onMeta?: (meta: { tableCounts: Record<string, number>; imageCount: number }) => void;
+    readMedia?: BackupMediaReader;
   }
 ): Promise<Blob> {
   const zipMod = await import("jszip");
@@ -1089,10 +1111,11 @@ export async function generateBackupZip(
   }
 
   // 1) database.sql (images base64 + login accounts සමඟ)
-  const { sql, tableCounts, imageCount, registerRows, siteAssets } = await generateBackupSql(
+  const { sql, tableCounts, imageCount, registerRows, siteAssets, mediaRows } = await generateBackupSql(
     (msg, pct) => onProgress(msg, Math.round(pct * 0.72)),
     opts?.client,
-    opts?.assetBaseUrl
+    opts?.assetBaseUrl,
+    { readMedia: opts?.readMedia, cronSecret: opts?.cronSecret }
   );
   opts?.onMeta?.({ tableCounts, imageCount });
   const [databasePlainSha256, dbContent] = await Promise.all([
@@ -1113,7 +1136,8 @@ export async function generateBackupZip(
       schemaSha256 = await sha256Hex(schemaText);
       await addFile("schema.sql", schemaText);
     }
-  } catch { /* schema embed බැරි වුණත් backup එක හැදේ */ }
+    else throw new Error("Canonical schema is empty/incomplete");
+  } catch (e) { throw new Error(`Full backup stopped — schema.sql: ${(e as Error).message}`); }
 
   // 1c) Format v3 — SITE DESIGN / UPDATE PACKAGE:
   //     • site-assets/public/… = public/ files ටිකම (uploaded icons ඇතුළුව) —
@@ -1129,29 +1153,19 @@ export async function generateBackupZip(
     const snap = await fetchSiteSourceSnapshot(opts?.assetBaseUrl, opts?.cronSecret);
     siteSourceFiles = snap.files;
     sitePackageVersion = snap.version;
-  } catch { /* source snapshot බැරි වුණත් දත්ත backup එක හැදේ — manifest එකේ 0 කියා පෙනේ */ }
+    if (!siteSourceFiles.length) throw new Error("Source snapshot is empty");
+  } catch (e) { throw new Error(`Full backup stopped — source snapshot: ${(e as Error).message}`); }
   for (const asset of siteAssets) {
-    try {
-      await addFile(`site-assets/public/${asset.path}`, b64ToBytes(asset.b64).buffer as ArrayBuffer, true);
-    } catch { /* එක file එකක් බැරි වුණත් ඉතිරිය යයි */ }
+    await addFile(`site-assets/public/${asset.path}`, b64ToBytes(asset.b64).buffer as ArrayBuffer, true);
   }
   for (const f of siteSourceFiles) await addFile(`site-source/${f.path}`, f.content);
 
-  // 2) registers → XLSX
-  const sb = opts?.client ?? (await authedClient());
-
-  async function allRows(table: "member_rows" | "voter_rows") {
-    const out: Record<string, unknown>[] = [];
-    for (let from = 0; from < 200000; from += 1000) {
-      const { data, error } = await sb.from(table).select("*").range(from, from + 999);
-      if (error) break;
-      const got = (data ?? []) as Record<string, unknown>[];
-      out.push(...got);
-      if (got.length < 1000) break;
-    }
-    return out;
+  // Convenient binary copies (Board photos are visible under media/board/).
+  // Encrypted backups MUST NOT leak private files outside encrypted database.sql.
+  if (!opts?.encryptPassword) for (const file of mediaRows) {
+    if (!file.path.startsWith("site-public/")) await addFile(`media/${file.path}`, b64ToBytes(file.b64).buffer as ArrayBuffer, true);
   }
-
+  // 2) XLSX/CSV are reconstructed from the SAME successful DB snapshot.
   function sheet(rows: Record<string, unknown>[], noKey: string) {
     return rows.map((r, i) => ({
       "#": i + 1,
@@ -1166,7 +1180,7 @@ export async function generateBackupZip(
   }
 
   onProgress("Exporting Member Register (XLSX)…", 80);
-  const members = registerRows.members.length ? registerRows.members : await allRows("member_rows");
+  const members = registerRows.members;
   const mSheet = sheet(members, "member_no");
   const mWb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(mWb, XLSX.utils.json_to_sheet(mSheet), "Members");
@@ -1174,7 +1188,7 @@ export async function generateBackupZip(
   await addFile("Members-Register.xlsx", mBuf, true);
 
   onProgress("Exporting Voter Register (XLSX)…", 87);
-  const voters = registerRows.voters.length ? registerRows.voters : await allRows("voter_rows");
+  const voters = registerRows.voters;
   const vSheet = sheet(voters, "voter_no");
   const vWb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(vWb, XLSX.utils.json_to_sheet(vSheet), "Voters");
@@ -1197,24 +1211,26 @@ export async function generateBackupZip(
       "Panduwasnuwara New MPCS — FULL SITE BACKUP (Format v" + BACKUP_FORMAT_VERSION + ")",
       "Generated: " + generatedAt,
       "",
-      "මේ ZIP එකේ තියෙන්නේ (මුලු site එකම — එකක් නෑර):",
+      "මේ ZIP එකේ app backup inventory:",
       "  • schema.sql            — database ව්‍යුහය: tables + RLS + functions (live chat logic ඇතුළුව)",
-      "  • database.sql          — සියලු data: tables 28ම (members, voters, settings, emails,",
+      "  • database.sql          — සියලු app data: tables " + BACKUP_TABLES.length + "ම (members, voters, settings, emails,",
       "                          board, business, news, gallery, messages, live chat, applications,",
       "                          fuel, f28, activity logs) + සියලු images/photos (base64)",
-      "                          + LOGIN accounts (auth.users) password සහිතව",
+      "                          + profiles වල තිබෙන credentials මත login recovery SQL",
       "  • site-assets/public/   — site එකේ public files " + siteAssets.length + "ක් (අලුත් phone/location/message",
       "                          icons ඇතුළු සියලු icons + images) — Import එකේදී storage එකට restore වේ",
       "  • site-source/          — අලුත්ම design/update source files " + siteSourceFiles.length + "ක්: globals.css (සියලු CSS),",
       "                          mouse-cursor animation, icon components, mega-menu, hotline cards,",
       "                          loading/speed files, Services fix — package " + (sitePackageVersion || "-"),
+      "  • media/                — uploaded Board photos ඇතුළු ගොනු binary පිටපත් (encrypted නම් SQL ඇතුළේ පමණයි)",
       "  • Members-Register.xlsx — සියලු සාමාජික විස්තර (" + members.length + " පේළි)",
       "  • Voters-Register.xlsx  — සියලු ඡන්ද හිමි විස්තර (" + voters.length + " පේළි)",
       "  • Members-Register.csv / Voters-Register.csv — UTF-8 CSV",
       "  • manifest.json         — backup දිනය/version, table row ගණන, file hashes (integrity පරීක්ෂාවට)",
+      "  • site-source/BACKUP_INVENTORY_SI.md — සම්පූර්ණ inventory, fixes හා සීමා (සිංහල)",
       "  • RECOVERY.txt          — හදිසි අවස්ථා checklist (site එක තියන තැන් + ගොඩගන්නා හැටි)",
       opts?.encryptPassword
-        ? "  🔒 මේ backup එකේ database.sql එක ENCRYPT වී ඇත — Import කරද්දී ඒ password එකම අවශ්‍යයි."
+        ? "  🔒 database.sql + uploaded media ENCRYPT වී ඇත. XLSX/CSV/public/source files encrypted නොවේ — ZIP එකත් රහසිගතව තබාගන්න."
         : "  🔒 ඕන නම් ඊළඟ වතාවේ Download කරද්දී Encrypt option එකෙන් password ආරක්ෂාව දාන්න.",
       "",
       "RESTORE කරන විදිහ:",
@@ -1227,6 +1243,11 @@ export async function generateBackupZip(
       "     3) Site එකේ env අලුත් project එකට මාරු කර පරණ superadmin password එකෙන්ම login වෙන්න",
       "     4) Admin → Backup & Restore → Import එකෙන් මේ ZIP එක එක් වරක් තෝරන්න (images storage එකට යයි)",
       "",
+      "සීමා: මුල් Excel workbook එක server එකේ ගබඩා කර නැත්නම් එහි formatting/macros නොමැත; registers data වලින් නැවත හදයි.",
+      "Supabase Auth MFA/sessions/OAuth/provider config, arbitrary other buckets, old backup ZIP files, hosting env/secrets/DNS දත්ත dump එකක් නොවේ.",
+      "Fresh project: login recovery සඳහා profiles වල auth_email + password_display තිබිය යුතුයි; නැති ගිණුම් reset/invite කරන්න.",
+      "Import එකෙන් database structure/source code/env apply නොවේ: canonical schema.sql run කර source නැවත deploy කළ යුතුයි.",
+      "Database writes are not a transaction. Keep the safety ZIP; a failed restore may need recovery from it.",
       "⚠ ආරක්ෂාව: මේ ZIP එකේ user login passwords + Gemini API key අඩංගුයි — ගොනුව රහසිගතව තබා ගන්න!",
       "🌐 Site design එක: මේ ZIP එකේ site-assets/ + site-source/ folders දෙකේ අලුත්ම",
       "   CSS, mouse-cursor animation, icons සහ design source files ටික ඇත. ඒම site",

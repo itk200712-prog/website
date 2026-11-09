@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
     if (!res.ok) return deny();
     const rows = (await res.json()) as { role?: string }[];
     const role = rows?.[0]?.role ?? "";
-    if (role !== "admin" && role !== "superadmin") return deny();
+    if (role !== "superadmin") return deny();
   } catch {
     return deny();
   }

@@ -580,7 +580,8 @@ ok("bot UI: asked language is kept through officer notice, Yes/No, form and rese
 console.log("\n── 14) Backup completeness ──");
 const backupSrc = readFileSync(join(root, "src/lib/backup.ts"), "utf8");
 const schemaTables = Array.from(new Set([...schema.matchAll(/create table if not exists public\.([a-z0-9_]+)/gi)].map((m) => m[1])));
-const backupTables = [...backupSrc.matchAll(/\{ name: "([a-z0-9_]+)"/g)].map((m) => m[1]);
+const catalogTables = (await import("../src/lib/backup-catalog.generated")).SCHEMA_BACKUP_TABLES;
+const backupTables = [...new Set([...backupSrc.matchAll(/\{ name: "([a-z0-9_]+)"/g)].map((m) => m[1]).concat(catalogTables.map((t) => t.name)))];
 ok("backup: covers EVERY table in schema.sql",
   schemaTables.every((t) => backupTables.includes(t)),
   `missing: ${schemaTables.filter((t) => !backupTables.includes(t)).join(", ") || "none"}`);
@@ -597,12 +598,12 @@ ok("backup: ZIP embeds canonical schema.sql (live chat DB logic + RLS) — serve
   backupSrc.includes("async function fetchSchemaSql") &&
   backupSrc.includes("/api/backup/schema") &&
   !backupSrc.includes('import("../../supabase/schema.sql")'));
-ok("backup: image scan covers nested JSON (JSON.stringify) + recursive storage list",
-  backupSrc.includes("scanImagePathsInRows") && backupSrc.includes("JSON.stringify(r)") && backupSrc.includes("listAllStorageFiles"));
+ok("backup: recursive media discovery + authenticated downloads + recursive storage listing",
+  backupSrc.includes("scanMediaReferences(liveTables") && backupSrc.includes("listAllStorageFiles") && backupSrc.includes("sb.storage.from(ref.bucket).download(ref.key)"));
 ok("restore: wipe uses not(pk,is,null) in reverse order; profiles never fully wiped (no RLS lockout)",
   backupSrc.includes('.not(t.pk, "is", null)') && backupSrc.includes("[...ordered].reverse()") && backupSrc.includes('new Set(["profiles", "backup_secrets", "backup_history"])'));
 ok("restore: URL rewrite handles nested JSON values",
-  backupSrc.includes("rewriteStr") && backupSrc.includes("JSON.parse(out)"));
+  backupSrc.includes("rewriteMediaValue(val, urlMap, aliases)") && readFileSync(join(root, "src/lib/backup-media.ts"), "utf8").includes("rewriteMediaValue(JSON.parse(s), urls, aliases)"));
 
 console.log("\n── 15) Backup extras: manifest · encryption · preview · safety · partial · scheduled ──");
 const bu = await import("../src/lib/backup-utils.ts");
@@ -944,7 +945,7 @@ ok("backup: scheduled run is locked + uploads are verified before reporting succ
 
 ok("security: schema.sql (default passwords) is server-only — not in the browser bundle",
   schemaRouteSrc.includes("auth/v1/user") &&
-  schemaRouteSrc.includes('role !== "admin" && role !== "superadmin"') &&
+  schemaRouteSrc.includes('role !== "superadmin"') &&
   schemaRouteSrc.includes('"Cache-Control": "no-store, private"') &&
   !readFileSync(join(root, "src/lib/backup.ts"), "utf8").includes('import("../../supabase/schema.sql")') &&
   readFileSync(join(root, "src/lib/backup.ts"), "utf8").includes("async function fetchSchemaSql") &&
@@ -984,8 +985,8 @@ ok("admin board: adding an existing person updates that row instead of duplicati
   adminBoardSrc.includes("duplicate එකක් හැදෙන්නේ නැතුව ඒ row එක update කළා"));
 
 ok("backup export/import: duplicate board & gallery rows are merged, never re-created",
-  backupSrc.includes("g.rows = dedupeTableRows(g.name, g.rows)") &&
-  backupSrc.includes("const clean = dedupeTableRows(name, rows)") &&
+  backupSrc.includes("orderBackupRows(g.name, dedupeTableRows(g.name, g.rows), SCHEMA_SELF_REFERENCES)") &&
+  backupSrc.includes("orderBackupRows(name, dedupeTableRows(name, rows), SCHEMA_SELF_REFERENCES)") &&
   backupSrc.includes('errors.push(`ℹ duplicate rows ${dedupedRows}ක් merge කළා') &&
   backupUtilsSrc.includes('if (table === "board_members") return dedupeBoardRows(rows)') &&
   backupUtilsSrc.includes('if (table === "gallery_items") return dedupeGalleryRows(rows)'));
@@ -1224,7 +1225,7 @@ ok("backup: separate encryption password + saved download/import history (actor/
   adminBackupSrc.includes('action: "import"') &&
   schema.includes("create table if not exists public.backup_history") &&
   schema.includes("backup_history_super") &&
-  backupSrc.includes('{ name: "backup_history", pk: "id" }') &&
+  catalogTables.some((t) => t.name === "backup_history" && t.pk === "id") &&
   scheduledBackupSrc.includes('action: "scheduled"'));
 ok("backup history: prune selector keeps only latest 5",
   bu.BACKUP_HISTORY_KEEP === 5 &&
@@ -1498,7 +1499,7 @@ ok("schedule: route is secret-gated, builds the SAME full ZIP as manual (Encrypt
   scheduledBackupSrc.includes("force") &&
   scheduledBackupSrc.includes("backup_history") &&
   backupSrc.includes("client?: BackupClient") &&
-  backupSrc.includes("opts?.client ?? (await authedClient())"));
+  backupSrc.includes("opts?.client ?? await authedClient()"));
 ok("schedule: Admin card (interval/time/destinations/encrypt/MEGA/cron SQL/test run) + secrets in backup_secrets",
   adminBackupSrc.includes("Scheduled Auto-Backup") &&
   adminBackupSrc.includes("sch.encrypt") &&
@@ -1986,7 +1987,7 @@ ok("Download With Special: SQL table with own-row read + admin-only writes, and 
   schemaSqlSrc.includes("using (user_id = auth.uid() or public.is_admin())") &&
   schemaSqlSrc.includes("using (public.is_admin()) with check (public.is_admin())") &&
   schemaSqlSrc.includes("create index if not exists special_dl_user_idx") &&
-  backupSrc.includes('{ name: "special_download_access", pk: "id" }') &&
+  catalogTables.some((t) => t.name === "special_download_access" && t.pk === "id") &&
   !existsSync(join(root, "special-download-access.sql")) // helper SQL workspace එකේ විතරයි — repo එකට යන්නේ නෑ
 );
 
@@ -2086,8 +2087,8 @@ ok("Member Update: NIC / gender validation + incomplete-column badge + backup ca
   memberUpdate.missingColumns({ member_no: "62/01", full_name: "නම", nic: "", address: "x", postal_address: "y", gender: "පුරුෂ" }).join(",") === "NIC" &&
   memberUpdate.sanitizeNic(" 123456789 v ") === "123456789V" &&
   memberUpdate.voterSyncPatch({ nic: "123456789v", full_name: " නම  ", address: "ලිපිනය", postal_address: "තැපැල්", gender: "පුරුෂ" }).nic === "123456789V" &&
-  backupSrc.includes('{ name: "member_rows", pk: "id" }') &&
-  backupSrc.includes('{ name: "voter_rows", pk: "id" }'));
+  catalogTables.some((t) => t.name === "member_rows" && t.pk === "id") &&
+  catalogTables.some((t) => t.name === "voter_rows" && t.pk === "id"));
 
 ok("member/voter register PDF: letterhead only on page 1 + 14px readable type + automatic fit-to-page so wrapped rows never squash the page",
   pdfRegisterSrc.includes("const FIRST_PAGE_ROWS = 20;") &&

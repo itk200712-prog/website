@@ -11,6 +11,7 @@
 //  Auth: admin/superadmin Bearer token හෝ x-backup-secret (scheduled backup)
 // ============================================================================
 
+import { listStoragePaths } from "@/lib/backup-media";
 import { NextRequest, NextResponse } from "next/server";
 import { SITE_PACKAGE_VERSION, SITE_SOURCE_FILES } from "@/lib/site-source.generated";
 import { PUBLIC_ASSET_FILES } from "@/lib/public-assets.generated";
@@ -23,7 +24,6 @@ const ANON_KEY = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
 const SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
 const CRON_KEY = "backup_cron_secret";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_FILES = 5000;
 
 function deny(status = 403) {
   return NextResponse.json(
@@ -71,47 +71,24 @@ async function userIsAdmin(token: string): Promise<boolean> {
     if (!res.ok) return false;
     const rows = (await res.json()) as { role?: string }[];
     const role = rows?.[0]?.role ?? "";
-    return role === "admin" || role === "superadmin";
+    return role === "superadmin";
   } catch {
     return false;
   }
 }
 
-/** `site-images` bucket එකේ files ගණන (folders recursive, උපරිම 5000) */
+/** Same paginator as the exporter; an error is UNKNOWN, never a false zero. */
 async function countStorageImages(): Promise<number> {
-  if (!SUPABASE_URL || !SERVICE_KEY) return 0;
-  let count = 0;
-  async function walk(prefix: string, depth: number): Promise<void> {
-    if (depth > 6 || count >= MAX_FILES) return;
-    for (let offset = 0; offset < MAX_FILES; offset += 100) {
-      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/site-images`, {
-        method: "POST",
-        headers: {
-          apikey: SERVICE_KEY,
-          Authorization: `Bearer ${SERVICE_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prefix, limit: 100, offset, sortBy: { column: "name", order: "asc" } }),
-        cache: "no-store",
-      });
-      if (!res.ok) return;
-      const items = (await res.json()) as { name: string; id: string | null }[];
-      if (!items.length) return;
-      for (const f of items) {
-        const path = prefix ? `${prefix}/${f.name}` : f.name;
-        if (f.id === null) await walk(path, depth + 1);
-        else count += 1;
-        if (count >= MAX_FILES) return;
-      }
-      if (items.length < 100) return;
-    }
-  }
-  try {
-    await walk("", 0);
-  } catch {
-    /* list නොහැකි නම් 0 */
-  }
-  return count;
+  if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Service-role storage inventory unavailable");
+  const paths = await listStoragePaths(async (prefix, offset) => {
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/site-images`, {
+      method: "POST", headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ prefix, limit: 100, offset, sortBy: { column: "name", order: "asc" } }), cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`Storage inventory HTTP ${res.status}`);
+    return await res.json();
+  });
+  return paths.length;
 }
 
 export async function GET(req: NextRequest) {
@@ -126,7 +103,9 @@ export async function GET(req: NextRequest) {
     if (!token || !(await userIsAdmin(token))) return deny(token ? 403 : 401);
   }
 
-  const images = await countStorageImages();
+  let images: number;
+  try { images = await countStorageImages(); }
+  catch { return NextResponse.json({ ok: false, reason: "storage_inventory_unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } }); }
   return NextResponse.json(
     {
       ok: true,

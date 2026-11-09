@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx scripts/test.mts"
+    "test": "tsx scripts/test.mts && tsx scripts/test-backup-media.mts && tsx scripts/test-mail-delivery.mts",
+    "pretest": "node scripts/gen-site-source.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
@@ -40,6 +41,7 @@
     "playwright-core": "^1.64.1",
     "postcss": "^8.5.1",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.3"
   }
 }

@@ -205,6 +205,14 @@ export function summarizeInserts(inserts: ParsedInsert[]): { tables: { name: str
   return { tables, totalRows: inserts.length };
 }
 
+/** Snapshot metadata retains zero-row tables, even in a standalone SQL import. */
+export function readBackupTableCounts(sql: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const m of sql.matchAll(/^-- ([a-z_][a-z0-9_]*) \((\d+) rows\)$/gm)) counts[m[1]] = Number(m[2]);
+  for (const m of sql.matchAll(/^-- Backup-Table: ([a-z_][a-z0-9_]*) (\d+)$/gm)) counts[m[1]] = Number(m[2]);
+  return counts;
+}
+
 /* ---------------------------------------------------------------- HASH --- */
 function bytesToHex(buf: ArrayBuffer): string {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");

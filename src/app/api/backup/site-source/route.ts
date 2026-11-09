@@ -71,7 +71,7 @@ async function userIsAdmin(token: string): Promise<boolean> {
     if (!res.ok) return false;
     const rows = (await res.json()) as { role?: string }[];
     const role = rows?.[0]?.role ?? "";
-    return role === "admin" || role === "superadmin";
+    return role === "superadmin";
   } catch {
     return false;
   }

@@ -196,3 +196,14 @@ git push
 - **Timer HTTP timeout update:** Admin → Backup → Scheduled card → **SQL එක copy කරන්න** → Supabase SQL Editor → paste → Run. පවතින cron secret එකම භාවිත කරන්න; නව secret එකක් හදන්න අවශ්‍ය නැහැ. නව SQL එකේ `timeout_milliseconds := 300000` තිබිය යුතුයි. කෙටි HTTP timeout එකක් full ZIP + SMTP request එකට ප්‍රමාණවත් නොවිය හැක.
 - Admin → Backup → **දැන්ම Test එකක් දුවවන්න** භාවිත කර සැබෑ ZIP + completion report පරීක්ෂා කරන්න. `Test report` button එක sample email එකක් පමණයි.
 - Outbox එකට නව table එකක් අවශ්‍ය නැහැ; පවතින backup/export/import coverage තුළ සුරැකේ. SMTP send attempt එක completion මොහොතේම වේ; සැබෑ inbox delivery තහවුරු කළ නොහැක.
+
+## Board photos + full backup audit
+
+- See `BACKUP_INVENTORY_SI.md` for the full Sinhala inventory, recovery steps and explicit limits.
+- Deploy this update, then make a NEW full backup. Old ZIPs cannot recover photo bytes they never captured.
+- No new DB migration is needed for this patch; media mapping uses existing `site_images_backup` columns. A full restore now retains empty-table metadata. Test on staging first and keep the safety ZIP.
+- Normal ZIPs include `media/board/` copies as well as SQL-embedded bytes. Encrypted SQL retains uploaded media bytes without adding plaintext media copies. XLSX/CSV and public/source/schema files are not encrypted by this checkbox.
+- Missing files/tables/schema/source and corrupt declared ZIP files now fail visibly instead of producing a falsely complete backup. Fix the reported access/missing-file issue and retry.
+- Referenced files from other buckets are not moved into a public bucket: create matching private buckets/policies first. Their restored signed links expire after one hour and need a normal application refresh mechanism.
+- Source restoration requires deployment. If rebuilding from ZIP, copy its root `schema.sql` to the project's `supabase/schema.sql` too; the build generator needs the canonical schema.
+- npm scripts now declare the `tsx` test runner in devDependencies so the test gate is reproducible after `npm ci`.

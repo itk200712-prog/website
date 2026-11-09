@@ -1,3 +1,5 @@
+import { SCHEMA_BACKUP_TABLES } from "@/lib/backup-catalog.generated";
+
 // ============================================================================
 //  📋 BACKUP COVERAGE — "site එකේ හැම දෙයක්ම backup එකට එනවද?" කියා බලන ලැයිස්තුව
 // ----------------------------------------------------------------------------
@@ -30,7 +32,7 @@ export const BACKUP_COVERAGE: CoverageGroup[] = [
     icon: "👤",
     items: [
       { key: "profiles", label: "User + Admin විස්තර (නම, NIC, දුරකථන, role, email, password)", kind: "table" },
-      { key: "login_accounts", label: "Login accounts (password ඇතුළුව — fresh restore)", kind: "registers", note: "database.sql → LOGIN ACCOUNTS" },
+      { key: "login_accounts", label: "Login recovery (profiles හි email/password ඇති ගිණුම් පමණයි)", kind: "registers", note: "database.sql → LOGIN ACCOUNTS" },
       { key: "special_download_access", label: "Download With Special අවසර", kind: "table" },
       { key: "backup_secrets", label: "රහස් (Gemini key, MEGA login, cron secret, encryption)", kind: "table" },
       { key: "system_settings", label: "Site settings (සියලු toggles, WhatsApp, notice…)", kind: "table" },
@@ -90,6 +92,9 @@ export const BACKUP_COVERAGE: CoverageGroup[] = [
     ],
   },
 ];
+
+const catalogExtras = SCHEMA_BACKUP_TABLES.filter((table) => !BACKUP_COVERAGE.some((g) => g.items.some((i) => i.key === table.name)));
+if (catalogExtras.length) BACKUP_COVERAGE.push({ title: "අලුත් schema tables", icon: "🗄", items: catalogExtras.map((t) => ({ key: t.name, label: t.name, kind: "table" })) });
 
 /** Backup එකේ table එකකට නොවන (file/විශේෂ) items — count එක manifest එකෙන් එයි */
 export const NON_TABLE_COVERAGE_KEYS = ["login_accounts", "site-assets", "site-source", "Members-Register.xlsx", "Voters-Register.xlsx"];

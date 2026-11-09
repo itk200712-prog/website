@@ -8,8 +8,8 @@
 // CSS/mouse-cursor වගේ design updates හැම එකක්ම අලුත්ම backup එකේ තියෙනවා.
 //
 // ⚠ අලුත් design/feature file එකක් එකතු කළොත් FILES list එකටත් දාන්න.
-// Server-only secret logic (API routes) මෙතන දාන්න එපා — frontend/design
-// files විතරයි.
+// Snapshot is served only by authenticated server routes (never a client import).
+// Source may include API logic, but actual .env/key files are never included.
 // ============================================================================
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -78,6 +78,14 @@ const FILES = [
   "src/lib/branch-settings.ts",
   "src/lib/supabase/storage.ts",
   "next.config.ts",
+  "BACKUP_INVENTORY_SI.md",
+  "DEPLOY_STEPS.md",
+  "package.json",
+  "package-lock.json",
+  "postcss.config.mjs",
+  "tailwind.config.ts",
+  "next-env.d.ts",
+  "scripts/gen-site-source.mjs",
 ];
 
 // ============================================================================
@@ -86,8 +94,7 @@ const FILES = [
 //     (ඉහත FILES list එක = අනිවාර්ය ලැයිස්තුව; auto-discover එකෙන් අමතර ඒවා එකතු වේ.)
 //
 //  🔒 secrets/සර්වර් code කවදාවත් snapshot එකට නොයයි — snapshot එක browser
-//     bundle එකට යන නිසා (backup.ts client එකේත් import වේ). Deny-list:
-//       src/app/api/**         → API routes (service keys, cron secrets)
+//     bundle එකට නොයයි. Deny-list:
 //       (src/lib/supabase/** ඇතුළත් — env var නම් විතරයි, රහස් නෑ)
 //       *.generated.ts         → මේ ගොනුවම
 //       .env*, *.pem, *.key    → ඕනෑම secret file
@@ -104,9 +111,9 @@ const DENY = [
   /^node_modules\//,
   /^\.next\//,
   /^supabase\//,
-  /^scripts\//,
+
   /^public\//,
-  /package-lock\.json$/,
+
 ];
 const isDenied = (rel) => DENY.some((re) => re.test(rel));
 
@@ -218,3 +225,39 @@ const assetsOut = [
 ].join("\n");
 writeFileSync(join(root, "src/lib/public-assets.generated.ts"), assetsOut, "utf8");
 console.log(`public assets manifest: ${publicFiles.length} files → src/lib/public-assets.generated.ts`);
+
+// Future schema tables are automatically registered for backup/restore. Fail a
+// build rather than silently omit a table with an unsupported primary key.
+const schemaText = readFileSync(join(root, "supabase/schema.sql"), "utf8");
+const catalog = [];
+const selfReferences = [];
+for (const match of schemaText.matchAll(/create table(?: if not exists)? public\.([a-z0-9_]+)\s*\(([\s\S]*?)\n\);/gi)) {
+  for (const line of match[2].split("\n")) {
+    const self = line.match(/^\s*([a-z_][a-z0-9_]*)\s+.*?references\s+public\.([a-z0-9_]+)\s*\(\s*([a-z_][a-z0-9_]*)\s*\)/i);
+    if (self && self[2] === match[1]) selfReferences.push({ table: match[1], column: self[1], targetColumn: self[3] });
+  }
+  const inline = [...match[2].matchAll(/^\s*([a-z_][a-z0-9_]*)\s+[^\n]*?\bprimary\s+key\b/gim)];
+  const tableKey = match[2].match(/^\s*primary\s+key\s*\(\s*([a-z_][a-z0-9_]*)\s*\)/im);
+  const pk = inline.length === 1 ? inline[0][1] : tableKey?.[1];
+  if (!pk) throw new Error(`Backup catalog: ${match[1]} needs a supported single-column primary key`);
+  if (!catalog.some((t) => t.name === match[1])) catalog.push({ name: match[1], pk, dependencies: [...new Set([...match[2].matchAll(/references\s+public\.([a-z0-9_]+)/gi)].map((m) => m[1]))] });
+}
+const declared = new Set([...schemaText.matchAll(/create table(?: if not exists)? public\.([a-z0-9_]+)/gi)].map((m) => m[1]));
+if (catalog.length !== declared.size) throw new Error("Backup catalog could not parse all canonical schema tables");
+const orderedCatalog = [];
+const visitedTables = new Set(), activeTables = new Set();
+function visitTable(table) {
+  if (activeTables.has(table.name)) throw new Error(`Backup catalog: cyclic/self-reference requires a staged restore: ${table.name}`);
+  if (visitedTables.has(table.name)) return;
+  activeTables.add(table.name);
+  for (const name of table.dependencies.filter((name) => name !== table.name)) {
+    const dependency = catalog.find((t) => t.name === name);
+    if (!dependency) throw new Error(`Backup catalog: missing referenced table ${name}`);
+    visitTable(dependency);
+  }
+  activeTables.delete(table.name); visitedTables.add(table.name);
+  orderedCatalog.push({ name: table.name, pk: table.pk });
+}
+catalog.forEach(visitTable);
+writeFileSync(join(root, "src/lib/backup-catalog.generated.ts"), `// Generated from canonical supabase/schema.sql; no runtime secrets.\nexport const SCHEMA_BACKUP_TABLES = ${JSON.stringify(orderedCatalog, null, 2)};\nexport const SCHEMA_SELF_REFERENCES = ${JSON.stringify(selfReferences, null, 2)};\n`);
+console.log(`backup catalog: ${catalog.length} schema tables`);
