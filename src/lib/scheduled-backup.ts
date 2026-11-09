@@ -314,7 +314,7 @@ export function buildCronSql(siteUrl: string, cronSecret: string): string {
   const base = siteUrl.replace(/\/$/, "");
   return [
     "-- MPCS Auto-Backup timer — විනාඩි 15කට වරක් site එක check කරයි.",
-    "-- (පැය කීයකට වරක්ද කියා Admin → Backup & Restore එකෙන් තෝරනවා; පටන් ගැන්ම හැමදාම රෑ 12:00.",
+    "-- (පැය කීයකට වරක්ද කියා Admin → Backup & Restore එකෙන් තෝරනවා; Save කළ පසු ඊළඟ පැයේ මුල පටන් ගනී.",
     "--  මෙය එක වරක් run කළාම ඇති — ඊට පස්සේ වෙලාව වෙනස් කරන හැම එකක්ම Admin එකෙන් විතරයි.)",
     "insert into storage.buckets (id, name, public)",
     "values ('backups', 'backups', false)",
@@ -338,7 +338,8 @@ export function buildCronSql(siteUrl: string, cronSecret: string): string {
     "      'Content-Type', 'application/json',",
     `      'x-backup-secret', '${cronSecret}'`,
     "    ),",
-    "    body    := '{}'::jsonb",
+    "    body    := '{}'::jsonb,",
+    "    timeout_milliseconds := 300000",
     "  );",
     "  $$",
     ");",

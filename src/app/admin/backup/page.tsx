@@ -220,10 +220,10 @@ export default function AdminBackupPage() {
         body: JSON.stringify({ force: true }),
       });
       const j = (await r.json().catch(() => null)) as {
-        ok?: boolean; file?: string; destinations?: string[]; reason?: string; detail?: string; warnings?: string[]; encrypted?: boolean;
+        ok?: boolean; emailReportsSent?: number; emailReportPending?: boolean; emailReportError?: string; file?: string; destinations?: string[]; reason?: string; detail?: string; warnings?: string[]; encrypted?: boolean;
       } | null;
       if (j?.ok) {
-        show(`✅ Test backup එක හරි! ${j.file ?? ""}${j.encrypted ? " 🔒" : ""} → ${(j.destinations ?? []).join(" + ")}${j.warnings?.length ? ` · ⚠ ${j.warnings.join("; ")}` : ""}`);
+        show(`✅ Backup හරි · ${j.emailReportPending ? `⚠ email PENDING: ${j.emailReportError || "SMTP retry queued"}` : `SMTP accepted: ${j.emailReportsSent ?? 0}`} · ${j.file ?? ""}${j.encrypted ? " 🔒" : ""} → ${(j.destinations ?? []).join(" + ")}${j.warnings?.length ? ` · ⚠ ${j.warnings.join("; ")}` : ""}`);
         await loadBackupHistory();
       } else {
         show(`⚠ Test එක අසාර්ථකයි: ${j?.detail || j?.reason || `HTTP ${r.status}`}`);
@@ -1204,7 +1204,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         )}
 
         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[11.5px] leading-relaxed text-amber-800">
-          <b>⏰ Timer එක (එක වරක් විතරයි):</b> {cronSecret ? "Cron secret එක තියෙනවා ✓" : "මුලින්ම Cron secret එකක් හදන්න"} —
+          <b>⏰ Timer එක:</b> Copy SQL එකේ අලුත් 300-second timeout update එක Supabase SQL Editor එකේ නැවත Run කරන්න.  {cronSecret ? "Cron secret එක තියෙනවා ✓" : "මුලින්ම Cron secret එකක් හදන්න"} —
           පහත SQL එක copy කරලා <b>Supabase → SQL Editor</b> එකේ <b>එක වරක්</b> run කරන්න. ඊට පස්සේ දවස්/වෙලාව වෙනස් කරන හැම එකම මෙතැනින් විතරයි.
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" onClick={() => void generateCronSecret()} className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-extrabold text-white hover:bg-amber-700">
@@ -1246,7 +1246,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
           <div className="text-[12px] font-extrabold text-slate-800">📧 ඊමේල් වාර්තාව (සාර්ථක / අසාර්ථක)</div>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
             හැම auto-backup එකකටම පස්සේ <b>file නම · file වර්ගය · file ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස</b> සහිත
-            email එකක් යයි. (යැවීම: SMTP පමණයි; fail වුණොත් error වාර්තා වේ.) ලිපින එකතු කරන්නේ{" "}
+            backup upload අවසන් වූ වහාම මේ request එකෙන්ම SMTP email යැවීමට උත්සාහ කරයි. Fail වුණොත් private queue එකේ තබා ඊළඟ cron check එකේ retry කරයි; Backup History එකේ SMTP accepted / PENDING තත්ත්වය පෙන්වයි. ලිපින එකතු කරන්නේ{" "}
             <a href="/admin/emails" className="font-extrabold text-indigo-700 underline">Admin → Emails → “Auto Backup Reports”</a> එකෙන්.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">

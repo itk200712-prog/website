@@ -71,7 +71,7 @@ export const MAIL_ROUTES: MailRouteDef[] = [
       "Every scheduled auto-backup sends a report here: file name, file type, file size, status (successful/failed), time spent, and the date & day of the run.",
     desc_si:
       "ඉබේම දුවන හැම auto-backup එකකටම පස්සේ වාර්තාවක් මේ ලිපින වලට එයි — file නම · file වර්ගය · file ප්‍රමාණය · තත්ත්වය (සාර්ථක/අසාර්ථක) · ගත වූ වේලාව · දිනය සහ දවස.",
-    fallbackKeys: ["contact_email_1", "contact_email_2"],
+    fallbackKeys: [],
     useNotifyList: false,
   },
   {

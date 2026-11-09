@@ -11,6 +11,8 @@ const { routeEmailsServer } = await import('../src/lib/mail-routes-server');
 const { formatFileSize, sendBackupReport } = await import('../src/lib/backup-report');
 const { NextRequest } = await import('next/server');
 const { GET, POST } = await import('../src/app/api/mail/settings/route');
+const { enqueueBackupReport, flushBackupReportQueue, BACKUP_MAIL_PREFIX } = await import('../src/lib/backup-mail-queue');
+const { POST: scheduledPost } = await import('../src/app/api/scheduled-backup/route');
 const { POST: sendPost } = await import('../src/app/api/mail/send/route');
 const originalFetch = globalThis.fetch;
 const originalTransport = nodemailer.createTransport;
@@ -21,6 +23,7 @@ const db = new Map<string, string>([
 const smtpTo: string[] = [];
 const mailPayloads: { to: string; from: string; cc?: string; bcc?: string }[] = [];
 const settings = new Map<string, string>();
+const historyPatches: Record<string, unknown>[] = [];
 const smtpErrors = new Set<string>();
 const writes: Record<string, string>[][] = [];
 let role = 'admin', closed = 0, calls = 0, maxConcurrent = 0, concurrent = 0;
@@ -43,26 +46,50 @@ try {
     assert.equal(u.hostname, 'smtp-test.invalid', 'No secondary/external HTTP mail service is permitted');
     if (u.pathname === '/auth/v1/user') return response({ id: '12345678-1234-1234-1234-123456789abc' });
     if (u.pathname === '/rest/v1/profiles') return response([{ role }]);
+    if (u.pathname === '/rest/v1/backup_history') {
+      if (init?.method === 'PATCH') historyPatches.push(JSON.parse(String(init.body)));
+      return response([]);
+    }
     if (u.pathname === '/rest/v1/system_settings') {
       const filter = u.searchParams.get('key') ?? '';
-      return response(Array.from(settings, ([key, value]) => ({ key, value })).filter(row => filter.slice(4, -1).split(',').includes(row.key)));
+      if (init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body));
+        for (const row of Array.isArray(payload) ? payload : [payload]) settings.set(row.key, row.value);
+        return new Response(null, { status: 204 });
+      }
+      if (init?.method === 'PATCH') { settings.set(filter.slice(3), JSON.parse(String(init.body)).value); return new Response(null, { status: 204 }); }
+      return response(Array.from(settings, ([key, value]) => ({ key, value })).filter(row => filter.startsWith('eq.') ? row.key === filter.slice(3) : filter.slice(4, -1).split(',').includes(row.key)));
     }
     assert.equal(u.pathname, '/rest/v1/backup_secrets');
     if (init?.method === 'DELETE') {
-      assert.equal(u.searchParams.get('or'), '(key.like.silentforms*,key.eq.mail_provider)');
-      if (cleanupError) return response({ message: 'cleanup unavailable' }, 503);
-      for (const key of db.keys()) if (key.startsWith('silentforms') || key === 'mail_provider') db.delete(key);
+      if (u.searchParams.has('or')) {
+        assert.equal(u.searchParams.get('or'), '(key.like.silentforms*,key.eq.mail_provider)');
+        if (cleanupError) return response({ message: 'cleanup unavailable' }, 503);
+        for (const key of db.keys()) if (key.startsWith('silentforms') || key === 'mail_provider') db.delete(key);
+      } else { db.delete((u.searchParams.get('key') ?? '').slice(3)); }
       return new Response(null, { status: 204 });
     }
     if (init?.method === 'POST') {
       if (dbError) return response({ message: 'Mock schema write error', code: '42703' }, 400);
-      const rows = JSON.parse(String(init.body));
+      const parsed = JSON.parse(String(init.body));
+      const rows = Array.isArray(parsed) ? parsed : [parsed];
       writes.push(rows);
-      for (const row of rows) { assert.deepEqual(Object.keys(row).sort(), ['key', 'value']); db.set(row.key, row.value); }
+      for (const row of rows) {
+        assert.deepEqual(Object.keys(row).sort(), ['key', 'value']);
+        const ignoreDuplicate = String((init.headers as Record<string, string>)?.Prefer).includes('ignore-duplicates');
+        if (!ignoreDuplicate || !db.has(row.key)) db.set(row.key, row.value);
+      }
       return new Response(null, { status: 204 });
     }
+    if (init?.method === 'PATCH') {
+      const key = (u.searchParams.get('key') ?? '').slice(3);
+      const prefix = u.searchParams.get('value');
+      if (!db.has(key) || (prefix && !db.get(key)!.startsWith(prefix.slice(5, -1)))) return response([]);
+      db.set(key, JSON.parse(String(init.body)).value);
+      return String((init.headers as Record<string, string>)?.Prefer).includes('representation') ? response([{ key, value: db.get(key) }]) : new Response(null, { status: 204 });
+    }
     const filter = u.searchParams.get('key') ?? '';
-    return response(Array.from(db, ([key, value]) => ({ key, value })).filter(row => filter.slice(4, -1).split(',').includes(row.key)));
+    return response(Array.from(db, ([key, value]) => ({ key, value })).filter(row => filter.startsWith('like.') ? row.key.startsWith(filter.slice(5, -1)) : filter.startsWith('eq.') ? row.key === filter.slice(3) : filter.slice(4, -1).split(',').includes(row.key)));
   }) as typeof fetch;
   const installTransport = () => {
     nodemailer.createTransport = ((options: Record<string, unknown>) => {
@@ -224,5 +251,80 @@ try {
     async (to, subject, text) => { reportText = text; return (await sendMail({ to, subject, text })).ok; });
   assert.equal(reports, 7); assert.match(reportText, /36\.7 MB \(36,700,000 bytes\)/);
   pass('Backup reports use SMTP for all recipients and preserve actual compressed ZIP size');
+  const report = { status: 'success' as const, source: 'auto' as const, fileName: 'hourly-success.zip', fileSize: 36_700_000, durationMs: 1234, destinations: ['Supabase'] };
+  settings.set('mail_route_backup_1', recipients[0]);
+  for (let i = 2; i <= MAIL_SLOTS; i++) settings.set(`mail_route_backup_${i}`, '');
+  smtpTo.length = 0; mailPayloads.length = 0;
+  const queued = await enqueueBackupReport(report, await routeEmailsServer('backup'), 'Backup successful');
+  assert.ok(db.has(queued)); assert.ok(queued.startsWith(BACKUP_MAIL_PREFIX)); assert.equal(smtpTo.length, 0);
+  const immediate = await flushBackupReportQueue({ key: queued });
+  assert.equal(immediate.pending, false); assert.equal(immediate.sent, 1);
+  assert.deepEqual(smtpTo, [recipients[0]]);
+  assert.ok(historyPatches.some(p => String(p.detail).includes('SMTP accepted')));
+  const messageId = (mailPayloads[0] as { messageId?: string }).messageId;
+  assert.match(messageId ?? '', /^<mpcs-/);
+  pass('Successful ZIP completion queues privately and sends immediate report to ONLY the configured backup inbox');
+
+  await enqueueBackupReport(report, recipients, 'Duplicate enqueue must not change the delivered run');
+  await flushBackupReportQueue({ key: queued });
+  assert.equal(smtpTo.length, 1);
+  pass('Same successful run is not emailed again after acknowledgement/re-enqueue');
+
+  const retryReport = { ...report, fileName: 'transient-retry.zip' };
+  smtpErrors.add(recipients[0]); mailPayloads.length = 0;
+  const retryKey = await enqueueBackupReport(retryReport, recipients.slice(0, 2), 'Backup successful despite SMTP failure');
+  smtpTo.length = 0;
+  const firstTry = await flushBackupReportQueue({ key: retryKey });
+  assert.equal(firstTry.pending, true); assert.equal(firstTry.sent, 1);
+  assert.match(JSON.parse(db.get(retryKey)!).lastError, /SMTP authentication/);
+  const firstMessageId = (mailPayloads.find(p => p.to === recipients[0]) as { messageId?: string }).messageId;
+  smtpErrors.clear(); smtpTo.length = 0; mailPayloads.length = 0;
+  const secondTry = await flushBackupReportQueue({ key: retryKey });
+  assert.equal(secondTry.pending, false); assert.equal(secondTry.sent, 2);
+  assert.deepEqual(smtpTo, [recipients[0]]);
+  pass('Durable retry survives SMTP failure and retries ONLY the still-unaccepted recipient');
+  assert.equal((mailPayloads[0] as { messageId?: string }).messageId, firstMessageId);
+  pass('Report retries retain a stable per-recipient Message-ID');
+
+  const simultaneousKey = await enqueueBackupReport({ ...report, fileName: 'overlap.zip' }, [recipients[0]], 'Backup done');
+  smtpTo.length = 0;
+  await Promise.all([flushBackupReportQueue({ key: simultaneousKey }), flushBackupReportQueue({ key: simultaneousKey })]);
+  assert.equal(smtpTo.length, 1);
+  pass('Atomic queue lease prevents overlapping cron workers sending the same acknowledged report');
+
+  settings.set('mail_route_backup_1', ''); settings.set('contact_email_1', 'unrelated-contact@example.com');
+  assert.deepEqual(await routeEmailsServer('backup'), []);
+  const noRecipientKey = await enqueueBackupReport({ ...report, fileName: 'waiting-for-recipient.zip' }, [], 'Backup done');
+  smtpTo.length = 0;
+  const waiting = await flushBackupReportQueue({ key: noRecipientKey });
+  assert.equal(waiting.pending, true); assert.match(waiting.error, /Auto Backup Reports/); assert.equal(smtpTo.length, 0);
+  settings.set('mail_route_backup_1', recipients[0]);
+  assert.equal((await flushBackupReportQueue({ key: noRecipientKey })).pending, false);
+  assert.deepEqual(smtpTo, [recipients[0]]);
+  pass('Missing backup recipient remains pending, never falls back to Contact; saving recipient allows retry');
+
+  const skippedKey = await enqueueBackupReport({ ...report, fileName: 'retry-on-skipped-slot.zip' }, [recipients[0]], 'Backup done');
+  settings.set('backup_schedule_enabled', '0');
+  settings.set('backup_schedule_running_at', '0');
+  smtpTo.length = 0;
+  const deniedTick = await scheduledPost(new NextRequest('https://smtp-test.invalid/api/scheduled-backup', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-backup-secret': 'wrong-secret' }, body: '{}',
+  }));
+  assert.equal(deniedTick.status, 401); assert.equal(smtpTo.length, 0); assert.equal(JSON.parse(db.get(skippedKey)!).sentAt, '');
+  pass('Unauthenticated cron request cannot drain or expose private report queue');
+  const skippedTick = await scheduledPost(new NextRequest('https://smtp-test.invalid/api/scheduled-backup', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-backup-secret': 'keep-cron' }, body: '{}',
+  }));
+  assert.equal(skippedTick.status, 200); assert.equal((await skippedTick.json()).skipped, true);
+  assert.deepEqual(smtpTo, [recipients[0]]); assert.ok(JSON.parse(db.get(skippedKey)!).sentAt);
+  assert.equal(settings.get('backup_schedule_running_at'), '0');
+  pass('Actual authenticated cron handler retries pending email even on skipped/disabled backup slots and clears run lock');
+
+  const expiredKey = await enqueueBackupReport({ ...report, fileName: 'recover-after-interruption.zip' }, [recipients[0]], 'Backup done');
+  const expired = JSON.parse(db.get(expiredKey)!); expired.lease = Date.now() - 1; db.set(expiredKey, JSON.stringify(expired));
+  smtpTo.length = 0;
+  assert.equal((await flushBackupReportQueue({ key: expiredKey })).pending, false); assert.equal(smtpTo.length, 1);
+  pass('Expired worker lease recovers after interruption without rebuilding the ZIP');
+
   console.log(`\nRESULT: ${passed} behavioral tests passed`);
 } finally { globalThis.fetch = originalFetch; nodemailer.createTransport = originalTransport; }

@@ -29,7 +29,7 @@ const FALLBACKS: Record<ServerMailRoute, string[]> = {
   livechat: ["live_chat_email", "contact_email_1"],
   message: ["mail_route_livechat_1", "live_chat_email", "contact_email_1"],
   business: ["contact_email_1", "contact_email_2"],
-  backup: ["contact_email_1", "contact_email_2"],
+  backup: [],
 };
 
 async function rowsFor(keys: string[]): Promise<Map<string, string>> {

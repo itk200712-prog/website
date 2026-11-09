@@ -32,7 +32,8 @@ select cron.schedule(
       'Content-Type', 'application/json',
       'x-backup-secret', '<CRON_SECRET>'
     ),
-    body    := '{}'::jsonb
+    body    := '{}'::jsonb,
+    timeout_milliseconds := 300000
   );
   $$
 );

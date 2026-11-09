@@ -2221,8 +2221,8 @@ console.log("\n── 26) Auto-backup වාර්තා email (file name · typ
   // route wiring
   const schedRouteSrc = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
   ok("scheduled backup: සාර්ථක වුණත් අසාර්ථක වුණත් email report යවයි",
-    schedRouteSrc.includes("sendBackupReport(") &&
-    (schedRouteSrc.match(/sendBackupReport\(/g) ?? []).length >= 2 &&
+    schedRouteSrc.includes("enqueueBackupReport(") &&
+    (schedRouteSrc.match(/enqueueBackupReport\(/g) ?? []).length >= 2 &&
     schedRouteSrc.includes("loadBackupReportEmails"));
 
   const mailSrc = readFileSync(join(root, "src/lib/mail-routes.ts"), "utf8");
@@ -2258,7 +2258,7 @@ console.log("\n── 27) SMTP-only mail delivery ──");
   ok("Retired client/server integration modules deleted", !existsSync(join(root, "src/lib/silentforms.ts")) && !existsSync(join(root, "src/components/recipient-mail-key.tsx")));
   ok("No retired provider endpoints/client imports in live mail paths", !/silentforms\.com|formsubmit\.co|lib\/silentforms/i.test(ms + sendRoute + settings + routes + page + backup));
   ok("Forms and browser backup reports use server route, no stored client keys", routes.includes('fetch("/api/mail/send"') && backup.includes('fetch("/api/mail/send"') && !backup.includes("localStorage"));
-  ok("Backup reports use same server SMTP sender for success/failure", cron.includes("await sendMail({ to, subject, text })") && backup.includes("sender?: (to: string[], subject: string, text: string) => Promise<number>"));
+  ok("Backup reports use same server SMTP sender for success/failure", cron.includes("await flushBackupReportQueue({ key: queueKey })") && readFileSync(join(root, "src/lib/backup-mail-queue.ts"), "utf8").includes("await sendMail({ to: remaining") && backup.includes("sender?: (to: string[], subject: string, text: string) => Promise<number>"));
   ok("Backup reports retain exact final ZIP size", cron.includes("fileSize: built.zip.length") && cron.includes("size: built.zip.length"));
   ok("Retired settings cleanup is service-role scoped and only follows SMTP Save", ms.includes("export async function cleanupRetiredMailSettings") && ms.includes('method: "DELETE"') && settings.includes("await cleanupRetiredMailSettings()"));
   const rep = await import("../src/lib/backup-report");
@@ -2275,6 +2275,15 @@ console.log("\n── 27) SMTP-only mail delivery ──");
   ok("Mail recipients: shared limit 10 covers seven emails in UI, public routes and backup reports", config.MAIL_SLOTS === 10 && routes.includes("length: MAIL_SLOTS") && clientRoutes.includes('import { MAIL_SLOTS }') && page.includes("values.length < MAIL_SLOTS") && cron.includes('return routeEmailsServer("backup")'));
   ok("SMTP: known provider mismatch caught, custom Workspace domains allowed", !!config.smtpConfigurationIssue({ host: "smtp.gmail.com", user: "test@mail.com" }) && config.smtpConfigurationIssue({ host: "smtp.gmail.com", user: "test@company.example" }) === null);
   ok("SMTP: identity change requires fresh credentials and errors persist visibly", settings.includes("identityChanged && !pass") && page.includes("setSmtpResult") && page.includes('role="alert"') && page.includes("Object.entries(SMTP_PRESETS)"));
+}
+
+{
+  const route = readFileSync(join(root, "src/app/api/scheduled-backup/route.ts"), "utf8");
+  const queue = readFileSync(join(root, "src/lib/backup-mail-queue.ts"), "utf8");
+  const sched = readFileSync(join(root, "src/lib/scheduled-backup.ts"), "utf8");
+  ok("Backup email: durable private outbox, atomic lease and accepted-recipient tracking", queue.includes("backup_secrets") && queue.includes("return=representation") && queue.includes("entry.accepted.includes(email)") && queue.includes("messageIdSeed"));
+  ok("Backup email: retry happens before due/lock skips, upload completion flushes immediately", route.indexOf("await flushBackupReportQueue({ limit: 1 })") < route.indexOf('reason: "already_running"') && route.includes("await flushBackupReportQueue({ key: queueKey })") && route.includes("finally { await clearRunLock(); }"));
+  ok("Backup cron: adequate HTTP timeout plus pending-status visibility", sched.includes("timeout_milliseconds := 300000") && readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8").includes("emailReportPending"));
 }
 
 console.log(`\n══════════════════════════════════════`);

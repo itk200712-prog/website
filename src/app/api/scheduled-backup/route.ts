@@ -19,9 +19,9 @@ import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
 import { generateBackupZip, type BackupClient } from "@/lib/backup";
 import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils";
-import { sendBackupReport, formatFileSize } from "@/lib/backup-report";
+import { formatFileSize, type BackupReportInput } from "@/lib/backup-report";
 import { routeEmailsServer } from "@/lib/mail-routes-server";
-import { sendMail } from "@/lib/mail-server";
+import { enqueueBackupReport, flushBackupReportQueue, backupMailHistoryLabel } from "@/lib/backup-mail-queue";
 import {
   autoBackupFileName,
   backupDueDecision,
@@ -416,7 +416,7 @@ async function recordHistory(input: {
 
 /**
  * 📧 Auto Backup Report ලිපින — Admin → Emails → “Auto Backup Reports” card එකෙන්
- * (mail_route_backup_1..4). එකක්වත් දාලා නැත්නම් contact_email_1/2 වලට යයි.
+ * (mail_route_backup_1..10). එකක්වත් දාලා නැත්නම් contact_email_1/2 වලට යයි.
  */
 async function loadBackupReportEmails(): Promise<string[]> {
   return routeEmailsServer("backup");
@@ -444,6 +444,11 @@ export async function POST(req: NextRequest) {
   if (!secrets.cronSecret || provided !== secrets.cronSecret) {
     return json({ ok: false, reason: "unauthorized" }, 401);
   }
+
+  // Drain saved reports even when no backup is due. SMTP failures must not rebuild the ZIP.
+  let retryWarning = "";
+  try { await flushBackupReportQueue({ limit: 1 }); }
+  catch (error) { retryWarning = (error as Error).message; }
 
   let force = false;
   try {
@@ -474,6 +479,7 @@ export async function POST(req: NextRequest) {
     cache: "no-store",
   }).catch(() => undefined);
 
+  try {
   if (!force) {
     const last = await lastScheduledSuccessAt();
     const decision = backupDueDecision(settings, last);
@@ -487,7 +493,6 @@ export async function POST(req: NextRequest) {
       });
     }
   } else if (!settings.toSupabase && !settings.toMega) {
-    await clearRunLock(); // lock එක දාලා ආපහු නවත්තන නිසා lock එක ඉවත් කරයි
     return json({ ok: false, reason: "no_destination" }, 400);
   }
 
@@ -506,28 +511,15 @@ export async function POST(req: NextRequest) {
     built = await buildFullBackupZip(encPw, req.nextUrl.origin, secrets.cronSecret);
   } catch (e) {
     const detail = `FULL ZIP build failed: ${(e as Error).message}`;
-    await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed", detail, encrypted });
-    // 📧 අසාර්ථක වුණත් වාර්තාව email එකෙන් යයි (file size 0 · ගත වූ වේලාව සමඟ)
+    let queueKey = "";
     try {
-      const emails = await loadBackupReportEmails();
-      await sendBackupReport(
-        {
-          status: "failed",
-          source: "auto",
-          fileName,
-          fileSize: 0,
-          durationMs: Date.now() - startedAt,
-          failures: [detail],
-          encrypted,
-          schedule: `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
-        },
-        emails,
-        async (to, subject, text) => (await sendMail({ to, subject, text })).ok
-      );
-    } catch {
-      /* email එක යැවීමේ දෝෂයක් ආවත් backup flow එක නවත්වන්නේ නෑ */
-    }
-    await clearRunLock();
+      queueKey = await enqueueBackupReport({ status: "failed", source: "auto", fileName, fileSize: 0,
+        durationMs: Date.now() - startedAt, failures: [detail], encrypted,
+        schedule: `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})` }, await loadBackupReportEmails(), detail);
+    } catch { /* history below records that the report could not be queued */ }
+    await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed",
+      detail: `${detail} · Email report: ${queueKey ? "PENDING SMTP" : "queue write failed"}`, encrypted });
+    if (queueKey) await flushBackupReportQueue({ key: queueKey }).catch(() => undefined);
     return json({ ok: false, reason: "build_failed", detail }, 500);
   }
 
@@ -570,61 +562,29 @@ export async function POST(req: NextRequest) {
     .filter(Boolean)
     .join(" · ");
 
-  // 📧 වාර්තා email — file නම · වර්ගය · ප්‍රමාණය · තත්ත්වය · ගත වූ වේලාව · දිනය/දවස
-  //    (History එකට කලින් යවන්නේ යැවුණාද නැද්ද කියා history detail එකේ සටහන් කරන්න)
-  let reportSent = 0;
-  let reportMethod = "none";
-  let reportError = "No Auto Backup Reports recipients configured";
-  try {
-    const emails = await loadBackupReportEmails();
-    reportSent = await sendBackupReport(
-      {
-        status: status as "success" | "partial" | "failed",
-        source: "auto",
-        fileName,
-        fileType: encrypted
-          ? "ZIP — Full backup (encrypted database.sql + schema.sql + registers + site files)"
-          : "ZIP — Full backup (database.sql + schema.sql + registers + site files)",
-        fileSize: built.zip.length,
-        durationMs: Date.now() - startedAt,
-        destinations: done,
-        failures: failed,
-        rows: built.totalRows,
-        tables: built.tables,
-        images: built.images,
-        encrypted,
-        schedule: force
-          ? "Manual test run"
-          : `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
-      },
-      emails,
-      async (to, subject, text) => {
-        const mail = await sendMail({ to, subject, text });
-        reportMethod = mail.method;
-        reportError = mail.failed.map(f => f.error).filter(Boolean).join("; ") || (mail.ok ? "" : "Provider unavailable / temporarily down");
-        return mail.ok;
-      }
-    );
-  } catch (error) {
-    reportError = (error as Error).message.slice(0, 300);
-    /* email report එක අසාර්ථක වුණත් backup එක සාර්ථකයි — response එකට බලපෑමක් නෑ */
-  }
-
-  const reportDetail = reportSent > 0
-    ? `Email report: provider accepted (${reportSent}, ${reportMethod}); inbox delivery unconfirmed${reportError ? `; Partial failure: ${reportError}` : ""}`
-    : `Email report: not accepted — ${reportError}`;
-  await recordHistory({
-    fileName,
-    fileSize: built.zip.length,
-    tables: built.tables,
-    rows: built.totalRows,
-    status,
-    detail: `${detail} · ${reportDetail}`,
-    encrypted,
-  });
+  // Commit the completion marker and report to durable storage before attempting SMTP.
+  // Upload completion immediately triggers a report in THIS request, not the next backup slot.
+  const report: BackupReportInput = {
+    status: status as "success" | "partial" | "failed", source: "auto", fileName,
+    fileType: encrypted ? "ZIP — Full backup (encrypted database.sql + schema.sql + registers + site files)"
+      : "ZIP — Full backup (database.sql + schema.sql + registers + site files)",
+    fileSize: built.zip.length, durationMs: Date.now() - startedAt,
+    destinations: done, failures: failed, rows: built.totalRows, tables: built.tables, images: built.images,
+    encrypted, schedule: force ? "Manual test run" : `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
+  };
+  let queueKey = "";
+  let emailOutcome = { sent: 0, pending: true, error: "" };
+  try { queueKey = await enqueueBackupReport(report, await loadBackupReportEmails(), detail); }
+  catch (error) { emailOutcome.error = `Report queue failed: ${(error as Error).message}`; }
+  await recordHistory({ fileName, fileSize: built.zip.length, tables: built.tables, rows: built.totalRows,
+    status, detail: `${detail} · ${backupMailHistoryLabel(emailOutcome)}`, encrypted });
   if (done.length) await storeLastScheduledSuccessDate(new Date().toISOString());
-
-  await clearRunLock();
+  if (queueKey) {
+    try { emailOutcome = await flushBackupReportQueue({ key: queueKey }); }
+    catch (error) { emailOutcome.error = (error as Error).message; }
+  }
+  const reportSent = emailOutcome.sent;
+  const reportError = emailOutcome.error;
 
   if (!done.length) return json({ ok: false, reason: "upload_failed", detail }, 500);
   return json({
@@ -639,9 +599,11 @@ export async function POST(req: NextRequest) {
     encrypted,
     destinations: done,
     emailReportsSent: reportSent,
-    emailReportMethod: reportMethod,
+    emailReportMethod: reportSent ? "smtp" : "none",
+    emailReportPending: emailOutcome.pending,
     emailReportDelivery: "unconfirmed",
     emailReportError: reportError,
-    warnings: [encryptWarning, ...failed].filter(Boolean),
+    warnings: [encryptWarning, retryWarning, ...failed, ...(emailOutcome.pending ? [`Backup saved, but report email is pending: ${reportError || "SMTP retry queued"}`] : [])].filter(Boolean),
   });
+  } finally { await clearRunLock(); }
 }

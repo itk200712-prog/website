@@ -1,5 +1,6 @@
 // Server-side SMTP-only mail. Credentials are stored in backup_secrets, never in the browser.
 import nodemailer from "nodemailer";
+import { createHash } from "node:crypto";
 import { smtpConfigurationIssue } from "@/lib/mail-config";
 export { SMTP_PRESETS } from "@/lib/mail-config";
 
@@ -130,7 +131,7 @@ export async function cleanupRetiredMailSettings(): Promise<boolean> {
 }
 
 /** SMTP එකකින් යවයි */
-export async function sendViaSmtp(cfg: SmtpConfig, to: string, subject: string, text: string): Promise<MailResult> {
+export async function sendViaSmtp(cfg: SmtpConfig, to: string, subject: string, text: string, messageIdSeed?: string): Promise<MailResult> {
   const configurationIssue = smtpConfigurationIssue(cfg);
   if (configurationIssue) return { ok: false, method: "smtp", to, error: configurationIssue };
   let transporter: ReturnType<typeof nodemailer.createTransport> | undefined;
@@ -150,6 +151,7 @@ export async function sendViaSmtp(cfg: SmtpConfig, to: string, subject: string, 
       to,
       subject,
       text,
+      ...(messageIdSeed ? { messageId: `<mpcs-${createHash("sha256").update(messageIdSeed + ":" + to).digest("hex")}@${cfg.fromEmail.split("@")[1] || "mpcs.invalid"}>` } : {}),
     });
     if (!Array.isArray(info.accepted) || info.accepted.length === 0) {
       return { ok: false, method: "smtp", to, error: "SMTP server did not accept the recipient" };
@@ -171,7 +173,7 @@ export async function sendViaSmtp(cfg: SmtpConfig, to: string, subject: string, 
 
 /** One SMTP sender, many recipients; no secondary provider or silent fallback. */
 export async function sendMail(input: {
-  to: string | string[]; subject: string; text: string;
+  to: string | string[]; subject: string; text: string; messageIdSeed?: string;
 }): Promise<{ ok: number; failed: MailResult[]; results: MailResult[]; method: "smtp" | "none" }> {
   const list = Array.from(new Set((Array.isArray(input.to) ? input.to : [input.to])
     .map(e => normalizeMailAddress(String(e ?? ""))).filter(validMailAddress)));
@@ -185,7 +187,7 @@ export async function sendMail(input: {
   // Bound parallel connections while continuing after individual recipient failures.
   const results: MailResult[] = [];
   for (let i = 0; i < list.length; i += 3) {
-    results.push(...await Promise.all(list.slice(i, i + 3).map(to => sendViaSmtp(smtp, to, input.subject, input.text))));
+    results.push(...await Promise.all(list.slice(i, i + 3).map(to => sendViaSmtp(smtp, to, input.subject, input.text, input.messageIdSeed))));
   }
   return { ok: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok), results, method: "smtp" };
 }

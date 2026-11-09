@@ -186,3 +186,13 @@ git push
 - Save → Test. 535 දිගටම ආවොත් නිවැරදි account එකෙන් අලුත් credentials සාදන්න. Site code එකෙන් වැරදි password එක නිවැරදි කළ නොහැක; password chat එකට එවන්න එපා.
 - Auto Backup Reports card එකට recipient emails 7ම Add → Save → Test. SMTP password එක එක sender එකට පමණයි. සැබෑ backup report අවශ්‍ය නම් Admin → Backup → test run → History + inbox බලන්න.
 - Official Mail.com SMTP data: https://support.mail.com/premium/imap/server.html
+
+## Backup සාර්ථක වුණත් report email නොඑනවා නම් — durable SMTP outbox update
+
+- ZIP build/upload සම්පූර්ණ වූ වහාම report එක private `backup_secrets` outbox එකේ සුරැකී එම completion request එකේම SMTP send වේ. SMTP fail වුණොත් ඊළඟ authenticated cron check එකේ retry වේ; නව backup එකක් due වීම අවශ්‍ය නැහැ, ZIP එක නැවත සාදන්නේ නැහැ.
+- Auto Backup Reports card එකේ save කළ recipients පමණයි; Contact inbox එකට fallback නොවේ. එහි නිවැරදි ලිපිනය දාලා Save කරන්න.
+- Accepted recipients සුරැකෙන නිසා partial failure එකකදී ඉතිරි ලිපින පමණක් retry වේ. Parallel workers සඳහා atomic lease එකක් සහ සෑම run/recipient එකකටම stable Message-ID එකක් ඇත. SMTP acceptance හා DB acknowledgement අතර process එක කඩා වැටුණොත් SMTP මඟින් exactly-once inbox delivery සහතික කළ නොහැක.
+- Backup History detail එකේ `SMTP accepted (...)` හෝ `PENDING SMTP retry` + හේතුව පෙන්වයි. Backup successful වීම සහ email accepted වීම වෙන වෙනම තත්ත්වයන්.
+- **Timer HTTP timeout update:** Admin → Backup → Scheduled card → **SQL එක copy කරන්න** → Supabase SQL Editor → paste → Run. පවතින cron secret එකම භාවිත කරන්න; නව secret එකක් හදන්න අවශ්‍ය නැහැ. නව SQL එකේ `timeout_milliseconds := 300000` තිබිය යුතුයි. කෙටි HTTP timeout එකක් full ZIP + SMTP request එකට ප්‍රමාණවත් නොවිය හැක.
+- Admin → Backup → **දැන්ම Test එකක් දුවවන්න** භාවිත කර සැබෑ ZIP + completion report පරීක්ෂා කරන්න. `Test report` button එක sample email එකක් පමණයි.
+- Outbox එකට නව table එකක් අවශ්‍ය නැහැ; පවතින backup/export/import coverage තුළ සුරැකේ. SMTP send attempt එක completion මොහොතේම වේ; සැබෑ inbox delivery තහවුරු කළ නොහැක.
