@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 // `.sql` files next.config.ts loader එකෙන් string එකක් ලෙස import වේ (server bundle එකේ විතරයි)
+import { BACKUP_TIMER_SQL } from "@/lib/backup-timer-sql.generated";
 import schemaSql from "../../../../../supabase/schema.sql";
 
 export const runtime = "nodejs";
@@ -65,7 +66,8 @@ function deny(status = 403) {
 }
 
 function sendSchema() {
-  const text = typeof schemaSql === "string" ? schemaSql : String(schemaSql ?? "");
+  const base = typeof schemaSql === "string" ? schemaSql : String(schemaSql ?? "");
+  const text = base.length >= 500 ? `${base}\n\n-- Backup timer installer (same combined schema.sql)\n${BACKUP_TIMER_SQL}` : base;
   if (text.length < 500) {
     return NextResponse.json({ ok: false, reason: "schema_missing" }, { status: 500 });
   }

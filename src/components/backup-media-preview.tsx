@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { safeMediaPath } from "@/lib/backup-media";
-import type { CapturedMedia, MediaAudit } from "@/lib/backup-media-audit";
+import { capturedMediaType, type CapturedMedia, type MediaAudit } from "@/lib/backup-media-audit";
 const PAGE_SIZE = 24;
 function bytes(file: CapturedMedia) {
   const decoded = atob(file.b64), out = new Uint8Array(decoded.length);
@@ -9,7 +9,7 @@ function bytes(file: CapturedMedia) {
   return out;
 }
 export function BackupMediaPreview({ media, audit }: { media: CapturedMedia[]; audit: MediaAudit }) {
-  const images = useMemo(() => media.filter((f) => /^image\//i.test(f.type)), [media]);
+  const images = useMemo(() => media.map(f => ({ ...f, type: capturedMediaType(f) })).filter((f) => f.b64.length > 0 && /^image\//i.test(f.type)), [media]);
   const [page, setPage] = useState(0);
   const [thumbs, setThumbs] = useState<{ path: string; url: string }[]>([]);
   const [message, setMessage] = useState("");

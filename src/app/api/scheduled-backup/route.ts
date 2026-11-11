@@ -433,6 +433,8 @@ export async function GET() {
   return json({
     ok: true,
     serverConfigured: true,
+    backupRevision: "encrypted-media-timer-v2",
+    serverTime: new Date().toISOString(),
     cronReady: Boolean(secrets.cronSecret),
     megaConfigured: Boolean(secrets.megaEmail && secrets.megaPassword),
     encryptionConfigured: Boolean(secrets.encryptionPassword),
@@ -510,15 +512,16 @@ export async function POST(req: NextRequest) {
   await observe("building", { file: fileName });
   const startedAt = Date.now();
   // 🔒 settings වල encrypt on නම් manual එකේ Encryption Password එකම පාවිච්චි කරයි.
-  // password එක save කරලා නැත්නම් backup එක නවත්වන්නේ නැතුව unencrypted යවනවා — history එකේ සටහන් වෙනවා.
+  // Encryption ON must fail closed if its password is missing. Never upload a plaintext fallback.
   const encPw = settings.encrypt ? secrets.encryptionPassword : "";
   const encrypted = Boolean(encPw);
-  const encryptWarning = settings.encrypt && !encPw ? "⚠ Encryption Password එක save කරලා නැති නිසා encrypt නොවී ගියා" : "";
+  const encryptWarning = "";
   // Auto ZIP එක හදන්න කලින්ම පරණ History clean කරයි — එවිට MEGA/Supabase එකට යන
   // backup file එක ඇතුළේත් තියෙන්නේ අලුත්ම history 5 විතරයි.
   await pruneBackupHistory();
   let built: Awaited<ReturnType<typeof buildFullBackupZip>>;
   try {
+    if (settings.encrypt && !encPw) throw new Error("Encryption is ON but the saved encryption password is missing; plaintext upload blocked");
     built = await buildFullBackupZip(encPw, req.nextUrl.origin, secrets.cronSecret);
   } catch (e) {
     const detail = `FULL ZIP build failed: ${(e as Error).message}`;

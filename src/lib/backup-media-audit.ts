@@ -9,6 +9,20 @@ function decode(b64: string): Uint8Array {
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
   return out;
 }
+/** Object stores sometimes return application/octet-stream for valid uploaded images. */
+export function capturedMediaType(file: CapturedMedia): string {
+  if (/^image\//i.test(file.type)) return file.type;
+  if (file.type && !/^(?:application\/octet-stream|binary\/octet-stream)$/i.test(file.type)) return file.type;
+  const head = atob(file.b64.slice(0, 1024));
+  if (head.startsWith("\x89PNG\r\n\x1a\n")) return "image/png";
+  if (head.startsWith("\xff\xd8\xff")) return "image/jpeg";
+  if (/^GIF8[79]a/.test(head)) return "image/gif";
+  if (head.startsWith("RIFF") && head.slice(8,12) === "WEBP") return "image/webp";
+  if (head.slice(4,8) === "ftyp" && /avif|avis/.test(head.slice(8,32))) return "image/avif";
+  if (/^\s*(?:<\?xml[^>]*>\s*)?<svg[\s>]/i.test(head)) return "image/svg+xml";
+  const ext = file.path.split(".").pop()?.toLowerCase();
+  return ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", avif: "image/avif", gif: "image/gif", svg: "image/svg+xml", bmp: "image/bmp", ico: "image/x-icon" } as Record<string,string>)[ext ?? ""] ?? file.type ?? "application/octet-stream";
+}
 export function inlineMedia(source: string): { b64: string; type: string } | null {
   const m = source.match(/^data:((?:image|audio|video|font)\/[a-z0-9.+-]+|application\/pdf)(;base64)?,([\s\S]*)$/i);
   if (!m) return null;
@@ -40,13 +54,15 @@ export async function auditCapturedMedia(tables: { name: string; rows: Record<st
       const inline = inlineMedia(ref.source);
       const path = aliases.get(ref.source) ?? mediaArchivePath(ref) ?? (inline ? await inlineMediaPath(ref.source) : undefined);
       // Inline bytes are already in the data row in older backups, too.
-      if ((path && byPath.has(path)) || inline) group.captured++; else group.missing++;
+      const file = path ? byPath.get(path) : undefined;
+      if ((file && decode(file.b64).length > 0) || (inline && decode(inline.b64).length > 0)) group.captured++; else group.missing++;
     }
   }
   const files: MediaAudit["files"] = [];
   let totalBytes = 0;
   for (const file of media) {
-    const bytes = decode(file.b64); totalBytes += bytes.length;
+    const bytes = decode(file.b64);
+    totalBytes += bytes.length;
     // Do not leak object names, old signed URLs or personal fields in a plaintext
     // inventory accompanying an encrypted SQL backup.
     files.push({ id: await sha256Hex(file.path), bytes: bytes.length, sha256: await sha256Hex(bytes), contentType: file.type });

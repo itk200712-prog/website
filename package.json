@@ -11,7 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx scripts/test.mts && tsx scripts/test-backup-media.mts && tsx scripts/test-backup-diagnostics.mts && tsx scripts/test-mail-delivery.mts",
+    "test": "tsx scripts/test.mts && tsx scripts/test-backup-media.mts && tsx scripts/test-backup-diagnostics.mts && tsx scripts/test-mail-delivery.mts && tsx scripts/test-backup-timer-sql.mts",
     "pretest": "node scripts/gen-site-source.mjs"
   },
   "dependencies": {
@@ -31,6 +31,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@types/node": "^22.10.7",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.0.7",

@@ -1,8 +1,9 @@
+import { BACKUP_TIMER_SQL } from "@/lib/backup-timer-sql.generated";
 // ============================================================================
 //  Scheduled Auto-Backup — settings + due ගණනය (pure helpers)
 // ----------------------------------------------------------------------------
 //  🕛 නව ක්‍රමය: **දවසට පැය කීයකට වරක්ද** කියන එක විතරයි තෝරන්නේ.
-//     පටන් ගැන්ම **හැමදාම රෑ 12:00 (ශ්‍රී ලංකා වේලාවෙන්)**.
+//     පටන් ගැන්ම Save කළ වේලාවෙන් පසු ඊළඟ පැයේ මුල (LK).
 //
 //     උදා: පැය 4කට වරක්  →  00:00 · 04:00 · 08:00 · 12:00 · 16:00 · 20:00
 //          පැය 6කට වරක්  →  00:00 · 06:00 · 12:00 · 18:00
@@ -10,8 +11,8 @@
 //          පැය 24කට වරක් →  00:00 (දවසකට එකයි)
 //          පැය 1කට වරක්  →  පැයක් පාසා (00:00, 01:00, 02:00 …)
 //
-//  · Settings save කරන දවස (**anchor**) රෑ 12:00 තමයි baseline එක —
-//    එදා රෑ 12ට පළවෙනි backup එක යයි.
+//  · Settings Save කරපු වේලාවෙන් පසු ඊළඟ LK පැයේ මුල baseline වේ.
+//    Database timer එක Save/Repair මගින් install/repair කරයි (එක්වරක් SQL installer අවශ්‍යයි).
 //  · Supabase pg_cron එක විනාඩි 15කට වරක් site එකේ /api/scheduled-backup
 //    route එක කැඳවනවා. ඒ route එකෙන් "දැන් යා යුතු slot එක පහු වෙලාද?"
 //    කියා මේ helpers වලින් තීරණය කරනවා (missed run එකක් තිබ්බත්
@@ -194,7 +195,7 @@ export type ScheduleSlot = {
   lastSlotMs: number | null;
   /** ඊළඟට යා යුතු slot */
   nextSlotMs: number | null;
-  /** baseline (anchor රෑ 12:00) */
+  /** baseline: first LK hour after Save */
   anchorMs: number | null;
   /** settings save කරපු වේලාව — මේකට කලින් slots යන්නේ නෑ */
   cutoffMs: number;
@@ -309,41 +310,7 @@ export function autoBackupFileName(now: Date = new Date()): string {
   return `mpcs-full-backup-${dateStr}_${hh}${mm}.zip`;
 }
 
-/** pg_cron එකට දාන SQL එක — Admin card එකේ copy කරගන්න පෙන්වනවා */
-export function buildCronSql(siteUrl: string, cronSecret: string): string {
-  const base = siteUrl.replace(/\/$/, "");
-  return [
-    "-- MPCS Auto-Backup timer — විනාඩි 15කට වරක් site එක check කරයි.",
-    "-- (පැය කීයකට වරක්ද කියා Admin → Backup & Restore එකෙන් තෝරනවා; Save කළ පසු ඊළඟ පැයේ මුල පටන් ගනී.",
-    "--  මෙය එක වරක් run කළාම ඇති — ඊට පස්සේ වෙලාව වෙනස් කරන හැම එකක්ම Admin එකෙන් විතරයි.)",
-    "insert into storage.buckets (id, name, public)",
-    "values ('backups', 'backups', false)",
-    "on conflict (id) do nothing;",
-    "",
-    "create extension if not exists pg_net with schema extensions;",
-    "create extension if not exists pg_cron;",
-    "",
-    "select cron.unschedule('weekly-site-backup')",
-    "where exists (select 1 from cron.job where jobname = 'weekly-site-backup');",
-    "select cron.unschedule('mpcs-auto-backup-check')",
-    "where exists (select 1 from cron.job where jobname = 'mpcs-auto-backup-check');",
-    "",
-    "select cron.schedule(",
-    "  'mpcs-auto-backup-check',",
-    "  '*/15 * * * *',",
-    "  $$",
-    "  select net.http_post(",
-    `    url     := '${base}/api/scheduled-backup',`,
-    "    headers := jsonb_build_object(",
-    "      'Content-Type', 'application/json',",
-    `      'x-backup-secret', '${cronSecret}'`,
-    "    ),",
-    "    body    := '{}'::jsonb,",
-    "    timeout_milliseconds := 300000",
-    "  );",
-    "  $$",
-    ");",
-    "",
-    "-- තහවුරු කරන්න: select jobname, schedule, active from cron.job;",
-  ].join("\n");
+/** Secret-free single installer; the database reads the CURRENT private secret on each tick. */
+export function buildCronSql(_siteUrl: string, _cronSecret: string): string {
+  return BACKUP_TIMER_SQL;
 }

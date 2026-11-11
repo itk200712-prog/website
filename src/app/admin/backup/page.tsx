@@ -1,4 +1,6 @@
 "use client";
+import { ENCRYPTED_MEDIA_PATH, decryptMediaPackage, verifyMediaPackageMatchesSql } from "@/lib/backup-encrypted-media";
+import { repairBackupTimer } from "@/lib/backup-timer";
 
 // ============================================================================
 // Backup & Restore — SUPERADMIN ONLY
@@ -92,6 +94,13 @@ export default function AdminBackupPage() {
   const [cronSecret, setCronSecret] = useState("");
   const [showCronSql, setShowCronSql] = useState(false);
   const [savingSch, setSavingSch] = useState(false);
+  const [repairingTimer, setRepairingTimer] = useState(false);
+  async function repairTimer() {
+    setRepairingTimer(true);
+    try { await repairBackupTimer(await authedClient()); show("✅ Database timer install/repair තහවුරු කළා. මෙය backup/email සාර්ථක බවට සාක්ෂියක් නොවේ; ඊළඟ due slot එකෙන් run වීම Live status තුළ පරීක්ෂා කරන්න."); }
+    catch (e) { setShowCronSql(true); show(`⚠ ${(e as Error).message}`); }
+    finally { setRepairingTimer(false); await checkBackupDiagnostics(); }
+  }
   const [testingSch, setTestingSch] = useState(false);
   const [safetyFirst, setSafetyFirst] = useState(true); // 🛡 import එකට කලින් auto safety-backup
   const [confirmText, setConfirmText] = useState("");
@@ -126,6 +135,17 @@ export default function AdminBackupPage() {
     siteHashState: "verified" | "mismatch" | "unchecked" | "none";
   } | null>(null);
 
+  const [mediaOnlyPreview, setMediaOnlyPreview] = useState<{ media: CapturedMedia[]; audit: MediaAudit } | null>(null);
+  const [mediaOnlyBusy, setMediaOnlyBusy] = useState(false);
+  async function inspectEncryptedImages(file: File) {
+    setMediaOnlyBusy(true); setMediaOnlyPreview(null);
+    try {
+      if (!encPw) throw new Error("Encryption password එක ඇතුළත් කරන්න");
+      setMediaOnlyPreview(await decryptMediaPackage(await file.text(), encPw));
+      show("✅ Encrypted image payload decrypt + සියලු image hashes තහවුරු කළා. Restore කළේ නැහැ.");
+    } catch (e) { show(`⚠ ${(e as Error).message}`); }
+    finally { setMediaOnlyBusy(false); }
+  }
   const [diagnostics, setDiagnostics] = useState<BackupDiagnostics | null>(null);
   const [diagnosticsError, setDiagnosticsError] = useState("");
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
@@ -203,16 +223,27 @@ export default function AdminBackupPage() {
         setMegaPwInput("");
       }
       setSch(next);
+      if (next.enabled) {
+        if (!cronSecret.trim()) {
+          const bytes = crypto.getRandomValues(new Uint8Array(24));
+          const secret = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+          const secretError = await setBackupSecret(SCHEDULE_SECRET_KEYS.cronSecret, secret);
+          if (secretError) throw new Error(secretError);
+          setCronSecret(secret);
+        }
+        try { await repairBackupTimer(sb); }
+        catch (e) { setShowCronSql(true); throw e; }
+      }
       void logActivity(
         "BACKUP_SCHEDULE",
         `Scheduled auto-backup ${next.enabled ? "enabled" : "disabled"} · every ${next.intervalHours}h from save time (${nextRunLabel(next)}) · to ${[next.toSupabase ? "Supabase" : "", next.toMega ? "MEGA" : ""].filter(Boolean).join("+") || "none"}${next.encrypt ? " · 🔒 encrypted" : ""}`
       );
       if (next.enabled && next.encrypt && secrets && !secrets.encryption) {
-        show("✅ Save වුණා — හැබැයි ⚠ Encryption Password එක තාම set කරලා නෑ! ඉහළ card එකෙන් set කළේ නැත්නම් auto backup එක encrypt නොවී යනවා");
+        show("✅ Save වුණා — හැබැයි ⚠ Encryption Password එක තාම set කරලා නෑ! ඉහළ card එකෙන් set කළේ නැත්නම් ආරක්ෂාවට auto backup එක නවතී—password එක save කරන්න");
       } else {
         show(
           next.enabled
-            ? `✅ Save වුණා — පළමු auto backup එක: ${nextRunLabel(next)} ට (ඊළඟ පැයෙන් පටන් ගෙන පැය ${next.intervalHours}කට වරක් · Cron SQL එක run කරලා නැත්නම් පහතින් run කරන්න)`
+            ? `✅ Save වුණා — පළමු auto backup එක: ${nextRunLabel(next)} ට (ඊළඟ පැයෙන් පටන් ගෙන පැය ${next.intervalHours}කට වරක් · Database timer install/repair තහවුරු කළා; due run එක Live status තුළ පරීක්ෂා කරන්න)`
             : "✅ Save වුණා — Scheduled auto-backup එක off කරලා"
         );
       }
@@ -230,7 +261,8 @@ export default function AdminBackupPage() {
     if (err) return show(`⚠ ${err}`);
     setCronSecret(secret);
     setShowCronSql(true);
-    show("✅ අලුත් Cron secret එක හැදුවා — දැන් පහත SQL එක copy කරලා Supabase SQL Editor එකේ run කරන්න (පරණ SQL එක run කරලා තිබ්බොත් ආයේ run කරන්න)");
+    try { await repairBackupTimer(await authedClient()); show("✅ අලුත් secret එක save කර database timer repair කළා. Timer එක සෑම tick එකකම අලුත් secret එක කියවයි."); }
+    catch (e) { show(`⚠ Secret save වුණා. ${(e as Error).message}`); }
   }
 
   async function testScheduleRun() {
@@ -479,6 +511,7 @@ export default function AdminBackupPage() {
       // Format v3 site update package (site-assets + site-source) — පරණ backup වල නෑ
       const siteAssets: { path: string; bytes: Uint8Array }[] = [];
       const mediaFiles: { path: string; bytes: Uint8Array }[] = [];
+      let encryptedMedia = "";
       let siteSourceCount = 0;
       let siteHashState: "verified" | "mismatch" | "unchecked" | "none" = "none";
       if (/\.zip$/i.test(file.name)) {
@@ -488,6 +521,8 @@ export default function AdminBackupPage() {
         const entry = zip.file("database.sql") ?? zip.file(/database\.sql$/i)[0];
         if (!entry) throw new Error("ZIP එකේ database.sql නෑ");
         rawSql = await entry.async("string");
+        const mediaEntry = zip.file(ENCRYPTED_MEDIA_PATH);
+        if (mediaEntry) encryptedMedia = await mediaEntry.async("string");
         const manEntry = zip.file("manifest.json") ?? zip.file(/manifest\.json$/i)[0];
         if (manEntry) {
           try { manifest = JSON.parse(await manEntry.async("string")) as BackupManifest; } catch { throw new Error("manifest.json is corrupt — import stopped"); }
@@ -555,6 +590,11 @@ export default function AdminBackupPage() {
 
       const inserts = parseBackupSql(sql);
       const inspected = await inspectBackupMedia(inserts, PUBLIC_ASSET_FILES);
+      if (encryptedMedia) {
+        const pack = await decryptMediaPackage(encryptedMedia, encPw);
+        await verifyMediaPackageMatchesSql(pack, inspected);
+        manifestMsg += " · ✅ වෙනම encrypted image payload + SQL bytes/references match";
+      }
       if (!inserts.length) throw new Error("backup file එකේ INSERT rows නෑ");
       // Format v3: SQL එක ඇතුළේම තියෙන site public-assets (icons) rows ගාණ
       let sitePublicSqlCount = 0;
@@ -808,12 +848,14 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
       <section className="card mt-6 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-extrabold text-slate-900">🕐 Live Auto-Backup / Confirmation Email Check</h3>
+          <button type="button" className="btn btn-outline !text-xs" disabled={repairingTimer || savingSch} onClick={repairTimer}>{repairingTimer ? "Repairing…" : "Install / Repair database timer"}</button>
           <button type="button" className="btn btn-outline !text-xs" disabled={diagnosticsBusy} onClick={checkBackupDiagnostics}>{diagnosticsBusy ? "Checking…" : "Live status පරීක්ෂා කරන්න"}</button>
         </div>
         <p className="mt-2 text-xs text-slate-500">මෙය read-only check එකකි. Backup එකක් run කරන්නේ හෝ sample email එකක් යවන්නේ නැහැ. සැබෑ run සඳහා Scheduled card එකේ Test Run භාවිත කරන්න.</p>
         {diagnosticsError && <p className="mt-2 text-xs text-rose-700">⚠ {diagnosticsError}</p>}
         {diagnostics && <div className="mt-3 space-y-2 text-xs text-slate-700">
           <p>Schedule: <b>{diagnostics.enabled ? `Enabled · every ${diagnostics.intervalHours}h` : "Disabled"}</b> · Next: {diagnostics.nextRun} · Encryption: {diagnostics.encrypted ? "ON (images SQL තුළයි)" : "OFF"}</p>
+          <p>Database timer: <b>{!diagnostics.timer?.available ? "SQL installer අවශ්‍යයි / status unavailable ⚠" : !diagnostics.timer.installed || !diagnostics.timer.job?.active ? "NOT active ⚠" : "Installed and active ✓"}</b> · Last HTTP: {diagnostics.timer?.lastResponse?.statusCode ?? "Not observed"}{diagnostics.timer?.lastResponse?.timedOut ? " · TIMEOUT" : ""}{diagnostics.timer?.lastResponse?.transportError ? " · Transport error" : ""}</p>
           <p>Cron heartbeat: <b>{diagnostics.cronObservedRecently ? "Observed recently ✓" : "NOT confirmed ⚠"}</b> · {diagnostics.cron?.at ?? "No observation yet"} · {diagnostics.cron?.phase ?? "unknown"}</p>
           <p>Last successful backup: {diagnostics.lastSuccess ?? "Unknown"} · Consecutive scheduled runs: <b>{diagnostics.recurringRunsObserved ? "Observed ✓" : "Not proven yet ⚠"}</b> · Observed gaps: {diagnostics.intervalsMinutes.join(", ") || "—"} min</p>
           <p>Email: SMTP-accepted reports {diagnostics.smtpAcceptedReports} · Pending {diagnostics.pendingReports}. <b>SMTP acceptance ≠ inbox receipt; inbox receipt තහවුරු කර නැහැ.</b></p>
@@ -822,6 +864,15 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         </div>}
       </section>
 
+      <section className="card mt-6 p-5">
+        <h3 className="font-extrabold">🔒 Encrypted images පමණක් පරීක්ෂා කරන්න</h3>
+        <p className="mt-2 text-xs text-slate-600">අලුත් encrypted ZIP එකේ encrypted-media/ALL-IMAGES.enc තුළ Board, bot, template සහ අනෙකුත් captured files සැබෑ bytes ලෙස encrypt කර තිබේ. එම .enc ගොනුව තෝරා ඉහළ Encryption password එකෙන් මෙතැන බලන්න. SQL import/restore කිරීමක් නැහැ. මුළු ZIP එක Preview කළ විටත් image payload එක SQL එක සමඟ ගැළපෙන බව පරීක්ෂා කරයි.</p>
+        <label className={`btn btn-outline mt-3 !text-xs ${mediaOnlyBusy ? "pointer-events-none opacity-50" : ""}`}>
+          <input type="file" accept=".enc" disabled={mediaOnlyBusy} className="hidden" onChange={e => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) void inspectEncryptedImages(f); }} />
+          {mediaOnlyBusy ? "Decrypting / verifying…" : "Choose ALL-IMAGES.enc — images only"}
+        </label>
+        {mediaOnlyPreview && <BackupMediaPreview media={mediaOnlyPreview.media} audit={mediaOnlyPreview.audit} />}
+      </section>
       {/* IMPORT PREVIEW */}
       {preview && (
         <div className="card mt-6 border-l-4 border-emerald-500 p-6">
@@ -1220,7 +1271,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
               <b>🔒 Encryption Password එකෙන් encrypt කරන්න</b><br />
               <span className="text-slate-500">ඉහළ දාපු Encryption Password එකමයි — Import කරද්දී ඒකම දෙද්දී විතරයි ඇරෙන්නේ</span>
               {sch.encrypt && secrets && !secrets.encryption && (
-                <span className="mt-1 block font-bold text-rose-600">⚠ Encryption Password එක තාම set කරලා නෑ — ඉහළින් set කරන්න. නැත්නම් encrypt නොවී යයි!</span>
+                <span className="mt-1 block font-bold text-rose-600">⚠ Encryption Password එක තාම set කරලා නෑ — ඉහළින් set කරන්න. Password එක save කරන තුරු auto backup එක නවතී; plaintext backup යවන්නේ නැහැ.</span>
               )}
               {sch.encrypt && secrets?.encryption && (
                 <span className="mt-1 block font-bold text-emerald-600">✓ Encryption Password එක set කරලා තියෙනවා</span>
@@ -1265,18 +1316,18 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         )}
 
         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-[11.5px] leading-relaxed text-amber-800">
-          <b>⏰ Timer එක:</b> Copy SQL එකේ අලුත් 300-second timeout update එක Supabase SQL Editor එකේ නැවත Run කරන්න.  {cronSecret ? "Cron secret එක තියෙනවා ✓" : "මුලින්ම Cron secret එකක් හදන්න"} —
+          <b>⏰ Timer එක:</b> පහත එක් SQL installer එක මුලින් Supabase SQL Editor එකේ run කරන්න. ඉන්පසු Schedule Save / Repair timer මගින් timer install/repair ස්වයංක්‍රීයව සිදුවේ. SQL එකට passwords/secrets paste කරන්න එපා.  {cronSecret ? "Cron secret එක තියෙනවා ✓" : "Schedule Save කරන විට secret එක සෑදේ"} —
           පහත SQL එක copy කරලා <b>Supabase → SQL Editor</b> එකේ <b>එක වරක්</b> run කරන්න. ඊට පස්සේ දවස්/වෙලාව වෙනස් කරන හැම එකම මෙතැනින් විතරයි.
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" onClick={() => void generateCronSecret()} className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-extrabold text-white hover:bg-amber-700">
               <KeyRound size={12} className="mr-1 inline" /> {cronSecret ? "අලුත් secret එකක් හදන්න" : "Cron secret එක හදන්න"}
             </button>
-            {cronSecret && (
+            {(
               <button
                 type="button"
                 onClick={() => {
                   const sql = buildCronSql(window.location.origin, cronSecret);
-                  void navigator.clipboard?.writeText(sql).then(
+                  void (navigator.clipboard ? navigator.clipboard.writeText(sql) : Promise.reject(new Error("clipboard unavailable"))).then(
                     () => show("✅ SQL එක copy වුණා — Supabase SQL Editor එකේ paste කරලා Run කරන්න"),
                     () => setShowCronSql(true)
                   );
@@ -1286,13 +1337,13 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
                 <Copy size={12} className="mr-1 inline" /> SQL එක copy කරන්න
               </button>
             )}
-            {cronSecret && (
+            {(
               <button type="button" onClick={() => setShowCronSql((v) => !v)} className="rounded-lg bg-white px-3 py-1.5 text-[11px] font-extrabold text-amber-700 ring-1 ring-amber-300 hover:bg-amber-100">
                 {showCronSql ? "SQL එක හංගන්න" : "SQL එක බලන්න"}
               </button>
             )}
           </div>
-          {showCronSql && cronSecret && (
+          {showCronSql && (
             <textarea
               readOnly
               value={buildCronSql(typeof window !== "undefined" ? window.location.origin : "", cronSecret)}

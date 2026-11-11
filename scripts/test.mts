@@ -1473,10 +1473,10 @@ ok("schedule: පළවෙනි backup = **Save කරපු වේලාවෙ
   })());
 
 const cronSqlSample = sched.buildCronSql("https://example.vercel.app/", "s3cr3t");
-ok("schedule: cron SQL = every 15 min to site route with secret header + bucket",
+ok("schedule: cron SQL = every 15 min to fixed production route with dynamically read secret + bucket",
   cronSqlSample.includes("*/15 * * * *") &&
-  cronSqlSample.includes("https://example.vercel.app/api/scheduled-backup") &&
-  cronSqlSample.includes("'x-backup-secret', 's3cr3t'") &&
+  cronSqlSample.includes("https://website-blond-eta-94.vercel.app/api/scheduled-backup") &&
+  cronSqlSample.includes("'x-backup-secret',secret") && !cronSqlSample.includes("s3cr3t") &&
   cronSqlSample.includes("storage.buckets") &&
   readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("mpcs-auto-backup-check"));
 ok("schedule: route is secret-gated, builds the SAME full ZIP as manual (Encryption Password encrypt option), uploads Supabase+MEGA, records history",
@@ -2284,7 +2284,7 @@ console.log("\n── 27) SMTP-only mail delivery ──");
   const sched = readFileSync(join(root, "src/lib/scheduled-backup.ts"), "utf8");
   ok("Backup email: durable private outbox, atomic lease and accepted-recipient tracking", queue.includes("backup_secrets") && queue.includes("return=representation") && queue.includes("entry.accepted.includes(email)") && queue.includes("messageIdSeed"));
   ok("Backup email: retry happens before due/lock skips, upload completion flushes immediately", route.indexOf("await flushBackupReportQueue({ limit: 1 })") < route.indexOf('reason: "already_running"') && route.includes("await flushBackupReportQueue({ key: queueKey })") && route.includes("finally { await clearRunLock(); }"));
-  ok("Backup cron: adequate HTTP timeout plus pending-status visibility", sched.includes("timeout_milliseconds := 300000") && readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8").includes("emailReportPending"));
+  ok("Backup cron: adequate HTTP timeout plus pending-status visibility", readFileSync(join(root, "supabase/scheduled-backup.sql"), "utf8").includes("timeout_milliseconds := 300000") && readFileSync(join(root, "src/app/admin/backup/page.tsx"), "utf8").includes("emailReportPending"));
 }
 
 console.log(`\n══════════════════════════════════════`);

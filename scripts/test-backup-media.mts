@@ -7,12 +7,13 @@ import JSZip from 'jszip';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://backup-source.invalid';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'dummy-anon';
 const { generateBackupSql, generateBackupZip, restoreBackup, verifyRestore, BACKUP_TABLES } = await import('../src/lib/backup');
-const { parseBackupSql, readBackupTableCounts, decryptBackupText, sha256Hex } = await import('../src/lib/backup-utils');
+const { parseBackupSql, readBackupTableCounts, decryptBackupText, encryptBackupText, sha256Hex } = await import('../src/lib/backup-utils');
 const { scanMediaReferences, rewriteMediaValue, storageMediaRef, listStoragePaths, MEDIA_INDEX_PATH } = await import('../src/lib/backup-media');
 const { publicMediaAddress, readRemoteMedia, validRemoteMediaUrl } = await import('../src/lib/backup-media-server');
 const { NextRequest } = await import('next/server');
 const { POST: mediaPost } = await import('../src/app/api/backup/media/route');
-const { inspectBackupMedia } = await import('../src/lib/backup-media-audit');
+const { ENCRYPTED_MEDIA_PATH, decryptMediaPackage, verifyMediaPackageMatchesSql } = await import('../src/lib/backup-encrypted-media');
+const { inspectBackupMedia, capturedMediaType } = await import('../src/lib/backup-media-audit');
 const { PUBLIC_ASSET_FILES } = await import('../src/lib/public-assets.generated');
 let passed = 0;
 const pass = (name: string) => { passed++; console.log(`PASS ${name}`); };
@@ -115,7 +116,7 @@ class FakeDB {
 const progress = () => {};
 const source = new FakeDB('https://backup-source.invalid');
 const seedFile = (key: string, bytes = imageBytes, bucket = 'site-images') => source.files.set(`${bucket}/${key}`, { bytes, type: 'image/png' });
-seedFile(encodedKey); seedFile('empty.bin', new Uint8Array()); seedFile('board/signed.png'); seedFile('a/b/c/d/e/f/g/h/deep.png'); seedFile('private.pdf', new Uint8Array([37, 80, 68, 70, 45]), 'private-docs');
+seedFile(encodedKey); source.files.get(`site-images/${encodedKey}`)!.type = 'application/octet-stream'; seedFile('empty.bin', new Uint8Array()); seedFile('board/signed.png'); seedFile('a/b/c/d/e/f/g/h/deep.png'); seedFile('private.pdf', new Uint8Array([37, 80, 68, 70, 45]), 'private-docs');
 source.tables.set('board_members', [
   { id: 'board-1', name_si: 'මධුරංග', name_en: 'Maduranga', email: 'director@example.com', photo: encodedUrl },
   { id: 'board-2', name_si: 'අධ්‍යක්ෂ', name_en: 'Director Two', email: 'second@example.com', photo: externalUrl },
@@ -136,6 +137,9 @@ const remoteReads: string[] = [];
 const reader = async (url: string) => { remoteReads.push(url); assert.equal(url, externalUrl); return { b64: btoa('EXTERNAL-BOARD-PHOTO'), type: 'image/png' }; };
 
 try {
+  assert.equal(capturedMediaType({ path: 'hash-without-extension', b64: Buffer.from(imageBytes).toString('base64'), type: 'application/octet-stream' }), 'image/png');
+  assert.equal(capturedMediaType({ path: 'animation-products/photo.webp', b64: btoa('fixture'), type: 'application/octet-stream' }), 'image/webp');
+  pass('Generic object-store MIME headers no longer hide Board/template images from preview');
   const nested = scanMediaReferences({ value: JSON.stringify({ images: [encodedUrl, signedUrl, relativeUrl] }) });
   assert.equal(nested.length, 3); assert.equal(nested[0].key, encodedKey); pass('Encoded Unicode/space/hash, signed, authenticated-relative, nested JSON discovery');
   assert.equal(storageMediaRef('/storage/v1/render/image/public/site-images/board/signed.png?width=128')?.key, 'board/signed.png'); pass('Transformed Supabase image URLs resolve original object bytes');
@@ -255,6 +259,21 @@ try {
   assert.equal(decryptedInspection.audit.groups.find((g: any) => g.category === 'bot')!.captured, 1);
   assert.equal(decryptedInspection.audit.groups.find((g: any) => g.category === 'templates')!.captured, 70);
   assert(JSON.parse(await encryptedZip.file('MEDIA-VERIFICATION.json')!.async('string')).encrypted);
+  const encryptedImages = await encryptedZip.file(ENCRYPTED_MEDIA_PATH)!.async('string');
+  assert(!encryptedImages.includes(encodedKey)); assert(!encryptedImages.includes(btoa('EXTERNAL-BOARD-PHOTO')));
+  const mediaPack = await decryptMediaPackage(encryptedImages, 'fixture-password');
+  await verifyMediaPackageMatchesSql(mediaPack, decryptedInspection);
+  assert.deepEqual(Buffer.from(mediaPack.media.find(f => f.path === encodedKey)!.b64, 'base64'), Buffer.from(imageBytes));
+  assert.equal(mediaPack.audit.groups.find(g => g.category === 'board')!.captured, 2);
+  assert.equal(mediaPack.audit.groups.find(g => g.category === 'templates')!.captured, 70);
+  pass('Independent encrypted image payload contains actual Board/bot/70 template bytes and matches every SQL file hash');
+  await assert.rejects(decryptMediaPackage(encryptedImages, 'wrong-password'), /password|corrupt/);
+  await assert.rejects(verifyMediaPackageMatchesSql(mediaPack, { ...decryptedInspection, audit: { ...decryptedInspection.audit, files: [] } }), /does not match/);
+  pass('Wrong image password and mismatched SQL/image archives fail verification instead of displaying success');
+  const corruptPack = structuredClone(mediaPack); corruptPack.media[0].b64 = btoa('WRONG-IMAGE-BYTES');
+  const corruptEnvelope = await encryptBackupText(JSON.stringify({ format: 'mpcs-encrypted-media-v1', ...corruptPack }), 'fixture-password');
+  await assert.rejects(decryptMediaPackage(corruptEnvelope, 'fixture-password'), /bytes\/hash mismatch/);
+  pass('Decrypted image package with a missing/changed original binary is rejected by its per-file SHA-256');
   pass('Encrypted ZIP still verifies/extracts bot and 70 template images locally with NO plaintext media leak');
   assert(plain.includes(Buffer.from(imageBytes).toString('base64'))); assert(plain.includes(btoa('EXTERNAL-BOARD-PHOTO'))); pass('Encrypted SQL retains media bytes, with NO unencrypted uploaded-media copies in ZIP');
   httpFailure = '/' + PUBLIC_ASSET_FILES[0]; await assert.rejects(generateBackupZip(progress, zipOptions), /Public asset download failed/); httpFailure = ''; pass('Missing public assets fail full ZIP export visibly');
@@ -278,6 +297,7 @@ const catalogFixture = mkdtempSync(join(tmpdir(), 'backup-catalog-'));
 try {
   for (const dir of ['scripts', 'supabase', 'src/lib', 'public']) mkdirSync(join(catalogFixture, dir), { recursive: true });
   writeFileSync(join(catalogFixture, 'scripts/gen-site-source.mjs'), readFileSync('scripts/gen-site-source.mjs'));
+  writeFileSync(join(catalogFixture, 'supabase/scheduled-backup.sql'), readFileSync('supabase/scheduled-backup.sql'));
   const schema = 'create table public.future_photos (\n  id uuid primary key,\n  photo text\n);\n';
   writeFileSync(join(catalogFixture, 'supabase/schema.sql'), schema);
   const generated = spawnSync(process.execPath, [join(catalogFixture, 'scripts/gen-site-source.mjs')], { encoding: 'utf8' });

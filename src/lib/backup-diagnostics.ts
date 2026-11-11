@@ -1,3 +1,4 @@
+import type { BackupTimerStatus } from "@/lib/backup-timer";
 import { SCHEDULE_SETTING_KEYS, SCHEDULE_LAST_SUCCESS_KEY, parseScheduleSettings, backupDueDecision, nextRunLabel } from "@/lib/scheduled-backup";
 export const BACKUP_RUNTIME_PREFIX = "backup_runtime:";
 const BASE = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
@@ -7,7 +8,7 @@ type Tick = { at: string; updatedAt: string; phase: string; reason?: string; fil
 export type BackupDiagnostics = { ok: true; checkedAt: string; enabled: boolean; intervalHours: number; encrypted: boolean; nextRun: string;
   lastSuccess: string | null; dueNow: boolean; dueReason: string; cron: Tick | null; cronObservedRecently: boolean;
   scheduledSuccessesInRetainedHistory: number; intervalsMinutes: number[]; recurringRunsObserved: boolean;
-  pendingReports: number; smtpAcceptedReports: number; inboxDelivery: "unconfirmed";
+  timer?: BackupTimerStatus; pendingReports: number; smtpAcceptedReports: number; inboxDelivery: "unconfirmed";
   recentRuns: { file: string; at: string; status: string; manualTest: boolean; email: string }[]; warnings: string[] };
 async function db(path: string, init: RequestInit = {}) {
   if (!BASE || !SERVICE) throw new Error("Backup diagnostics: server_not_configured");
@@ -48,10 +49,22 @@ export function summarizeBackupDiagnostics(settingsRows: { key: string; value: s
   return { ok: true, checkedAt: now.toISOString(), enabled: schedule.enabled, intervalHours: schedule.intervalHours, encrypted: schedule.encrypt, nextRun: nextRunLabel(schedule, now), lastSuccess, dueNow: decision.due, dueReason: decision.reason, cron, cronObservedRecently, scheduledSuccessesInRetainedHistory: successful.length, intervalsMinutes, recurringRunsObserved, pendingReports, smtpAcceptedReports, inboxDelivery: "unconfirmed", recentRuns, warnings };
 }
 export async function loadBackupDiagnostics(): Promise<BackupDiagnostics> {
-  const [settingsRows, history, privateRows] = await Promise.all([
+  const [settingsRows, history, privateRows, timer] = await Promise.all([
     db(`system_settings?select=key,value&key=in.(${[...Object.values(SCHEDULE_SETTING_KEYS), SCHEDULE_LAST_SUCCESS_KEY].join(",")})`).then((r) => r.json()),
     db("backup_history?select=file_name,created_at,status,detail&action=eq.scheduled&order=created_at.desc&limit=10").then((r) => r.json()),
     db("backup_secrets?select=key,value&or=(key.like.backup_runtime:*,key.like.backup_report_outbox:*)&limit=1000").then((r) => r.json()),
+    db("rpc/mpcs_backup_timer_status", { method: "POST", body: "{}" }).then(r => r.json()).then(v => ({ available: true, installed: v.installed === true,
+      job: v.job ? { active: v.job.active === true, schedule: String(v.job.schedule), dynamicSecret: v.job.dynamicSecret === true } : null,
+      lastRequest: v.lastRequest ? { requestId: Number(v.lastRequest.requestId), at: String(v.lastRequest.at) } : null,
+      lastResponse: v.lastResponse ? { statusCode: Number(v.lastResponse.statusCode) || null, timedOut: v.lastResponse.timedOut === true, transportError: v.lastResponse.transportError === true, at: String(v.lastResponse.at) } : null,
+    } as BackupTimerStatus)).catch(() => ({ available: false, installed: false } as BackupTimerStatus)),
   ]);
-  return summarizeBackupDiagnostics(settingsRows, history, privateRows);
+  const result = summarizeBackupDiagnostics(settingsRows, history, privateRows);
+  result.timer = timer;
+  if (!timer.available) result.warnings.push("Database timer installer/status RPC unavailable. Run the single Copy SQL installer, then Save / Repair timer.");
+  else if (!timer.installed || !timer.job?.active || !timer.job.dynamicSecret) result.warnings.push("Database timer is absent, inactive or outdated. Use Install / Repair database timer.");
+  if (timer.lastResponse?.statusCode === 401) result.warnings.push("Timer HTTP 401: cron authentication failed. Repair the timer to read the CURRENT secret on each tick.");
+  if (timer.lastResponse?.timedOut || timer.lastResponse?.transportError) result.warnings.push("Database timer HTTP timeout/transport failure. A dispatched request alone does not prove backup completion.");
+  if ((timer.lastResponse?.statusCode ?? 0) >= 500) result.warnings.push("Scheduled handler returned a server error. Inspect recent failed backup history; do not report success.");
+  return result;
 }

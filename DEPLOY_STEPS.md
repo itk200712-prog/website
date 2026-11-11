@@ -193,7 +193,7 @@ git push
 - Auto Backup Reports card එකේ save කළ recipients පමණයි; Contact inbox එකට fallback නොවේ. එහි නිවැරදි ලිපිනය දාලා Save කරන්න.
 - Accepted recipients සුරැකෙන නිසා partial failure එකකදී ඉතිරි ලිපින පමණක් retry වේ. Parallel workers සඳහා atomic lease එකක් සහ සෑම run/recipient එකකටම stable Message-ID එකක් ඇත. SMTP acceptance හා DB acknowledgement අතර process එක කඩා වැටුණොත් SMTP මඟින් exactly-once inbox delivery සහතික කළ නොහැක.
 - Backup History detail එකේ `SMTP accepted (...)` හෝ `PENDING SMTP retry` + හේතුව පෙන්වයි. Backup successful වීම සහ email accepted වීම වෙන වෙනම තත්ත්වයන්.
-- **Timer HTTP timeout update:** Admin → Backup → Scheduled card → **SQL එක copy කරන්න** → Supabase SQL Editor → paste → Run. පවතින cron secret එකම භාවිත කරන්න; නව secret එකක් හදන්න අවශ්‍ය නැහැ. නව SQL එකේ `timeout_milliseconds := 300000` තිබිය යුතුයි. කෙටි HTTP timeout එකක් full ZIP + SMTP request එකට ප්‍රමාණවත් නොවිය හැක.
+- **Timer HTTP timeout update:** Admin → Backup → Scheduled card → **SQL එක copy කරන්න** → Supabase SQL Editor → paste → Run. SQL එකට secret paste නොකරන්න; current secret එක private table එකෙන් සෑම tick එකකම කියවයි. නව SQL එකේ `timeout_milliseconds := 300000` තිබිය යුතුයි. කෙටි HTTP timeout එකක් full ZIP + SMTP request එකට ප්‍රමාණවත් නොවිය හැක.
 - Admin → Backup → **දැන්ම Test එකක් දුවවන්න** භාවිත කර සැබෑ ZIP + completion report පරීක්ෂා කරන්න. `Test report` button එක sample email එකක් පමණයි.
 - Outbox එකට නව table එකක් අවශ්‍ය නැහැ; පවතින backup/export/import coverage තුළ සුරැකේ. SMTP send attempt එක completion මොහොතේම වේ; සැබෑ inbox delivery තහවුරු කළ නොහැක.
 
@@ -213,4 +213,19 @@ git push
 1. Full ZIPs now include `MEDIA-VERIFICATION.json`. With encryption ON, do not look for plaintext uploaded-image copies: choose the ZIP in Admin Backup Preview and decrypt locally to inspect/extract Board, bot and template images. RESTORE is not required.
 2. Use **Live Auto-Backup / Confirmation Email Check** after deploying. It is authenticated/read-only and never sends sample messages. Look separately at cron heartbeat, consecutive scheduled runs, last success, SMTP-accepted and pending reports.
 3. A force test is explicitly labeled manual, not evidence of hourly automation. Wait for real scheduled observations to confirm cadence. Inbox receipt still needs the recipient's inbox.
-4. A missing heartbeat is not fixed by a configured secret alone. Re-run the Scheduled card's Copy SQL using the same current secret if the timer/job/timeout migration has not been installed. No new database migration is needed for the heartbeat or media audit.
+4. A missing heartbeat is not fixed by a configured secret alone. Re-run the Scheduled card's Copy SQL using the same current secret if the timer/job/timeout migration has not been installed. Heartbeat/media auditing itself uses existing tables, but the new install/repair/status RPCs REQUIRE the single timer SQL migration below.
+
+
+## Latest required timer + encrypted-image update
+
+1. Deploy the current source changes (not just the previous 72db4ef revision).
+2. Run **`supabase/scheduled-backup.sql` once** in the production Supabase SQL Editor as the database owner. This is ONE secret-free update. If the current private cron secret exists, it repairs the timer immediately; it does NOT force an early backup. No member/voter/gallery/news tables are deleted or imported.
+3. Admin → Backup & Restore → Save Schedule now calls the superadmin-only `mpcs_backup_timer_repair` RPC. **Install / Repair database timer** repairs without changing the save-time anchor. If SQL has not been applied, the UI reports that explicitly rather than claiming automation is ready. SQL contains the fixed production domain; a deliberate domain migration must update that destination.
+4. Live status shows actual installed/active job, dynamic-secret use, last pg_net HTTP response/timeout, app heartbeat and saved history separately. A 401 suggests a secret mismatch; a 5xx is a handler failure, not success. A queued HTTP request is NOT backup completion.
+5. Encrypted new full ZIPs contain **`encrypted-media/ALL-IMAGES.enc`** AND the backwards-compatible image bytes in `database.sql`. Uploaded media is NOT copied into plaintext `media/`. Use the normal ZIP Preview, or select the extracted `.enc` file in **Encrypted images පමණක් පරීක්ෂා කරන්න** with the same encryption password. No SQL import or restore is required. ZIP Preview checks both encrypted representations match by every file hash and category reference count.
+6. Encryption ON + missing saved password now blocks the auto-backup instead of silently sending plaintext. Save the existing password through the encryption card first.
+7. Existing MIME labels such as `application/octet-stream` no longer hide valid Board/template images in preview; detection uses image signatures and known image extensions.
+
+Validation: 409 regression + 56 media + 17 diagnostics + 33 SMTP + 9 embedded-PostgreSQL SQL integration tests. SQL extension networking/cron are mocked in the embedded test: this is NOT evidence of a running production job. A separate read-only check downloaded current production Board 5 + bot 1 + template 70 images and passed actual encrypted-package byte/hash round trip; this is NOT a full production backup or inbox check.
+
+Browser smoke test additionally passed AES-GCM+gzip image-package encrypt/decrypt, generic-MIME image detection, backup-byte thumbnails, pagination, decrypted image ZIP download, selection reset and no page errors. It was a local component fixture, not an authenticated production-admin session.

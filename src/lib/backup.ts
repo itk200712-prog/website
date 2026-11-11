@@ -1,3 +1,4 @@
+import { ENCRYPTED_MEDIA_PATH, encryptMediaPackage } from "@/lib/backup-encrypted-media";
 // ============================================================================
 // Backup & Restore engine — full-site SQL dump / restore (superadmin only UI)
 // Dump  = DDL + LOGIN accounts (auth.users+passwords) + INSERTs (all tables, all rows)
@@ -20,7 +21,7 @@ import {
 
 import { orderBackupRows } from "@/lib/backup-row-order";
 import { SCHEMA_BACKUP_TABLES, SCHEMA_SELF_REFERENCES } from "@/lib/backup-catalog.generated";
-import { auditCapturedMedia, inlineMedia, inlineMediaPath, type MediaAudit } from "@/lib/backup-media-audit";
+import { auditCapturedMedia, capturedMediaType, inlineMedia, inlineMediaPath, type MediaAudit } from "@/lib/backup-media-audit";
 import { MEDIA_INDEX_PATH, safeMediaPath, scanMediaReferences, mediaArchivePath, rewriteMediaValue, listStoragePaths, type MediaRef } from "@/lib/backup-media";
 
 export { parseBackupSql } from "@/lib/backup-utils";
@@ -549,7 +550,8 @@ export async function generateBackupSql(
           const { data, error } = await sb.storage.from(ref.bucket).download(ref.key);
           if (error || !data) throw new Error(error?.message ?? "No file returned");
           const bytes = new Uint8Array(await data.arrayBuffer());
-          return { path, b64: bytesToB64(bytes), type: data.type || contentTypeForPath(path) };
+          const type = !data.type || /^(?:application\/octet-stream|binary\/octet-stream)$/i.test(data.type) ? contentTypeForPath(path) : data.type;
+          return { path, b64: bytesToB64(bytes), type };
         }
         return { path, ...await readExternalBackupMedia(ref.source, mediaOptions?.readMedia, assetBaseUrl, mediaOptions?.cronSecret) };
       } catch (e) { throw new Error(`Full backup stopped — media ${path}: ${(e as Error).message}`); }
@@ -560,6 +562,7 @@ export async function generateBackupSql(
   const siteAssets = await fetchPublicAssets(assetBaseUrl);
   const byPath = new Map(imgRows.map((r) => [r.path, r]));
   for (const a of siteAssets) byPath.set(a.archivePath, { path: a.archivePath, b64: a.b64, type: a.type });
+  for (const [path, file] of byPath) byPath.set(path, { ...file, type: capturedMediaType(file) });
   const mediaRows = [...byPath.values()];
   const mediaAudit = await auditCapturedMedia(liveTables, mediaRows, aliases, PUBLIC_ASSET_PATHS);
   if (!mediaAudit.verified) throw new Error("Full backup stopped: referenced images/files are missing from captured media");
@@ -1139,8 +1142,13 @@ export async function generateBackupZip(
   ]);
   // encrypted නම් cipher එක ආයෙත් compress කරන්න බෑ — STORE (වේගය)
   await addFile("database.sql", dbContent, !!opts?.encryptPassword);
+  // An independently inspectable encrypted image payload, not just SQL-embedded base64.
+  if (opts?.encryptPassword) {
+    onProgress("Encrypting verified Board / bot / template image package…", 74);
+    await addFile(ENCRYPTED_MEDIA_PATH, await encryptMediaPackage(mediaRows, mediaAudit, opts.encryptPassword), true);
+  }
 
-  await addFile("MEDIA-VERIFICATION.json", JSON.stringify({ ...mediaAudit, encrypted: !!opts?.encryptPassword, location: opts?.encryptPassword ? "Image bytes are inside encrypted database.sql. Use Admin Backup Preview with the encryption password to view/extract; no RESTORE is needed." : "Image bytes are in database.sql and media/ or site-assets/public/." }, null, 2));
+  await addFile("MEDIA-VERIFICATION.json", JSON.stringify({ ...mediaAudit, implementation: "encrypted-media-timer-v2", generatedAt, encrypted: !!opts?.encryptPassword, location: opts?.encryptPassword ? "Image bytes are inside encrypted-media/ALL-IMAGES.enc AND encrypted database.sql. Use Admin Backup Preview with the encryption password, or select ALL-IMAGES.enc to verify/view images without SQL or RESTORE." : "Image bytes are in database.sql and media/ or site-assets/public/." }, null, 2));
 
   // 1b) schema.sql — canonical schema (tables + RLS + functions + live chat RPC logic).
   //     fresh Supabase project එකකට restore කරද්දී මුලින්ම run කළ යුත්තේ මෙයයි.

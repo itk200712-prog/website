@@ -86,6 +86,7 @@ const FILES = [
   "tailwind.config.ts",
   "next-env.d.ts",
   "scripts/gen-site-source.mjs",
+  "supabase/scheduled-backup.sql", // secret-free build dependency; canonical schema remains authenticated/server-only
 ];
 
 // ============================================================================
@@ -261,3 +262,6 @@ function visitTable(table) {
 catalog.forEach(visitTable);
 writeFileSync(join(root, "src/lib/backup-catalog.generated.ts"), `// Generated from canonical supabase/schema.sql; no runtime secrets.\nexport const SCHEMA_BACKUP_TABLES = ${JSON.stringify(orderedCatalog, null, 2)};\nexport const SCHEMA_SELF_REFERENCES = ${JSON.stringify(selfReferences, null, 2)};\n`);
 console.log(`backup catalog: ${catalog.length} schema tables`);
+
+// Single source of truth for the copyable, secret-free timer installer.
+writeFileSync(join(root, "src/lib/backup-timer-sql.generated.ts"), `// Generated from supabase/scheduled-backup.sql. No credentials.\nexport const BACKUP_TIMER_SQL = ${JSON.stringify(readFileSync(join(root,"supabase/scheduled-backup.sql"),"utf8"))};\n`);

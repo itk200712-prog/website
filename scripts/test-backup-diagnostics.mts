@@ -58,6 +58,18 @@ const report = buildBackupReportEmail({ status: 'success', source: 'auto', fileN
 assert(report.body.includes('Board 5')); assert(report.body.includes('bot 1')); assert(report.body.includes('Templates 70')); assert(report.body.includes('Missing 0')); assert(report.body.includes('encrypted database.sql'));
 pass('Actual backup confirmation template includes Board/bot/templates coverage and explains encrypted image location');
 
+const { repairBackupTimer } = await import('../src/lib/backup-timer');
+await assert.rejects(repairBackupTimer({ rpc: async () => ({ data: null, error: { message: 'function missing' } }) }), /Copy SQL/);
+pass('Missing installer RPC fails visibly instead of claiming schedule save installed a timer');
+for (const job of [{ active: false, dynamicSecret: true, schedule: '*/15 * * * *' }, { active: true, dynamicSecret: false, schedule: '*/15 * * * *' }, { active: true, dynamicSecret: true, schedule: '0 0 * * *' }]) {
+  await assert.rejects(repairBackupTimer({ rpc: async () => ({ data: { installed: true, job }, error: null }) }), /active\/valid/);
+}
+pass('Inactive, obsolete-secret and daily-only jobs cannot masquerade as a valid hourly-check timer');
+let called = '';
+await repairBackupTimer({ rpc: async name => { called = name; return { data: { installed: true, job: { active: true, dynamicSecret: true, schedule: '*/15 * * * *' } }, error: null }; } });
+assert.equal(called, 'mpcs_backup_timer_repair');
+pass('Save/Repair invokes the authenticated DB installer RPC, never an immediate forced backup');
+
 const originalFetch = globalThis.fetch;
 let role = 'member', failHistory = false;
 const writes: { key: string; value: string }[] = [];
@@ -65,6 +77,7 @@ let getReads = 0;
 try {
   globalThis.fetch = (async (input: any, init?: RequestInit) => {
     const url = new URL(String(input)); assert.equal(url.hostname, 'diagnostics.invalid');
+    if (url.pathname === '/rest/v1/rpc/mpcs_backup_timer_status') return Response.json({ installed: true, job: { active: true, schedule: '*/15 * * * *', dynamicSecret: true }, lastResponse: { statusCode: 401, timedOut: false, transportError: false, at: now.toISOString() }, secret: 'must-not-leak' });
     if (init?.method === 'POST') { assert.equal(url.pathname, '/rest/v1/backup_secrets'); writes.push(JSON.parse(String(init.body))); return new Response(null, { status: 204 }); }
     getReads++;
     if (url.pathname === '/auth/v1/user') return Response.json({ id: '12345678-1234-1234-1234-123456789abc' });
@@ -81,7 +94,7 @@ try {
   pass('Diagnostics endpoint rejects unauthenticated users, members and ordinary admins');
   role = 'superadmin';
   const good = await GET(req(true)); assert.equal(good.status, 200);
-  const text = await good.text(); assert(!text.includes('fixture-service')); assert(!text.includes('must-not-leak')); assert(!text.includes('private-address'));
+  const text = await good.text(); assert(text.includes('Timer HTTP 401')); assert(JSON.parse(text).timer.installed); assert(!text.includes('fixture-service')); assert(!text.includes('must-not-leak')); assert(!text.includes('private-address'));
   assert.equal(writes.length, 0);
   pass('Superadmin live diagnostics is read-only and never triggers a backup, sends SMTP, or exposes stored secrets');
   failHistory = true; assert.equal((await GET(req(true))).status, 503); failHistory = false;
