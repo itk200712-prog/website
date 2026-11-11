@@ -95,3 +95,27 @@
 - Production Next.js build: **passed**.
 - `npm test` දැන් source metadata නැවත generate කර suites තුනම ධාවනය කරයි.
 - ඉහත ප්‍රතිඵල local/mocked පරීක්ෂණ වලට පමණි; deployed production හෝ real inbox තහවුරු කිරීමක් නොවේ.
+
+## Image verification + live scheduler diagnostics update
+
+- Every new full backup includes `MEDIA-VERIFICATION.json`: Board, Live Chat bot and template/animation reference counts, matched captured files, missing counts, and per-file byte hashes. It intentionally does not expose old signed URLs or personal object names in plaintext inventories of encrypted SQL backups.
+- **Encryption ON does not remove images.** They are inside encrypted `database.sql`. Admin → Backup & Restore → select ZIP → enter the encryption/import passwords → Preview now shows thumbnails decoded from the BACKUP bytes, not live image URLs. No RESTORE is needed to inspect them. “Images පමණක් ZIP ලෙස download” extracts a decrypted image ZIP locally; keep it private.
+- Inline `data:image` and custom local image references outside the public-file manifest are captured too. Template product/background image fields and their nested JSON arrays are checked.
+- `Live Auto-Backup / Confirmation Email Check` is a read-only superadmin check. It distinguishes configured interval, observed authenticated cron heartbeat, consecutive successful scheduled runs, manual tests, pending SMTP reports and SMTP acceptance. SMTP acceptance is never labeled inbox receipt.
+- Manual test observations are stored separately from real cron observations in existing private `backup_secrets` rows. No database migration is needed. A saved cron secret by itself is NOT proof of an installed/running pg_cron job.
+- If cron observations remain missing after deployment / the next 15-minute check, use the Scheduled card’s Copy SQL with the SAME current secret and run it in Supabase SQL Editor. The installed job needs the existing 300000 ms HTTP-timeout fix; deploying code alone does not update installed SQL jobs.
+
+### Production read-only observations for this follow-up
+
+The publicly readable production settings were enabled at a 1-hour interval, targeting MEGA, with encryption ON. The server configuration endpoint reported its service configuration, cron secret, MEGA and encryption credentials as configured. These are configuration observations, **not proof of repeated hourly executions or inbox delivery**. Private history/outbox and an actual full backup ZIP were not available in this session.
+
+The live database contained 5 non-empty Board photo references, 1 bot avatar reference and 70 template/animation storage references; all of those referenced public files were readable. Separately, the entire public `site-images` bucket contained 148 files, including 9 files under `board/`, 5 under `chat/`, 74 under `animation-products/` and 7 under `animation-bg/`. Stored bucket files can include older/unreferenced uploads, so their count is different from active database references.
+
+A separate **PUBLIC MEDIA ONLY** recovery ZIP was created and read back to verify every SHA-256: all 148 public storage files + 39 deployed public assets = **187 files / 11,952,705 original bytes**. This is not a full database/Auth/scheduler backup and does not prove the contents of an older auto-backup ZIP.
+
+### Follow-up verification results
+
+- Regression suite: 409 passed; backup/media suite: 52 passed; scheduler diagnostics suite: 14 passed; SMTP/retry suite: 33 passed.
+- Browser smoke test: backup-byte thumbnails render via blob URLs, pagination works, and the decrypted-image ZIP contains all 26 fixture images; no page errors. This was a local component fixture test, not a production admin login test.
+- Runtime heartbeat checks include project/deployment identity so imported observations from another project are not accepted as this deployment's active timer.
+- Production public media recovery archive was read back and every file hash verified. A private production hourly run and real inbox receipt still require authenticated diagnostics / recipient evidence.

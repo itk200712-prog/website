@@ -2,7 +2,7 @@
 export const MEDIA_INDEX_PATH = "__backup_media_index__.json";
 export type MediaRef = { source: string; bucket?: string; key?: string; local?: string };
 const MEDIA_EXT = /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp|pdf|docx?|xlsx?|csv|mp4|webm|mp3|wav)(?:[?#]|$)/i;
-const MEDIA_FIELD = /(?:photo|image|avatar|logo|icon|banner|thumbnail|letterhead|attachment|document|file_url|video|audio)/i;
+const MEDIA_FIELD = /(?:photo|image|avatar|logo|icon|banner|thumbnail|letterhead|attachment|document|file_url|video|audio|products|background|watermark|cover|src)/i;
 const TOKENS = /(?:https?:\/\/|\/\/|\/storage\/v1\/)[^\s"'<>\\)]+/g;
 
 export function safeMediaPath(path: string): boolean {
@@ -32,10 +32,11 @@ export function scanMediaReferences(value: unknown, publicPaths: readonly string
   const refs = new Map<string, MediaRef>();
   const publicSet = new Set(publicPaths);
   function consider(source: string, field: string) {
+    if (/^data:(?:image|audio|video|font)\/|^data:application\/pdf/i.test(source)) { refs.set(source, { source }); return; }
     const storage = storageMediaRef(source);
     if (storage) { refs.set(source, storage); return; }
     const local = source.replace(/^\//, "").split(/[?#]/)[0];
-    if (!/^https?:|^\/\//i.test(source) && publicSet.has(local)) {
+    if (!/^https?:|^\/\//i.test(source) && (publicSet.has(local) || (source.startsWith("/") && !source.startsWith("//") && (MEDIA_FIELD.test(field) || MEDIA_EXT.test(source))))) {
       refs.set(source, { source, local }); return;
     }
     if (/^(?:https?:)?\/\//i.test(source) && (MEDIA_FIELD.test(field) || MEDIA_EXT.test(source)))
@@ -47,11 +48,12 @@ export function scanMediaReferences(value: unknown, publicPaths: readonly string
   function walk(v: unknown, field: string) {
     if (typeof v === "string") {
       const s = v.trim();
+      if (/^data:(?:image|audio|video|font)\/|^data:application\/pdf/i.test(s)) { consider(s, field); return; }
       if (/^(?:blob:|file:)/i.test(s) && MEDIA_FIELD.test(field)) consider(s, field);
       if (/^[\[{]/.test(s)) {
         try { walk(JSON.parse(s), field); return; } catch (e) { if (e instanceof Error && e.message.startsWith("Unpersisted media")) throw e; }
       }
-      if (/^(?:(?:https?:)?\/\/|\/storage\/v1\/)/i.test(s) && !/\s/.test(s)) consider(s, field);
+      if (/^(?:(?:https?:)?\/\/|\/[^/])/i.test(s) && !/\s/.test(s)) consider(s, field);
       else if (publicSet.has(s.replace(/^\//, "").split(/[?#]/)[0])) consider(s, field);
       else {
         for (const m of s.matchAll(TOKENS)) consider(m[0], field);

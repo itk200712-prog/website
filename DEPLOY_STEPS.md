@@ -207,3 +207,10 @@ git push
 - Referenced files from other buckets are not moved into a public bucket: create matching private buckets/policies first. Their restored signed links expire after one hour and need a normal application refresh mechanism.
 - Source restoration requires deployment. If rebuilding from ZIP, copy its root `schema.sql` to the project's `supabase/schema.sql` too; the build generator needs the canonical schema.
 - npm scripts now declare the `tsx` test runner in devDependencies so the test gate is reproducible after `npm ci`.
+
+### Verify image contents and actual hourly/SMTP observations
+
+1. Full ZIPs now include `MEDIA-VERIFICATION.json`. With encryption ON, do not look for plaintext uploaded-image copies: choose the ZIP in Admin Backup Preview and decrypt locally to inspect/extract Board, bot and template images. RESTORE is not required.
+2. Use **Live Auto-Backup / Confirmation Email Check** after deploying. It is authenticated/read-only and never sends sample messages. Look separately at cron heartbeat, consecutive scheduled runs, last success, SMTP-accepted and pending reports.
+3. A force test is explicitly labeled manual, not evidence of hourly automation. Wait for real scheduled observations to confirm cadence. Inbox receipt still needs the recipient's inbox.
+4. A missing heartbeat is not fixed by a configured secret alone. Re-run the Scheduled card's Copy SQL using the same current secret if the timer/job/timeout migration has not been installed. No new database migration is needed for the heartbeat or media audit.

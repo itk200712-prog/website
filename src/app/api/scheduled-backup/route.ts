@@ -17,6 +17,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
+import { recordBackupRuntime } from "@/lib/backup-diagnostics";
+import type { MediaAudit } from "@/lib/backup-media-audit";
 import { readRemoteMedia } from "@/lib/backup-media-server";
 import { generateBackupZip, type BackupClient } from "@/lib/backup";
 import { BACKUP_HISTORY_KEEP, backupHistoryIdsToPrune } from "@/lib/backup-utils";
@@ -156,13 +158,13 @@ async function buildFullBackupZip(
   encryptPassword = "",
   assetBaseUrl?: string, // Format v3: public assets fetch කරන්න මේ request එකේම origin එක
   cronSecret = "" // schema.sql embed කරන්න /api/backup/schema වලට (server-backup auth)
-): Promise<{ zip: Buffer; totalRows: number; tables: number; images: number }> {
+): Promise<{ zip: Buffer; totalRows: number; tables: number; images: number; mediaCoverage: NonNullable<BackupReportInput["mediaCoverage"]> }> {
   const sb = createClient(SUPA_BASE, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     // Node runtime එකේ realtime init එකට ws ඕනේ (අපි realtime පාවිච්චි කරන්නේ නෑ)
     realtime: { transport: ws as never },
   });
-  let meta = { tableCounts: {} as Record<string, number>, imageCount: 0 };
+  let meta: { tableCounts: Record<string, number>; imageCount: number; mediaAudit?: MediaAudit } = { tableCounts: {}, imageCount: 0 };
   const blob = await generateBackupZip(() => {}, {
     client: sb as unknown as BackupClient,
     encryptPassword: encryptPassword || undefined,
@@ -175,7 +177,7 @@ async function buildFullBackupZip(
   });
   const zip = Buffer.from(await blob.arrayBuffer());
   const totalRows = Object.values(meta.tableCounts).reduce((a, b) => a + b, 0);
-  return { zip, totalRows, tables: Object.keys(meta.tableCounts).length, images: meta.imageCount };
+  return { zip, totalRows, tables: Object.keys(meta.tableCounts).length, images: meta.imageCount, mediaCoverage: { files: meta.mediaAudit?.totalFiles ?? 0, board: meta.mediaAudit?.groups.find((g) => g.category === "board")?.captured ?? 0, bot: meta.mediaAudit?.groups.find((g) => g.category === "bot")?.captured ?? 0, templates: meta.mediaAudit?.groups.find((g) => g.category === "templates")?.captured ?? 0, missing: meta.mediaAudit?.groups.reduce((n, g) => n + g.missing, 0) ?? 0 } };
 }
 
 // ── Supabase Storage destination ──
@@ -447,11 +449,6 @@ export async function POST(req: NextRequest) {
     return json({ ok: false, reason: "unauthorized" }, 401);
   }
 
-  // Drain saved reports even when no backup is due. SMTP failures must not rebuild the ZIP.
-  let retryWarning = "";
-  try { await flushBackupReportQueue({ limit: 1 }); }
-  catch (error) { retryWarning = (error as Error).message; }
-
   let force = false;
   try {
     const body = (await req.json()) as { force?: unknown } | null;
@@ -459,6 +456,14 @@ export async function POST(req: NextRequest) {
   } catch {
     /* body නැති cron call එකක් වෙන්න පුළුවන් */
   }
+
+  const observedAt = new Date().toISOString();
+  const observe = (phase: string, extra: Parameters<typeof recordBackupRuntime>[3] = {}) => recordBackupRuntime(force, observedAt, phase, extra);
+  await observe("received");
+  // Drain saved reports even when no backup is due. SMTP failures must not rebuild the ZIP.
+  let retryWarning = "";
+  try { await flushBackupReportQueue({ limit: 1 }); }
+  catch (error) { retryWarning = (error as Error).message; }
 
   const settings = await loadSchedule();
 
@@ -471,6 +476,7 @@ export async function POST(req: NextRequest) {
     )) as { value: string }[] | null;
     const startedMs = Number(lockRows?.[0]?.value ?? 0);
     if (Number.isFinite(startedMs) && startedMs > 0 && Date.now() - startedMs < 12 * 60_000) {
+      await observe("skipped", { reason: "already_running" });
       return json({ ok: true, skipped: true, reason: "already_running" });
     }
   }
@@ -486,6 +492,7 @@ export async function POST(req: NextRequest) {
     const last = await lastScheduledSuccessAt();
     const decision = backupDueDecision(settings, last);
     if (!decision.due) {
+      await observe("skipped", { reason: decision.reason });
       return json({
         ok: true,
         skipped: true,
@@ -495,10 +502,12 @@ export async function POST(req: NextRequest) {
       });
     }
   } else if (!settings.toSupabase && !settings.toMega) {
+    await observe("failed", { reason: "no_destination" });
     return json({ ok: false, reason: "no_destination" }, 400);
   }
 
   const fileName = autoBackupFileName();
+  await observe("building", { file: fileName });
   const startedAt = Date.now();
   // 🔒 settings වල encrypt on නම් manual එකේ Encryption Password එකම පාවිච්චි කරයි.
   // password එක save කරලා නැත්නම් backup එක නවත්වන්නේ නැතුව unencrypted යවනවා — history එකේ සටහන් වෙනවා.
@@ -522,6 +531,7 @@ export async function POST(req: NextRequest) {
     await recordHistory({ fileName, fileSize: 0, tables: 0, rows: 0, status: "failed",
       detail: `${detail} · Email report: ${queueKey ? "PENDING SMTP" : "queue write failed"}`, encrypted });
     if (queueKey) await flushBackupReportQueue({ key: queueKey }).catch(() => undefined);
+    await observe("failed", { reason: "build_failed", file: fileName });
     return json({ ok: false, reason: "build_failed", detail }, 500);
   }
 
@@ -554,6 +564,7 @@ export async function POST(req: NextRequest) {
     force
       ? "Manual test run"
       : `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
+    `Media verified: Board ${built.mediaCoverage.board}, Bot ${built.mediaCoverage.bot}, Templates ${built.mediaCoverage.templates}, missing ${built.mediaCoverage.missing}`,
     `FULL ZIP = manual backup (schema + logins + ${built.images} images + registers)`,
     encrypted ? "🔒 Encrypted (Encryption Password)" : "Not encrypted",
     encryptWarning,
@@ -571,7 +582,7 @@ export async function POST(req: NextRequest) {
     fileType: encrypted ? "ZIP — Full backup (encrypted database.sql + schema.sql + registers + site files)"
       : "ZIP — Full backup (database.sql + schema.sql + registers + site files)",
     fileSize: built.zip.length, durationMs: Date.now() - startedAt,
-    destinations: done, failures: failed, rows: built.totalRows, tables: built.tables, images: built.images,
+    destinations: done, failures: failed, rows: built.totalRows, tables: built.tables, images: built.images, mediaCoverage: built.mediaCoverage,
     encrypted, schedule: force ? "Manual test run" : `Every ${settings.intervalHours}h from save time (${nextRunLabel(settings)})`,
   };
   let queueKey = "";
@@ -588,6 +599,7 @@ export async function POST(req: NextRequest) {
   const reportSent = emailOutcome.sent;
   const reportError = emailOutcome.error;
 
+  await observe(done.length ? "saved" : "failed", { reason: status, file: fileName, emailAccepted: emailOutcome.sent, emailPending: emailOutcome.pending });
   if (!done.length) return json({ ok: false, reason: "upload_failed", detail }, 500);
   return json({
     ok: true,
@@ -597,6 +609,7 @@ export async function POST(req: NextRequest) {
     rows: built.totalRows,
     tables: built.tables,
     images: built.images,
+    mediaCoverage: built.mediaCoverage,
     seconds: Math.round((Date.now() - startedAt) / 1000),
     encrypted,
     destinations: done,
@@ -607,5 +620,6 @@ export async function POST(req: NextRequest) {
     emailReportError: reportError,
     warnings: [encryptWarning, retryWarning, ...failed, ...(emailOutcome.pending ? [`Backup saved, but report email is pending: ${reportError || "SMTP retry queued"}`] : [])].filter(Boolean),
   });
-  } finally { await clearRunLock(); }
+  } catch (error) { await observe("failed", { reason: "unexpected_error" }); throw error; }
+  finally { await clearRunLock(); }
 }

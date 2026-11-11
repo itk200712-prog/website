@@ -11,7 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx scripts/test.mts && tsx scripts/test-backup-media.mts && tsx scripts/test-mail-delivery.mts",
+    "test": "tsx scripts/test.mts && tsx scripts/test-backup-media.mts && tsx scripts/test-backup-diagnostics.mts && tsx scripts/test-mail-delivery.mts",
     "pretest": "node scripts/gen-site-source.mjs"
   },
   "dependencies": {

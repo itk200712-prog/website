@@ -34,6 +34,7 @@ export type BackupReportInput = {
   rows?: number;
   tables?: number;
   images?: number;
+  mediaCoverage?: { files: number; board: number; bot: number; templates: number; missing: number };
   encrypted?: boolean;
   /** email එක යවන මොහොත (default: දැන්) */
   at?: Date;
@@ -153,6 +154,8 @@ export function buildBackupReportEmail(input: BackupReportInput): {
         (typeof input.images === "number" ? ` · ${input.images} images` : "")
     );
   }
+  if (input.mediaCoverage) lines.push(`🖼 Media verified: Board ${input.mediaCoverage.board} · Live Chat bot ${input.mediaCoverage.bot} · Templates ${input.mediaCoverage.templates} · Files ${input.mediaCoverage.files} · Missing ${input.mediaCoverage.missing}`);
+  if (input.encrypted) lines.push("ℹ Image bytes are inside encrypted database.sql. Admin → Backup Preview + Encryption password shows/extracts images without restoring.");
   lines.push(`🔒 Encrypted   : ${input.encrypted ? "ඔව් (Encryption Password)" : "නෑ"}`);
   if (input.destinations?.length) lines.push(`💾 Saved to    : ${input.destinations.join(" + ")}`);
   if (input.failures?.length) {

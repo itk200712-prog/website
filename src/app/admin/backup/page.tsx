@@ -27,6 +27,10 @@ import {
   upcomingRunTimes, SCHEDULE_HOUR_OPTIONS,
   SCHEDULE_SECRET_KEYS, SCHEDULE_SETTING_KEYS, scheduleSettingsRows, type BackupScheduleSettings,
 } from "@/lib/scheduled-backup";
+import { BackupMediaPreview } from "@/components/backup-media-preview";
+import { inspectBackupMedia, type CapturedMedia, type MediaAudit } from "@/lib/backup-media-audit";
+import { PUBLIC_ASSET_FILES } from "@/lib/public-assets.generated";
+import type { BackupDiagnostics } from "@/lib/backup-diagnostics";
 import { logActivity } from "@/lib/activity";
 import {
   BACKUP_COVERAGE, buildCoverageReport, type CoverageReport, type CoverageRow,
@@ -112,6 +116,8 @@ export default function AdminBackupPage() {
     siteAssets: { path: string; bytes: Uint8Array }[];
     mediaFiles: { path: string; bytes: Uint8Array }[];
     tableCounts: Record<string, number>;
+    inspectedMedia: CapturedMedia[];
+    mediaAudit: MediaAudit;
     /** Format v3: ZIP එකේ site-source/ design files ගාණ (CSS/cursor ඇතුළුව — hash verify වේ) */
     siteSourceCount: number;
     /** database.sql එක ඇතුළේ site-public/ image rows ගාණ (.sql import එකකදීත් පෙනේ) */
@@ -120,6 +126,21 @@ export default function AdminBackupPage() {
     siteHashState: "verified" | "mismatch" | "unchecked" | "none";
   } | null>(null);
 
+  const [diagnostics, setDiagnostics] = useState<BackupDiagnostics | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState("");
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  async function checkBackupDiagnostics() {
+    setDiagnosticsBusy(true); setDiagnosticsError("");
+    try {
+      const sb = await authedClient();
+      const { data } = await sb.auth.getSession();
+      const res = await fetch("/api/backup/diagnostics", { headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` }, cache: "no-store" });
+      const result = await res.json();
+      if (!res.ok || !result.ok) throw new Error("Live diagnostics ලබාගත නොහැකි වුණා — superadmin session / server configuration බලන්න");
+      setDiagnostics(result);
+    } catch (e) { setDiagnosticsError((e as Error).message); }
+    setDiagnosticsBusy(false);
+  }
   async function loadBackupHistory(): Promise<BackupHistoryEntry[]> {
     setHistoryLoading(true);
     const result = await getBackupHistory(BACKUP_HISTORY_KEEP);
@@ -533,6 +554,7 @@ export default function AdminBackupPage() {
       }
 
       const inserts = parseBackupSql(sql);
+      const inspected = await inspectBackupMedia(inserts, PUBLIC_ASSET_FILES);
       if (!inserts.length) throw new Error("backup file එකේ INSERT rows නෑ");
       // Format v3: SQL එක ඇතුළේම තියෙන site public-assets (icons) rows ගාණ
       let sitePublicSqlCount = 0;
@@ -556,7 +578,7 @@ export default function AdminBackupPage() {
       for (const t of tables) sel[t.name] = t.known;
       setSelected(sel);
       setConfirmText("");
-      setPreview({ fileName: file.name, fileSize: file.size, inserts, tables, totalRows, manifest, manifestMsg, encrypted, siteAssets, mediaFiles, tableCounts, siteSourceCount, sitePublicSqlCount, siteHashState });
+      setPreview({ fileName: file.name, fileSize: file.size, inserts, tables, totalRows, manifest, manifestMsg, encrypted, siteAssets, mediaFiles, tableCounts, inspectedMedia: inspected.media, mediaAudit: inspected.audit, siteSourceCount, sitePublicSqlCount, siteHashState });
       setAnim(null);
       const siteNote = siteAssets.length || siteSourceCount || sitePublicSqlCount
         ? ` · 🌐 site update files ${siteAssets.length + siteSourceCount}ක් (CSS/cursor/icons${siteHashState === "verified" ? " · hash හරි ✅" : ""})`
@@ -783,6 +805,23 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
         </div>
       </div>
 
+      <section className="card mt-6 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-extrabold text-slate-900">🕐 Live Auto-Backup / Confirmation Email Check</h3>
+          <button type="button" className="btn btn-outline !text-xs" disabled={diagnosticsBusy} onClick={checkBackupDiagnostics}>{diagnosticsBusy ? "Checking…" : "Live status පරීක්ෂා කරන්න"}</button>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">මෙය read-only check එකකි. Backup එකක් run කරන්නේ හෝ sample email එකක් යවන්නේ නැහැ. සැබෑ run සඳහා Scheduled card එකේ Test Run භාවිත කරන්න.</p>
+        {diagnosticsError && <p className="mt-2 text-xs text-rose-700">⚠ {diagnosticsError}</p>}
+        {diagnostics && <div className="mt-3 space-y-2 text-xs text-slate-700">
+          <p>Schedule: <b>{diagnostics.enabled ? `Enabled · every ${diagnostics.intervalHours}h` : "Disabled"}</b> · Next: {diagnostics.nextRun} · Encryption: {diagnostics.encrypted ? "ON (images SQL තුළයි)" : "OFF"}</p>
+          <p>Cron heartbeat: <b>{diagnostics.cronObservedRecently ? "Observed recently ✓" : "NOT confirmed ⚠"}</b> · {diagnostics.cron?.at ?? "No observation yet"} · {diagnostics.cron?.phase ?? "unknown"}</p>
+          <p>Last successful backup: {diagnostics.lastSuccess ?? "Unknown"} · Consecutive scheduled runs: <b>{diagnostics.recurringRunsObserved ? "Observed ✓" : "Not proven yet ⚠"}</b> · Observed gaps: {diagnostics.intervalsMinutes.join(", ") || "—"} min</p>
+          <p>Email: SMTP-accepted reports {diagnostics.smtpAcceptedReports} · Pending {diagnostics.pendingReports}. <b>SMTP acceptance ≠ inbox receipt; inbox receipt තහවුරු කර නැහැ.</b></p>
+          {diagnostics.recentRuns.map((r) => <p key={r.file + r.at} className="break-all rounded-lg bg-slate-50 p-2">{r.at} · {r.status} · {r.manualTest ? "MANUAL TEST" : "SCHEDULED"} · email {r.email} · {r.file}</p>)}
+          {diagnostics.warnings.map((w) => <p key={w} className="rounded-lg bg-amber-50 p-2 text-amber-900">⚠ {w}</p>)}
+        </div>}
+      </section>
+
       {/* IMPORT PREVIEW */}
       {preview && (
         <div className="card mt-6 border-l-4 border-emerald-500 p-6">
@@ -809,6 +848,7 @@ insert into public.backup_secrets (key, value) values ('backup_download_password
             </div>
           )}
 
+          <BackupMediaPreview media={preview.inspectedMedia} audit={preview.mediaAudit} />
           <div className="mt-4 flex gap-2">
             <button className="btn btn-outline !px-3 !py-1 !text-[11px]" onClick={() => setSelected(Object.fromEntries(preview.tables.map((t) => [t.name, t.known])))}>
               සියල්ල තෝරන්න

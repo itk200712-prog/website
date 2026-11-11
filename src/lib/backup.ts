@@ -20,6 +20,7 @@ import {
 
 import { orderBackupRows } from "@/lib/backup-row-order";
 import { SCHEMA_BACKUP_TABLES, SCHEMA_SELF_REFERENCES } from "@/lib/backup-catalog.generated";
+import { auditCapturedMedia, inlineMedia, inlineMediaPath, type MediaAudit } from "@/lib/backup-media-audit";
 import { MEDIA_INDEX_PATH, safeMediaPath, scanMediaReferences, mediaArchivePath, rewriteMediaValue, listStoragePaths, type MediaRef } from "@/lib/backup-media";
 
 export { parseBackupSql } from "@/lib/backup-utils";
@@ -407,6 +408,7 @@ export async function generateBackupSql(
   tableCounts: Record<string, number>;
   imageCount: number;
   mediaRows: { path: string; b64: string; type: string }[];
+  mediaAudit: MediaAudit;
   /** Format v3: ZIP එකේ site-assets/ files විදිහටත් දාන්න public assets ටික */
   siteAssets: SiteAssetFile[];
   /** ZIP registers වලට ආයෙත් fetch නොකර පාවිච්චි කරන්න (දෙපාරක් ගන්න එක නවත්වයි) */
@@ -514,7 +516,14 @@ export async function generateBackupSql(
   const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
   for (const path of paths) tasks.set(path, { source: "", bucket: "site-images", key: path });
   for (const ref of refs) {
-    if (ref.local) { aliases.set(ref.source, mediaArchivePath(ref)!); continue; }
+    if (inlineMedia(ref.source)) { tasks.set(await inlineMediaPath(ref.source), ref); continue; }
+    if (ref.local && PUBLIC_ASSET_PATHS.includes(ref.local)) { aliases.set(ref.source, mediaArchivePath(ref)!); continue; }
+    if (ref.local) {
+      const path = `referenced-media/${await sha256Hex(ref.source)}${ref.local.match(/\.[a-zA-Z0-9]{1,8}$/)?.[0] ?? ""}`;
+      aliases.set(ref.source, path);
+      tasks.set(path, { source: new URL(ref.source, resolveAssetBaseUrl(assetBaseUrl)).href });
+      continue;
+    }
     let path = mediaArchivePath(ref);
     // A storage URL on another project must NOT download the same key from
     // this project. Capture its actual bytes and rewrite by the exact alias.
@@ -534,6 +543,8 @@ export async function generateBackupSql(
     onProgress(`File ${Math.min(i + 6, entries.length)}/${entries.length}…`, 55 + Math.round((i / Math.max(entries.length, 1)) * 28));
     const files = await Promise.all(entries.slice(i, i + 6).map(async ([path, ref]) => {
       try {
+        const inline = inlineMedia(ref.source);
+        if (inline) return { path, ...inline };
         if (ref.bucket && ref.key) {
           const { data, error } = await sb.storage.from(ref.bucket).download(ref.key);
           if (error || !data) throw new Error(error?.message ?? "No file returned");
@@ -550,6 +561,8 @@ export async function generateBackupSql(
   const byPath = new Map(imgRows.map((r) => [r.path, r]));
   for (const a of siteAssets) byPath.set(a.archivePath, { path: a.archivePath, b64: a.b64, type: a.type });
   const mediaRows = [...byPath.values()];
+  const mediaAudit = await auditCapturedMedia(liveTables, mediaRows, aliases, PUBLIC_ASSET_PATHS);
+  if (!mediaAudit.verified) throw new Error("Full backup stopped: referenced images/files are missing from captured media");
   if (aliases.size) byPath.set(MEDIA_INDEX_PATH, { path: MEDIA_INDEX_PATH, type: "application/json", b64: bytesToB64(new TextEncoder().encode(JSON.stringify(Object.fromEntries(aliases)))) });
   imgRows.splice(0, imgRows.length, ...byPath.values());
   // A restored cache may contain OLD bytes. Never emit those after fresh image
@@ -609,6 +622,7 @@ export async function generateBackupSql(
     tableCounts,
     imageCount: mediaRows.length,
     mediaRows,
+    mediaAudit,
     siteAssets,
     registerRows: {
       members: gathered.find((g) => g.name === "member_rows")?.rows ?? [],
@@ -748,6 +762,7 @@ export async function restoreBackup(
   function rewrite(val: unknown): unknown { return rewriteMediaValue(val, urlMap, aliases); }
   const selectedRefs = wantImages ? scanMediaReferences(selectedData, PUBLIC_ASSET_PATHS) : [];
   const missing = selectedRefs.filter((ref) => {
+    if (inlineMedia(ref.source)) return false; // original data URI remains valid in the restored row
     const path = aliases.get(ref.source) ?? mediaArchivePath(ref);
     return !path || !urlMap.has(path);
   });
@@ -1084,7 +1099,7 @@ export async function generateBackupZip(
     client?: BackupClient; // server scheduled-backup එක service-role client එක inject කරයි
     assetBaseUrl?: string; // Format v3: public/ assets fetch කරන site base URL එක (නැත්නම් browser origin/env)
     cronSecret?: string; // Server backup (scheduled) එකේදී schema.sql ගන්න x-backup-secret
-    onMeta?: (meta: { tableCounts: Record<string, number>; imageCount: number }) => void;
+    onMeta?: (meta: { tableCounts: Record<string, number>; imageCount: number; mediaAudit: MediaAudit }) => void;
     readMedia?: BackupMediaReader;
   }
 ): Promise<Blob> {
@@ -1111,19 +1126,21 @@ export async function generateBackupZip(
   }
 
   // 1) database.sql (images base64 + login accounts සමඟ)
-  const { sql, tableCounts, imageCount, registerRows, siteAssets, mediaRows } = await generateBackupSql(
+  const { sql, tableCounts, imageCount, registerRows, siteAssets, mediaRows, mediaAudit } = await generateBackupSql(
     (msg, pct) => onProgress(msg, Math.round(pct * 0.72)),
     opts?.client,
     opts?.assetBaseUrl,
     { readMedia: opts?.readMedia, cronSecret: opts?.cronSecret }
   );
-  opts?.onMeta?.({ tableCounts, imageCount });
+  opts?.onMeta?.({ tableCounts, imageCount, mediaAudit });
   const [databasePlainSha256, dbContent] = await Promise.all([
     sha256Hex(sql),
     opts?.encryptPassword ? encryptBackupText(sql, opts.encryptPassword) : Promise.resolve(sql),
   ]);
   // encrypted නම් cipher එක ආයෙත් compress කරන්න බෑ — STORE (වේගය)
   await addFile("database.sql", dbContent, !!opts?.encryptPassword);
+
+  await addFile("MEDIA-VERIFICATION.json", JSON.stringify({ ...mediaAudit, encrypted: !!opts?.encryptPassword, location: opts?.encryptPassword ? "Image bytes are inside encrypted database.sql. Use Admin Backup Preview with the encryption password to view/extract; no RESTORE is needed." : "Image bytes are in database.sql and media/ or site-assets/public/." }, null, 2));
 
   // 1b) schema.sql — canonical schema (tables + RLS + functions + live chat RPC logic).
   //     fresh Supabase project එකකට restore කරද්දී මුලින්ම run කළ යුත්තේ මෙයයි.

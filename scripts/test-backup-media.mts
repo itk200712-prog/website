@@ -12,6 +12,7 @@ const { scanMediaReferences, rewriteMediaValue, storageMediaRef, listStoragePath
 const { publicMediaAddress, readRemoteMedia, validRemoteMediaUrl } = await import('../src/lib/backup-media-server');
 const { NextRequest } = await import('next/server');
 const { POST: mediaPost } = await import('../src/app/api/backup/media/route');
+const { inspectBackupMedia } = await import('../src/lib/backup-media-audit');
 const { PUBLIC_ASSET_FILES } = await import('../src/lib/public-assets.generated');
 let passed = 0;
 const pass = (name: string) => { passed++; console.log(`PASS ${name}`); };
@@ -121,6 +122,14 @@ source.tables.set('board_members', [
 ]);
 source.tables.set('system_settings', [{ key: 'hero_images', value: JSON.stringify([{ url: signedUrl }, { photo: relativeUrl }]) }]);
 source.tables.set('membership_applications', [{ id: 'app-1', document: 'https://backup-source.invalid/storage/v1/object/sign/private-docs/private.pdf?token=old' }]);
+seedFile('chat/avatar.webp');
+const templateSettings: Record<string, any> = {};
+for (let i = 0; i < 14; i++) {
+  const bg = `animation-bg/bg-${i}.webp`; seedFile(bg);
+  const products = Array.from({ length: 4 }, (_, j) => { const key = `animation-products/p-${i}-${j}.webp`; seedFile(key); return `https://backup-source.invalid/storage/v1/object/public/site-images/${key}`; });
+  templateSettings[`unit-${i}`] = { bgImage: `https://backup-source.invalid/storage/v1/object/public/site-images/${bg}`, products };
+}
+source.tables.get('system_settings')!.push({ key: 'chat_bot_avatar', value: 'https://backup-source.invalid/storage/v1/object/public/site-images/chat/avatar.webp' }, { key: 'business_animation_settings', value: JSON.stringify(templateSettings) });
 source.tables.set('site_images_backup', [{ path: encodedKey, data_base64: btoa('STALE-CACHE-IMAGE'), content_type: 'image/png' }]);
 source.tables.set('member_rows', Array.from({ length: 52_013 }, (_, i) => ({ id: i + 1, member_no: String(i + 1), full_name: 'Maduranga', nic: '123456789V', address: 'Negombo', postal_address: 'Negombo', gender: 'M', file_name: 'Register.xlsx' })));
 const remoteReads: string[] = [];
@@ -167,6 +176,15 @@ try {
   const counts = readBackupTableCounts(generated.sql);
   assert.equal(counts.gallery_items, 0); assert.equal(counts.news, 0); assert.equal(counts.site_images_backup, imageInserts.length); pass('SQL snapshot preserves zero-row table metadata and exact media-cache row count');
 
+  assert.equal(generated.mediaAudit.groups.find((g: any) => g.category === 'board')!.captured, 2);
+  assert.equal(generated.mediaAudit.groups.find((g: any) => g.category === 'bot')!.captured, 1);
+  assert.equal(generated.mediaAudit.groups.find((g: any) => g.category === 'templates')!.captured, 70);
+  assert(generated.mediaAudit.verified);
+  pass('Board + Live Chat bot + all 70 JSON template/animation references are matched to captured bytes');
+  const inspected = await inspectBackupMedia(inserts, PUBLIC_ASSET_FILES);
+  assert.equal(inspected.audit.groups.find((g: any) => g.category === 'templates')!.captured, 70);
+  assert(inspected.media.some((m: any) => m.path === 'chat/avatar.webp' && m.b64 === Buffer.from(imageBytes).toString('base64')));
+  pass('Backup-only inspector extracts real bot/template bytes from SQL, without fetching live image URLs');
   const target = new FakeDB('https://backup-target.invalid');
   target.tables.set('gallery_items', [{ id: 'stale-gallery', image: 'old.jpg' }]); target.tables.set('news', [{ id: 'stale-news' }]);
   const restored = await restoreBackup(inserts, progress, { client: target as any, tableCounts: counts });
@@ -185,6 +203,9 @@ try {
   assert(verified.every((r: any) => r.ok));
   target.tables.set('member_rows', [{ id: 1 }]); assert.equal((await verifyRestore({ member_rows: 52_013 }, target as any))[0].ok, false); pass('Restore count verification rejects one row when 52,013 were expected');
 
+  const incompleteAudit = await inspectBackupMedia(inserts.filter((r: any) => !(r.table === 'site_images_backup' && r.values[r.cols.indexOf('path')] === 'chat/avatar.webp')), PUBLIC_ASSET_FILES);
+  assert.equal(incompleteAudit.audit.verified, false); assert.equal(incompleteAudit.audit.groups.find((g: any) => g.category === 'bot')!.missing, 1);
+  pass('Inspector explicitly flags a missing bot image instead of treating a setting URL as captured bytes');
   const aliases = new Map([[externalUrl, 'ext.png']]);
   const rewritten: any = rewriteMediaValue({ photos: [encodedUrl, encodedUrl.replace('backup-source', 'another-source')], nested: JSON.stringify({ photo: externalUrl }) }, new Map([[encodedKey, 'https://new.example/board.png'], ['ext.png', 'https://new.example/ext.png']]), aliases);
   assert.deepEqual(rewritten.photos, ['https://new.example/board.png', 'https://new.example/board.png']); assert.equal(JSON.parse(rewritten.nested).photo, 'https://new.example/ext.png'); pass('Two old origins sharing a key BOTH rewrite; no single-old-URL Map loss');
@@ -223,14 +244,32 @@ try {
   const manifest = JSON.parse(await zip.file('manifest.json')!.async('string'));
   for (const [path, info] of Object.entries(manifest.files) as [string, any][]) assert.equal(await sha256Hex(await zip.file(path)!.async('uint8array')), info.sha256);
   assert(zip.file('schema.sql')); assert(zip.file('Members-Register.xlsx')); assert(zip.file('Voters-Register.csv')); assert(zip.file('site-source/src/fixture.ts'));
+  const verifiedInventory = JSON.parse(await zip.file('MEDIA-VERIFICATION.json')!.async('string'));
+  assert.equal(verifiedInventory.groups.find((g: any) => g.category === 'templates').captured, 70);
+  assert(!JSON.stringify(verifiedInventory).includes('not-a-real-token')); assert(!JSON.stringify(verifiedInventory).includes(encodedKey));
   pass('Full ZIP contains visible media/board binary, schema, source, registers, and valid hashes for EVERY file');
   const encryptedZip = await JSZip.loadAsync(await (await generateBackupZip(progress, { ...zipOptions, encryptPassword: 'fixture-password' })).arrayBuffer());
   assert.equal(Object.keys(encryptedZip.files).filter((p) => p.startsWith('media/')).length, 0);
   const plain = await decryptBackupText(await encryptedZip.file('database.sql')!.async('string'), 'fixture-password');
+  const decryptedInspection = await inspectBackupMedia(parseBackupSql(plain), PUBLIC_ASSET_FILES);
+  assert.equal(decryptedInspection.audit.groups.find((g: any) => g.category === 'bot')!.captured, 1);
+  assert.equal(decryptedInspection.audit.groups.find((g: any) => g.category === 'templates')!.captured, 70);
+  assert(JSON.parse(await encryptedZip.file('MEDIA-VERIFICATION.json')!.async('string')).encrypted);
+  pass('Encrypted ZIP still verifies/extracts bot and 70 template images locally with NO plaintext media leak');
   assert(plain.includes(Buffer.from(imageBytes).toString('base64'))); assert(plain.includes(btoa('EXTERNAL-BOARD-PHOTO'))); pass('Encrypted SQL retains media bytes, with NO unencrypted uploaded-media copies in ZIP');
   httpFailure = '/' + PUBLIC_ASSET_FILES[0]; await assert.rejects(generateBackupZip(progress, zipOptions), /Public asset download failed/); httpFailure = ''; pass('Missing public assets fail full ZIP export visibly');
   schemaFailure = true; await assert.rejects(generateBackupZip(progress, zipOptions), /schema.sql/); schemaFailure = false; pass('Missing canonical schema fails full ZIP export visibly');
   snapshotFailure = true; await assert.rejects(generateBackupZip(progress, zipOptions), /source snapshot/); snapshotFailure = false; pass('Empty/unavailable source snapshot fails full ZIP export visibly');
+  const special = new FakeDB('https://backup-source.invalid');
+  special.tables.set('system_settings', [{ key: 'chat_bot_avatar', value: `data:image/png;base64,${Buffer.from(imageBytes).toString('base64')}` }, { key: 'template_background_image', value: '/custom-assets/banner?variant=2' }]);
+  const specialExport = await generateBackupSql(progress, special as any, 'https://fixture-site.invalid', { readMedia: async (url) => { assert.equal(url, 'https://fixture-site.invalid/custom-assets/banner?variant=2'); return { b64: Buffer.from(imageBytes).toString('base64'), type: 'image/png' }; } });
+  assert(specialExport.mediaRows.some((f: any) => f.path.startsWith('inline-media/'))); assert(specialExport.mediaAudit.verified);
+  pass('Inline bot data images and local template URLs outside the public manifest also have captured bytes');
+  const specialTarget = new FakeDB('https://special-target.invalid');
+  await restoreBackup(parseBackupSql(specialExport.sql), progress, { client: specialTarget as any, onlyTables: ['system_settings'] });
+  assert(specialTarget.tables.get('system_settings')!.find((r) => r.key === 'chat_bot_avatar')!.value.startsWith('data:image/'));
+  assert(specialTarget.tables.get('system_settings')!.find((r) => r.key === 'template_background_image')!.value.startsWith('https://special-target.invalid/'));
+  pass('Inline and custom local template image references survive actual restore');
   const failRows = new FakeDB('https://row-failure.invalid'); failRows.failWrite = 'board_members';
   await assert.rejects(restoreBackup(inserts, progress, { client: failRows as any, onlyTables: ['board_members'] }), /not transactional/); pass('Failed table inserts return a failed restore, not a successful row count');
 } finally { globalThis.fetch = originalFetch; }
